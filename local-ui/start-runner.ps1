@@ -96,6 +96,47 @@ function Wait-ServerBind {
   }
 }
 
+function Assert-RunnerSource {
+  param(
+    [System.Diagnostics.Process]$Process,
+    [string]$RepoRoot,
+    [int]$Port,
+    [string]$PidFile
+  )
+
+  $ExpectedRoot = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\')
+  $ExpectedStatic = [System.IO.Path]::GetFullPath(
+    (Join-Path $ExpectedRoot "tracefix\runner_ui\static")
+  ).TrimEnd('\')
+
+  try {
+    $Info = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/ui-info" -TimeoutSec 5
+  } catch {
+    Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
+    throw "Runner bound to port $Port but /api/ui-info could not verify its source checkout: $($_.Exception.Message)"
+  }
+
+  $ActualRoot = [System.IO.Path]::GetFullPath([string]$Info.repo_root).TrimEnd('\')
+  $ActualStatic = [System.IO.Path]::GetFullPath([string]$Info.static_dir).TrimEnd('\')
+  $RootMatches = [string]::Equals($ActualRoot, $ExpectedRoot, [System.StringComparison]::OrdinalIgnoreCase)
+  $StaticMatches = [string]::Equals($ActualStatic, $ExpectedStatic, [System.StringComparison]::OrdinalIgnoreCase)
+
+  if (-not $RootMatches -or -not $StaticMatches) {
+    Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
+    throw @"
+Runner imported UI code from the wrong checkout.
+Expected repo root: $ExpectedRoot
+Actual repo root:   $ActualRoot
+Expected static:    $ExpectedStatic
+Actual static:      $ActualStatic
+"@
+  }
+
+  Write-Host "Runner source verified: $ExpectedStatic" -ForegroundColor Green
+}
+
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $StateDir = Join-Path $RepoRoot ".tracefix-ui"
 $LogDir = Join-Path $StateDir "logs"
@@ -126,13 +167,33 @@ if ((Test-Path -LiteralPath $DefaultJava)) {
 
 $OutLog = Join-Path $LogDir "runner.out.log"
 $ErrLog = Join-Path $LogDir "runner.err.log"
-$Process = Start-Process -FilePath $RunnerPython `
-  -ArgumentList @("-B", "-m", "tracefix.runner_ui", "--host", "$BindHost", "--port", "$Port") `
-  -WorkingDirectory $RepoRoot `
-  -WindowStyle Hidden `
-  -RedirectStandardOutput $OutLog `
-  -RedirectStandardError $ErrLog `
-  -PassThru
+$OriginalPythonPath = $env:PYTHONPATH
+try {
+  $env:PYTHONPATH = if ($OriginalPythonPath) {
+    "$RepoRoot;$OriginalPythonPath"
+  } else {
+    "$RepoRoot"
+  }
+  $QuotedRepoRoot = '"' + [string]$RepoRoot + '"'
+  $Process = Start-Process -FilePath $RunnerPython `
+    -ArgumentList @(
+      "-B", "-m", "tracefix.runner_ui",
+      "--host", "$BindHost",
+      "--port", "$Port",
+      "--root", $QuotedRepoRoot
+    ) `
+    -WorkingDirectory $RepoRoot `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $OutLog `
+    -RedirectStandardError $ErrLog `
+    -PassThru
+} finally {
+  if ($null -eq $OriginalPythonPath) {
+    Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+  } else {
+    $env:PYTHONPATH = $OriginalPythonPath
+  }
+}
 
 Set-Content -Path $PidFile -Value $Process.Id
 $LocalUrl = "http://127.0.0.1:$Port/"
@@ -152,6 +213,7 @@ Write-Host "Logs: $OutLog"
 Write-Host "      $ErrLog"
 
 Wait-ServerBind -Process $Process -Port $Port -TimeoutSeconds $StartupTimeoutSeconds -ErrLog $ErrLog
+Assert-RunnerSource -Process $Process -RepoRoot $RepoRoot -Port $Port -PidFile $PidFile
 
 if ($Open) {
   Start-Process $LaunchUrl

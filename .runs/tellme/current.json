@@ -1,28 +1,26 @@
 {
-  "run_id": "tellme_1b4e90ad434e",
+  "run_id": "tellme_1c033cdee25e",
   "tellme": {
-    "query_id": "tellme_1b4e90ad434e",
-    "query": "Design a system that allows a user to ask questions about events captured by two smart-room cameras on a specific date and time—for example, “What happened in the room on June 14 between 2:00 PM and 3:00 PM?” The controller should retrieve and synchronize the relevant recordings from both cameras, combine their observations, remove duplicate information, resolve conflicting details, and return an accurate summary of what occurred during the requested period. Emergency or safety-related events should be highlighted, and occupant privacy must be protected.",
-    "mode": "llm",
+    "query_id": "tellme_1c033cdee25e",
+    "query": "Coordinate three medication-delivery robots sharing one hospital corridor.",
+    "mode": "deterministic",
     "model": "gpt-4.1-mini",
-    "api_key_detected": true,
-    "llm_timeout_seconds": 120,
+    "api_key_detected": false,
+    "llm_timeout_seconds": null,
     "status": "needs_tracefix",
     "route_decision": {
-      "route": "multi_agent",
-      "intent": "historical_lookup",
-      "selected_agent": null,
-      "selected_tool": null,
-      "required_tools": [],
-      "rationale": "The query requires multi-step or multi-modal reasoning beyond one mock CityOS lookup.",
-      "time_window": {
-        "start": "14:00",
-        "end": "15:00",
-        "label": "query_range"
-      },
-      "requires_tracefix": true,
+      "route": "single_agent",
+      "intent": "general",
+      "selected_agent": "general_context_agent",
+      "selected_tool": "cityos_context_lookup",
+      "required_tools": [
+        "cityos_context_lookup"
+      ],
+      "rationale": "The query appears answerable with one focused CityOS-style context lookup.",
+      "time_window": null,
+      "requires_tracefix": false,
       "caveats": [
-        "V0 only emits a TraceFixTaskSpec stub for complex queries."
+        "If the single-agent lookup is insufficient, the harness should escalate to TraceFix later."
       ],
       "trigger_terms_found": [],
       "explicit_agent_names_detected": false
@@ -42,15 +40,11 @@
       "harness_subtasks": [
         {
           "expected_modalities": [
-            "video"
+            "context"
           ],
-          "harness_name": "video_context_harness",
+          "harness_name": "general_context_harness",
           "space_id": "smart_room_1",
-          "time_window": {
-            "end": "15:00",
-            "label": "query_range",
-            "start": "14:00"
-          }
+          "time_window": null
         }
       ],
       "llm_notes": [
@@ -60,8 +54,6 @@
       "needs_temporal_consistency": false,
       "output_contract": {
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
           "timestamped_event_summary"
         ],
         "answer_type": "direct_answer",
@@ -94,37 +86,26 @@
         ]
       },
       "plan_type": "tracefix",
-      "query_id": "tellme_1b4e90ad434e",
+      "query_id": "tellme_1c033cdee25e",
       "required_harnesses": [
-        "video_context_harness"
+        "general_context_harness"
       ],
       "required_modalities": [
-        "context",
-        "video"
+        "context"
       ],
       "safety_caveats": [
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-        "Mock CityOS structured context may be incomplete.",
-        "Confidence must remain bounded by available evidence.",
+        "Only the selected derived-context APIs may be used.",
         "Use CityOS structured context only.",
-        "Do not request raw sensor access, identity claims, unrestricted transcription, or medical diagnosis.",
         "Do not request raw sensor access.",
         "Do not identify a person, diagnose injury, or infer unsupported behavior."
       ],
-      "time_windows": [
-        {
-          "end": "15:00",
-          "label": "query_range",
-          "start": "14:00"
-        }
-      ]
+      "time_windows": []
     },
     "execution_brief": {
       "allowed_claims": [
-        "bounded_count",
-        "presence_state",
         "timestamped_event_summary"
       ],
       "ambiguity": {
@@ -136,8 +117,6 @@
       },
       "answer_packet_requirements": {
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
           "timestamped_event_summary"
         ],
         "answer_type": "direct_answer",
@@ -162,30 +141,28 @@
         ]
       },
       "application_goal": {
-        "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
-        "goal_type": "temporal_correlation",
+        "failure_condition": "Return insufficient_evidence when the bounded evidence is not enough.",
+        "goal_type": "event_detection",
         "non_goals": [
           "identify person",
           "face recognition",
           "medical diagnosis",
           "infer cause or intent"
         ],
-        "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
-        "user_intent": "activity_lookup"
+        "success_condition": "Return a privacy-bounded answer with confidence and evidence references.",
+        "user_intent": "general_lookup"
       },
-      "brief_id": "brief_task_1b4e90ad434e",
+      "brief_id": "brief_task_1c033cdee25e",
       "candidate_harnesses": [
-        "video_context_harness",
+        "general_context_harness",
         "answer_synthesis_harness"
       ],
       "caveats": [
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-        "Mock CityOS structured context may be incomplete.",
-        "Confidence must remain bounded by available evidence.",
+        "Only the selected derived-context APIs may be used.",
         "Use CityOS structured context only.",
-        "Do not request raw sensor access, identity claims, unrestricted transcription, or medical diagnosis.",
         "Do not request raw sensor access.",
         "Do not identify a person, diagnose injury, or infer unsupported behavior."
       ],
@@ -196,9 +173,9 @@
       ],
       "evidence_card_requirements": {
         "allowed_conclusion_types": [
-          "temporal_order",
-          "bounded_temporal_sequence",
-          "event_match"
+          "observed_state",
+          "bounded_count",
+          "presence_state"
         ],
         "badge_requirements": [
           {
@@ -208,20 +185,19 @@
             "source": "query_analysis"
           },
           {
-            "badge_id": "ordering",
-            "label_template": "{ordering}",
+            "badge_id": "modality",
+            "label_template": "{modalities}",
             "required": false,
-            "source": "aggregator"
+            "source": "harness_output"
           }
         ],
-        "card_type": "temporal",
+        "card_type": "descriptive",
         "caveat_requirements": [
-          "Temporal order does not establish causation.",
-          "No identity claim is made about any tracked person."
+          "Reflects structured context only; no causal interpretation."
         ],
-        "claim_target": "bounded_temporal_sequence",
+        "claim_target": "observed_room_state",
         "confidence_requirements": {
-          "confidence_kind": "temporal_link_confidence",
+          "confidence_kind": "sensor_confidence",
           "explanation_required": true,
           "label_bands": {
             "high": [
@@ -239,64 +215,65 @@
           },
           "minimum_threshold": null,
           "required_inputs": [
-            "track_continuity",
-            "evidence_agreement"
+            "sensor_confidence",
+            "evidence_count"
           ],
-          "scoring_method": "temporal_link_confidence"
+          "scoring_method": "bounded_sensor_confidence"
         },
         "evidence_requirements": [
           {
             "accepted_packet_types": [
-              "entry_event_packet",
-              "fall_event_packet",
-              "tracking_packet",
-              "temporal_consistency_packet"
+              "occupancy_context_packet",
+              "room_state_packet",
+              "motion_context_packet",
+              "audio_context_packet"
             ],
-            "evidence_type": "event_sequence",
+            "evidence_type": "structured_context",
             "include_evidence_refs": true,
             "include_modality": true,
             "include_time_window": true,
-            "minimum_count": 2,
+            "minimum_count": 1,
             "required": true
           }
         ],
         "fallback_card_type": "insufficient_evidence",
         "forbidden_conclusion_types": [
-          "causation",
-          "personal_identity",
-          "intent_inference",
-          "cause_or_intent_inference",
+          "causal_effect",
+          "statistical_significance",
+          "causal_graph_claim",
           "raw_sensor_access",
           "face_identity",
+          "personal_identity",
           "medical_diagnosis",
           "unsupported_behavioral_inference",
-          "confirmed_injury"
+          "confirmed_injury",
+          "cause_or_intent_inference"
         ],
         "metric_requirements": [
           {
-            "description": "Timestamps of the correlated events.",
-            "display_label": "Event timestamps",
-            "metric_id": "event_timestamps",
+            "description": "The value observed in the time window (e.g. occupancy count or state).",
+            "display_label": "Observed value",
+            "metric_id": "observed_value",
             "required": true,
             "source": "harness_output",
-            "source_field": null,
+            "source_field": "value",
             "unavailable_behavior": "show_na",
-            "value_type": "timestamp"
+            "value_type": "category"
           },
           {
-            "description": "Time elapsed between the events.",
-            "display_label": "Elapsed duration",
-            "metric_id": "elapsed_duration",
+            "description": "Bounded window the observation covers.",
+            "display_label": "Time window",
+            "metric_id": "time_window",
             "required": true,
-            "source": "aggregator",
-            "source_field": null,
+            "source": "harness_output",
+            "source_field": "timestamp",
             "unavailable_behavior": "show_na",
-            "value_type": "duration"
+            "value_type": "range"
           },
           {
-            "description": "Whether continuity was maintained between events (identity-free).",
-            "display_label": "Track continuity",
-            "metric_id": "track_continuity",
+            "description": "Sensor modalities that contributed.",
+            "display_label": "Modalities used",
+            "metric_id": "modalities_used",
             "required": true,
             "source": "aggregator",
             "source_field": null,
@@ -304,9 +281,19 @@
             "value_type": "category"
           },
           {
-            "description": "Cross-source agreement on the sequence.",
-            "display_label": "Evidence agreement",
-            "metric_id": "evidence_agreement",
+            "description": "Number of supporting context packets.",
+            "display_label": "Evidence count",
+            "metric_id": "evidence_count",
+            "required": true,
+            "source": "aggregator",
+            "source_field": null,
+            "unavailable_behavior": "show_na",
+            "value_type": "integer"
+          },
+          {
+            "description": "Fraction of modalities in agreement.",
+            "display_label": "Sensor agreement",
+            "metric_id": "sensor_agreement",
             "required": false,
             "source": "aggregator",
             "source_field": null,
@@ -314,22 +301,22 @@
             "value_type": "percentage"
           }
         ],
-        "primary_question": "In what order did the events occur?",
+        "primary_question": "What did the structured context observe?",
         "provenance_requirements": [
-          "List event packets and the time windows compared."
+          "List the harness/packet ids backing the observed value."
         ],
         "summary_requirements": [
-          "State the temporal order without implying that one event caused the other."
+          "State the observed value and its bounded time window in one sentence."
         ],
         "title_template": "{primary_question}"
       },
       "evidence_plan": {
         "conflicting_evidence_checks": [],
         "minimum_sufficient_evidence": [
-          "video_findings_packet"
+          "general_context_harness_packet"
         ],
         "primary_evidence": [
-          "video_findings_packet"
+          "general_context_harness_packet"
         ],
         "supporting_evidence": []
       },
@@ -341,7 +328,7 @@
         "medical_diagnosis",
         "unsupported_behavioral_inference"
       ],
-      "normalized_query": "design a system that allows a user to ask questions about events captured by two smart-room cameras on a specific date and time\n\nfor example, \n\nwhat happened in the room on june 14 between 2:00 pm and 3:00 pm?\n\nthe controller should retrieve and synchronize the relevant recordings from both cameras, combine their observations, remove duplicate information, resolve conflicting details, and return an accurate summary of what occurred during the requested period. emergency or safety-related events should be highlighted, and occupant privacy must be protected.",
+      "normalized_query": "coordinate three medication-delivery robots sharing one hospital corridor.",
       "privacy_policy": {
         "forbidden_inferences": [
           "raw_sensor_access",
@@ -359,11 +346,10 @@
         "privacy_scope": "cityos_structured_context_only",
         "raw_sensor_access_allowed": false
       },
-      "query_id": "tellme_1b4e90ad434e",
-      "reasoning_summary": "Deterministic template proposal generated for query tellme_1b4e90ad434e.",
+      "query_id": "tellme_1c033cdee25e",
+      "reasoning_summary": "FakeLLM semantic proposal for deterministic demo mode using only discovered sensors and APIs.",
       "required_modalities": [
-        "context",
-        "video"
+        "context"
       ],
       "room_capability_context": {
         "available_context_apis": [
@@ -389,7 +375,9 @@
           "get_speech_activity_context"
         ],
         "coverage_gaps": [],
-        "notes": [],
+        "notes": [
+          "No primary sensor is available for this query; planning relies on general context."
+        ],
         "privacy_policy": {
           "forbidden_inferences": [
             "raw_sensor_access",
@@ -412,7 +400,7 @@
           "privacy_scope": "cityos_structured_context_only",
           "raw_sensor_access_allowed": false
         },
-        "query_id": "tellme_1b4e90ad434e",
+        "query_id": "tellme_1c033cdee25e",
         "relevant_sensors": [
           {
             "allowed_api_names": [
@@ -439,8 +427,8 @@
               "Cannot verify events outside the doorway field of view."
             ],
             "modality": "video",
-            "reason": "Modality or supported context type matches the query requirements.",
-            "relevance": "primary",
+            "reason": "Not directly targeted but available for corroboration.",
+            "relevance": "supporting",
             "restricted_api_names": [
               "get_raw_video_reference"
             ],
@@ -477,8 +465,8 @@
               "Posture signals are candidate-level only."
             ],
             "modality": "video",
-            "reason": "Modality or supported context type matches the query requirements.",
-            "relevance": "primary",
+            "reason": "Not directly targeted but available for corroboration.",
+            "relevance": "supporting",
             "restricted_api_names": [
               "get_raw_video_reference"
             ],
@@ -513,8 +501,8 @@
               "Cannot establish visual identity."
             ],
             "modality": "audio",
-            "reason": "Modality or supported context type matches the query requirements.",
-            "relevance": "primary",
+            "reason": "Not directly targeted but available for corroboration.",
+            "relevance": "supporting",
             "restricted_api_names": [
               "get_raw_audio_reference",
               "get_full_transcript_context"
@@ -580,23 +568,13 @@
         ],
         "snapshot_id": "cap_smart_room_1_cam_audio_v1",
         "space_id": "smart_room_1",
-        "time_window": {
-          "end": "15:00",
-          "label": "query_range",
-          "start": "14:00"
-        }
+        "time_window": null
       },
-      "route": "multi_agent",
+      "route": "single_agent",
       "space_id": "smart_room_1",
-      "task_category": "temporal_correlation",
-      "time_windows": [
-        {
-          "end": "15:00",
-          "label": "query_range",
-          "start": "14:00"
-        }
-      ],
-      "user_query": "Design a system that allows a user to ask questions about events captured by two smart-room cameras on a specific date and time\n\nfor example, \n\nWhat happened in the room on June 14 between 2:00 PM and 3:00 PM?\n\nThe controller should retrieve and synchronize the relevant recordings from both cameras, combine their observations, remove duplicate information, resolve conflicting details, and return an accurate summary of what occurred during the requested period. Emergency or safety-related events should be highlighted, and occupant privacy must be protected.",
+      "task_category": "event_detection",
+      "time_windows": [],
+      "user_query": "Coordinate three medication-delivery robots sharing one hospital corridor.",
       "validation_policy": {
         "bounded_time_windows_required": true,
         "llm_proposal_untrusted": true,
@@ -608,22 +586,22 @@
       }
     },
     "tracefix_task_spec": {
-      "task_id": "task_1b4e90ad434e",
-      "query_id": "tellme_1b4e90ad434e",
-      "user_query": "Design a system that allows a user to ask questions about events captured by two smart-room cameras on a specific date and time\n\nfor example, \n\nWhat happened in the room on June 14 between 2:00 PM and 3:00 PM?\n\nThe controller should retrieve and synchronize the relevant recordings from both cameras, combine their observations, remove duplicate information, resolve conflicting details, and return an accurate summary of what occurred during the requested period. Emergency or safety-related events should be highlighted, and occupant privacy must be protected.",
+      "task_id": "task_1c033cdee25e",
+      "query_id": "tellme_1c033cdee25e",
+      "user_query": "Coordinate three medication-delivery robots sharing one hospital corridor.",
       "space_id": "smart_room_1",
-      "intent": "activity_lookup",
-      "tracefix_reason": "Needs multi-step evidence gathering or consistency checks.",
+      "intent": "general_lookup",
+      "tracefix_reason": "Preserve routing, privacy, and output verification.",
       "required_capabilities": [
-        "video_context",
+        "general_context",
         "answer_synthesis"
       ],
       "input_artifacts": [
         {
-          "artifact_id": "video_findings_packet",
+          "artifact_id": "general_context_harness_packet",
           "artifact_type": "packet",
-          "time_range": "query_range:14:00->15:00",
-          "modality": "video",
+          "time_range": null,
+          "modality": null,
           "privacy_level": "structured_context_only"
         }
       ],
@@ -639,32 +617,25 @@
         "identity_inference_allowed": false
       },
       "success_criteria": [
-        "Return a privacy-bounded answer packet with confidence and evidence refs.",
+        "Return a privacy-bounded answer with confidence and evidence references.",
         "Return required fields only.",
         "Preserve privacy limits and caveats."
       ],
       "output_contract_name": "direct_answer_v1",
-      "route": "multi_agent",
-      "time_windows": [
-        {
-          "start": "14:00",
-          "end": "15:00",
-          "label": "query_range"
-        }
-      ],
+      "route": "single_agent",
+      "time_windows": [],
       "required_modalities": [
-        "context",
-        "video"
+        "context"
       ],
       "candidate_harnesses": [
-        "video_context_harness",
+        "general_context_harness",
         "answer_synthesis_harness"
       ],
       "application_goal": {
-        "goal_type": "temporal_correlation",
-        "user_intent": "activity_lookup",
-        "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
-        "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
+        "goal_type": "event_detection",
+        "user_intent": "general_lookup",
+        "success_condition": "Return a privacy-bounded answer with confidence and evidence references.",
+        "failure_condition": "Return insufficient_evidence when the bounded evidence is not enough.",
         "non_goals": [
           "identify person",
           "face recognition",
@@ -674,11 +645,11 @@
       },
       "evidence_plan": {
         "primary_evidence": [
-          "video_findings_packet"
+          "general_context_harness_packet"
         ],
         "supporting_evidence": [],
         "minimum_sufficient_evidence": [
-          "video_findings_packet"
+          "general_context_harness_packet"
         ],
         "conflicting_evidence_checks": []
       },
@@ -693,8 +664,6 @@
           "limitations"
         ],
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
           "timestamped_event_summary"
         ],
         "forbidden_claims": [
@@ -710,25 +679,26 @@
         "fallback_answer_type": "insufficient_evidence"
       },
       "evidence_card_contract": {
-        "card_type": "temporal",
-        "primary_question": "In what order did the events occur?",
+        "card_type": "descriptive",
+        "primary_question": "What did the structured context observe?",
         "title_template": "{primary_question}",
-        "claim_target": "bounded_temporal_sequence",
+        "claim_target": "observed_room_state",
         "allowed_conclusion_types": [
-          "temporal_order",
-          "bounded_temporal_sequence",
-          "event_match"
+          "observed_state",
+          "bounded_count",
+          "presence_state"
         ],
         "forbidden_conclusion_types": [
-          "causation",
-          "personal_identity",
-          "intent_inference",
-          "cause_or_intent_inference",
+          "causal_effect",
+          "statistical_significance",
+          "causal_graph_claim",
           "raw_sensor_access",
           "face_identity",
+          "personal_identity",
           "medical_diagnosis",
           "unsupported_behavioral_inference",
-          "confirmed_injury"
+          "confirmed_injury",
+          "cause_or_intent_inference"
         ],
         "badge_requirements": [
           {
@@ -738,37 +708,37 @@
             "required": true
           },
           {
-            "badge_id": "ordering",
-            "label_template": "{ordering}",
-            "source": "aggregator",
+            "badge_id": "modality",
+            "label_template": "{modalities}",
+            "source": "harness_output",
             "required": false
           }
         ],
         "metric_requirements": [
           {
-            "metric_id": "event_timestamps",
-            "display_label": "Event timestamps",
-            "description": "Timestamps of the correlated events.",
+            "metric_id": "observed_value",
+            "display_label": "Observed value",
+            "description": "The value observed in the time window (e.g. occupancy count or state).",
             "required": true,
-            "value_type": "timestamp",
+            "value_type": "category",
             "source": "harness_output",
-            "source_field": null,
+            "source_field": "value",
             "unavailable_behavior": "show_na"
           },
           {
-            "metric_id": "elapsed_duration",
-            "display_label": "Elapsed duration",
-            "description": "Time elapsed between the events.",
+            "metric_id": "time_window",
+            "display_label": "Time window",
+            "description": "Bounded window the observation covers.",
             "required": true,
-            "value_type": "duration",
-            "source": "aggregator",
-            "source_field": null,
+            "value_type": "range",
+            "source": "harness_output",
+            "source_field": "timestamp",
             "unavailable_behavior": "show_na"
           },
           {
-            "metric_id": "track_continuity",
-            "display_label": "Track continuity",
-            "description": "Whether continuity was maintained between events (identity-free).",
+            "metric_id": "modalities_used",
+            "display_label": "Modalities used",
+            "description": "Sensor modalities that contributed.",
             "required": true,
             "value_type": "category",
             "source": "aggregator",
@@ -776,9 +746,19 @@
             "unavailable_behavior": "show_na"
           },
           {
-            "metric_id": "evidence_agreement",
-            "display_label": "Evidence agreement",
-            "description": "Cross-source agreement on the sequence.",
+            "metric_id": "evidence_count",
+            "display_label": "Evidence count",
+            "description": "Number of supporting context packets.",
+            "required": true,
+            "value_type": "integer",
+            "source": "aggregator",
+            "source_field": null,
+            "unavailable_behavior": "show_na"
+          },
+          {
+            "metric_id": "sensor_agreement",
+            "display_label": "Sensor agreement",
+            "description": "Fraction of modalities in agreement.",
             "required": false,
             "value_type": "percentage",
             "source": "aggregator",
@@ -787,13 +767,13 @@
           }
         ],
         "summary_requirements": [
-          "State the temporal order without implying that one event caused the other."
+          "State the observed value and its bounded time window in one sentence."
         ],
         "confidence_requirements": {
-          "confidence_kind": "temporal_link_confidence",
+          "confidence_kind": "sensor_confidence",
           "required_inputs": [
-            "track_continuity",
-            "evidence_agreement"
+            "sensor_confidence",
+            "evidence_count"
           ],
           "minimum_threshold": null,
           "label_bands": {
@@ -811,18 +791,18 @@
             ]
           },
           "explanation_required": true,
-          "scoring_method": "temporal_link_confidence"
+          "scoring_method": "bounded_sensor_confidence"
         },
         "evidence_requirements": [
           {
-            "evidence_type": "event_sequence",
+            "evidence_type": "structured_context",
             "required": true,
-            "minimum_count": 2,
+            "minimum_count": 1,
             "accepted_packet_types": [
-              "entry_event_packet",
-              "fall_event_packet",
-              "tracking_packet",
-              "temporal_consistency_packet"
+              "occupancy_context_packet",
+              "room_state_packet",
+              "motion_context_packet",
+              "audio_context_packet"
             ],
             "include_evidence_refs": true,
             "include_time_window": true,
@@ -830,11 +810,10 @@
           }
         ],
         "caveat_requirements": [
-          "Temporal order does not establish causation.",
-          "No identity claim is made about any tracked person."
+          "Reflects structured context only; no causal interpretation."
         ],
         "provenance_requirements": [
-          "List event packets and the time windows compared."
+          "List the harness/packet ids backing the observed value."
         ],
         "fallback_card_type": "insufficient_evidence"
       },
@@ -858,8 +837,6 @@
         "answer_type": "direct_answer",
         "fallback_answer_type": "insufficient_evidence",
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
           "timestamped_event_summary"
         ],
         "forbidden_claims": [
@@ -912,23 +889,19 @@
         "unsupported_behavioral_inference"
       ],
       "allowed_claims": [
-        "bounded_count",
-        "presence_state",
         "timestamped_event_summary"
       ],
-      "reasoning_summary": "Deterministic template proposal generated for query tellme_1b4e90ad434e.",
+      "reasoning_summary": "FakeLLM semantic proposal for deterministic demo mode using only discovered sensors and APIs.",
       "executable": true,
-      "reason": "activity_lookup",
+      "reason": "general_lookup",
       "target_tracefix_path": "TraceFix-main/",
       "status": "stub",
       "caveats": [
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-        "Mock CityOS structured context may be incomplete.",
-        "Confidence must remain bounded by available evidence.",
+        "Only the selected derived-context APIs may be used.",
         "Use CityOS structured context only.",
-        "Do not request raw sensor access, identity claims, unrestricted transcription, or medical diagnosis.",
         "Do not request raw sensor access.",
         "Do not identify a person, diagnose injury, or infer unsupported behavior."
       ]
@@ -940,14 +913,14 @@
           "role": "Synthesize a final answer packet with caveats and evidence references."
         },
         {
-          "name": "video_context_harness",
-          "role": "Summarize structured video-derived scene context."
+          "name": "general_context_harness",
+          "role": "Retrieve general CityOS structured context."
         }
       ],
       "channels": [
         {
-          "from": "video_context_harness",
-          "label": "video_findings",
+          "from": "general_context_harness",
+          "label": "general_context_findings",
           "to": "answer_synthesis_harness"
         }
       ],
@@ -960,8 +933,6 @@
       ],
       "output_contract": {
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
           "timestamped_event_summary"
         ],
         "answer_type": "direct_answer",
@@ -993,44 +964,37 @@
           "limitations"
         ]
       },
-      "query_id": "tellme_1b4e90ad434e",
+      "query_id": "tellme_1c033cdee25e",
       "resources": [
         {
           "modalities": [
-            "context",
-            "video"
+            "context"
           ],
           "name": "cityos_structured_context",
           "space_id": "smart_room_1",
-          "time_windows": [
-            {
-              "end": "15:00",
-              "label": "query_range",
-              "start": "14:00"
-            }
-          ],
+          "time_windows": [],
           "type": "structured_context_bundle"
         },
         {
           "name": "tellme_query_logs",
-          "query_id": "tellme_1b4e90ad434e",
+          "query_id": "tellme_1c033cdee25e",
           "type": "local_query_run_directory"
         }
       ],
-      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\nDesign a system that allows a user to ask questions about events captured by two smart-room cameras on a specific date and time\n\nfor example, \n\nWhat happened in the room on June 14 between 2:00 PM and 3:00 PM?\n\nThe controller should retrieve and synchronize the relevant recordings from both cameras, combine their observations, remove duplicate information, resolve conflicting details, and return an accurate summary of what occurred during the requested period. Emergency or safety-related events should be highlighted, and occupant privacy must be protected.\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- query_range: start=14:00, end=15:00\n\n## Required Modalities\n- context, video\n\n## Candidate Harnesses\n- answer_synthesis_harness\n- video_context_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence or escalate when the structured context is inadequate.\n- goal_type: temporal_correlation\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer packet with confidence and evidence refs.\n- user_intent: activity_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['video_findings_packet']\n- primary_evidence: ['video_findings_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['bounded_count', 'presence_state', 'timestamped_event_summary']\n- answer_type: direct_answer\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- bounded_count, presence_state, timestamped_event_summary\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
-      "task_id": "task_1b4e90ad434e",
+      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\nCoordinate three medication-delivery robots sharing one hospital corridor.\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- none specified\n\n## Required Modalities\n- context\n\n## Candidate Harnesses\n- answer_synthesis_harness\n- general_context_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence when the bounded evidence is not enough.\n- goal_type: event_detection\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer with confidence and evidence references.\n- user_intent: general_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['general_context_harness_packet']\n- primary_evidence: ['general_context_harness_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['timestamped_event_summary']\n- answer_type: direct_answer\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- timestamped_event_summary\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
+      "task_id": "task_1c033cdee25e",
       "tool_manifest": {
         "answer_synthesis_harness": [
           "synthesize_answer_packet"
         ],
-        "video_context_harness": [
-          "get_video_context"
+        "general_context_harness": [
+          "cityos_context_lookup"
         ]
       },
-      "user_query": "Design a system that allows a user to ask questions about events captured by two smart-room cameras on a specific date and time\n\nfor example, \n\nWhat happened in the room on June 14 between 2:00 PM and 3:00 PM?\n\nThe controller should retrieve and synchronize the relevant recordings from both cameras, combine their observations, remove duplicate information, resolve conflicting details, and return an accurate summary of what occurred during the requested period. Emergency or safety-related events should be highlighted, and occupant privacy must be protected."
+      "user_query": "Coordinate three medication-delivery robots sharing one hospital corridor."
     },
     "answer_packet": {
-      "query_id": "tellme_1b4e90ad434e",
+      "query_id": "tellme_1c033cdee25e",
       "status": "needs_tracefix",
       "answer": "This query requires a future TraceFix multi-agent workflow and cannot be fully answered in V0.",
       "confidence": 0.0,
@@ -1044,73 +1008,51 @@
       ],
       "selected_agent": null,
       "route_decision": {
-        "route": "multi_agent",
-        "intent": "historical_lookup",
-        "selected_agent": null,
-        "selected_tool": null,
-        "required_tools": [],
-        "rationale": "The query requires multi-step or multi-modal reasoning beyond one mock CityOS lookup.",
-        "time_window": {
-          "start": "14:00",
-          "end": "15:00",
-          "label": "query_range"
-        },
-        "requires_tracefix": true,
+        "route": "single_agent",
+        "intent": "general",
+        "selected_agent": "general_context_agent",
+        "selected_tool": "cityos_context_lookup",
+        "required_tools": [
+          "cityos_context_lookup"
+        ],
+        "rationale": "The query appears answerable with one focused CityOS-style context lookup.",
+        "time_window": null,
+        "requires_tracefix": false,
         "caveats": [
-          "V0 only emits a TraceFixTaskSpec stub for complex queries."
+          "If the single-agent lookup is insufficient, the harness should escalate to TraceFix later."
         ],
         "trigger_terms_found": [],
         "explicit_agent_names_detected": false
       },
       "agent_plan": {},
       "raw_outputs": {
-        "run_dir": "C:\\Users\\shrey\\TraceFixCityOS\\.runs\\tellme\\tellme_1b4e90ad434e",
+        "run_dir": "C:\\Users\\razer\\Downloads\\TeLLME Traceifx\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_1c033cdee25e",
         "logging_fallback_used": false,
         "llm_operational": {
-          "agent_backend_mode": "llm",
-          "real_llm_requested": true,
-          "openai_key_configured": true,
-          "model": "gpt-4.1-mini",
-          "timeout_seconds": 120,
-          "decomposition": {
-            "model": "gpt-4.1-mini",
-            "last_used": "primary",
-            "last_latency_ms": 24141.0,
-            "fallback_reason": null,
-            "primary_calls": 1,
-            "fallback_calls": 0,
-            "last_request": {
-              "request_start": "2026-07-21T15:55:08.577831+00:00",
-              "first_response_time": "2026-07-21T15:55:32.700116+00:00",
-              "request_end": "2026-07-21T15:55:32.701147+00:00",
-              "total_duration_ms": 24125.0,
-              "time_to_first_response_ms": 24125.0,
-              "model": "gpt-4.1-mini",
-              "provider": "https://api.openai.com/v1",
-              "failed": false,
-              "error": null,
-              "retry_count": 0
-            }
-          }
+          "agent_backend_mode": "deterministic",
+          "real_llm_requested": false,
+          "openai_key_configured": false,
+          "model": null,
+          "timeout_seconds": null
         },
-        "agent_backend_mode": "llm",
+        "agent_backend_mode": "deterministic",
         "tracefix_task_spec": {
-          "task_id": "task_1b4e90ad434e",
-          "query_id": "tellme_1b4e90ad434e",
-          "user_query": "Design a system that allows a user to ask questions about events captured by two smart-room cameras on a specific date and time\n\nfor example, \n\nWhat happened in the room on June 14 between 2:00 PM and 3:00 PM?\n\nThe controller should retrieve and synchronize the relevant recordings from both cameras, combine their observations, remove duplicate information, resolve conflicting details, and return an accurate summary of what occurred during the requested period. Emergency or safety-related events should be highlighted, and occupant privacy must be protected.",
+          "task_id": "task_1c033cdee25e",
+          "query_id": "tellme_1c033cdee25e",
+          "user_query": "Coordinate three medication-delivery robots sharing one hospital corridor.",
           "space_id": "smart_room_1",
-          "intent": "activity_lookup",
-          "tracefix_reason": "Needs multi-step evidence gathering or consistency checks.",
+          "intent": "general_lookup",
+          "tracefix_reason": "Preserve routing, privacy, and output verification.",
           "required_capabilities": [
-            "video_context",
+            "general_context",
             "answer_synthesis"
           ],
           "input_artifacts": [
             {
-              "artifact_id": "video_findings_packet",
+              "artifact_id": "general_context_harness_packet",
               "artifact_type": "packet",
-              "time_range": "query_range:14:00->15:00",
-              "modality": "video",
+              "time_range": null,
+              "modality": null,
               "privacy_level": "structured_context_only"
             }
           ],
@@ -1126,32 +1068,25 @@
             "identity_inference_allowed": false
           },
           "success_criteria": [
-            "Return a privacy-bounded answer packet with confidence and evidence refs.",
+            "Return a privacy-bounded answer with confidence and evidence references.",
             "Return required fields only.",
             "Preserve privacy limits and caveats."
           ],
           "output_contract_name": "direct_answer_v1",
-          "route": "multi_agent",
-          "time_windows": [
-            {
-              "start": "14:00",
-              "end": "15:00",
-              "label": "query_range"
-            }
-          ],
+          "route": "single_agent",
+          "time_windows": [],
           "required_modalities": [
-            "context",
-            "video"
+            "context"
           ],
           "candidate_harnesses": [
-            "video_context_harness",
+            "general_context_harness",
             "answer_synthesis_harness"
           ],
           "application_goal": {
-            "goal_type": "temporal_correlation",
-            "user_intent": "activity_lookup",
-            "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
-            "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
+            "goal_type": "event_detection",
+            "user_intent": "general_lookup",
+            "success_condition": "Return a privacy-bounded answer with confidence and evidence references.",
+            "failure_condition": "Return insufficient_evidence when the bounded evidence is not enough.",
             "non_goals": [
               "identify person",
               "face recognition",
@@ -1161,11 +1096,11 @@
           },
           "evidence_plan": {
             "primary_evidence": [
-              "video_findings_packet"
+              "general_context_harness_packet"
             ],
             "supporting_evidence": [],
             "minimum_sufficient_evidence": [
-              "video_findings_packet"
+              "general_context_harness_packet"
             ],
             "conflicting_evidence_checks": []
           },
@@ -1180,8 +1115,6 @@
               "limitations"
             ],
             "allowed_claims": [
-              "bounded_count",
-              "presence_state",
               "timestamped_event_summary"
             ],
             "forbidden_claims": [
@@ -1197,25 +1130,26 @@
             "fallback_answer_type": "insufficient_evidence"
           },
           "evidence_card_contract": {
-            "card_type": "temporal",
-            "primary_question": "In what order did the events occur?",
+            "card_type": "descriptive",
+            "primary_question": "What did the structured context observe?",
             "title_template": "{primary_question}",
-            "claim_target": "bounded_temporal_sequence",
+            "claim_target": "observed_room_state",
             "allowed_conclusion_types": [
-              "temporal_order",
-              "bounded_temporal_sequence",
-              "event_match"
+              "observed_state",
+              "bounded_count",
+              "presence_state"
             ],
             "forbidden_conclusion_types": [
-              "causation",
-              "personal_identity",
-              "intent_inference",
-              "cause_or_intent_inference",
+              "causal_effect",
+              "statistical_significance",
+              "causal_graph_claim",
               "raw_sensor_access",
               "face_identity",
+              "personal_identity",
               "medical_diagnosis",
               "unsupported_behavioral_inference",
-              "confirmed_injury"
+              "confirmed_injury",
+              "cause_or_intent_inference"
             ],
             "badge_requirements": [
               {
@@ -1225,37 +1159,37 @@
                 "required": true
               },
               {
-                "badge_id": "ordering",
-                "label_template": "{ordering}",
-                "source": "aggregator",
+                "badge_id": "modality",
+                "label_template": "{modalities}",
+                "source": "harness_output",
                 "required": false
               }
             ],
             "metric_requirements": [
               {
-                "metric_id": "event_timestamps",
-                "display_label": "Event timestamps",
-                "description": "Timestamps of the correlated events.",
+                "metric_id": "observed_value",
+                "display_label": "Observed value",
+                "description": "The value observed in the time window (e.g. occupancy count or state).",
                 "required": true,
-                "value_type": "timestamp",
+                "value_type": "category",
                 "source": "harness_output",
-                "source_field": null,
+                "source_field": "value",
                 "unavailable_behavior": "show_na"
               },
               {
-                "metric_id": "elapsed_duration",
-                "display_label": "Elapsed duration",
-                "description": "Time elapsed between the events.",
+                "metric_id": "time_window",
+                "display_label": "Time window",
+                "description": "Bounded window the observation covers.",
                 "required": true,
-                "value_type": "duration",
-                "source": "aggregator",
-                "source_field": null,
+                "value_type": "range",
+                "source": "harness_output",
+                "source_field": "timestamp",
                 "unavailable_behavior": "show_na"
               },
               {
-                "metric_id": "track_continuity",
-                "display_label": "Track continuity",
-                "description": "Whether continuity was maintained between events (identity-free).",
+                "metric_id": "modalities_used",
+                "display_label": "Modalities used",
+                "description": "Sensor modalities that contributed.",
                 "required": true,
                 "value_type": "category",
                 "source": "aggregator",
@@ -1263,9 +1197,19 @@
                 "unavailable_behavior": "show_na"
               },
               {
-                "metric_id": "evidence_agreement",
-                "display_label": "Evidence agreement",
-                "description": "Cross-source agreement on the sequence.",
+                "metric_id": "evidence_count",
+                "display_label": "Evidence count",
+                "description": "Number of supporting context packets.",
+                "required": true,
+                "value_type": "integer",
+                "source": "aggregator",
+                "source_field": null,
+                "unavailable_behavior": "show_na"
+              },
+              {
+                "metric_id": "sensor_agreement",
+                "display_label": "Sensor agreement",
+                "description": "Fraction of modalities in agreement.",
                 "required": false,
                 "value_type": "percentage",
                 "source": "aggregator",
@@ -1274,13 +1218,13 @@
               }
             ],
             "summary_requirements": [
-              "State the temporal order without implying that one event caused the other."
+              "State the observed value and its bounded time window in one sentence."
             ],
             "confidence_requirements": {
-              "confidence_kind": "temporal_link_confidence",
+              "confidence_kind": "sensor_confidence",
               "required_inputs": [
-                "track_continuity",
-                "evidence_agreement"
+                "sensor_confidence",
+                "evidence_count"
               ],
               "minimum_threshold": null,
               "label_bands": {
@@ -1298,18 +1242,18 @@
                 ]
               },
               "explanation_required": true,
-              "scoring_method": "temporal_link_confidence"
+              "scoring_method": "bounded_sensor_confidence"
             },
             "evidence_requirements": [
               {
-                "evidence_type": "event_sequence",
+                "evidence_type": "structured_context",
                 "required": true,
-                "minimum_count": 2,
+                "minimum_count": 1,
                 "accepted_packet_types": [
-                  "entry_event_packet",
-                  "fall_event_packet",
-                  "tracking_packet",
-                  "temporal_consistency_packet"
+                  "occupancy_context_packet",
+                  "room_state_packet",
+                  "motion_context_packet",
+                  "audio_context_packet"
                 ],
                 "include_evidence_refs": true,
                 "include_time_window": true,
@@ -1317,11 +1261,10 @@
               }
             ],
             "caveat_requirements": [
-              "Temporal order does not establish causation.",
-              "No identity claim is made about any tracked person."
+              "Reflects structured context only; no causal interpretation."
             ],
             "provenance_requirements": [
-              "List event packets and the time windows compared."
+              "List the harness/packet ids backing the observed value."
             ],
             "fallback_card_type": "insufficient_evidence"
           },
@@ -1345,8 +1288,6 @@
             "answer_type": "direct_answer",
             "fallback_answer_type": "insufficient_evidence",
             "allowed_claims": [
-              "bounded_count",
-              "presence_state",
               "timestamped_event_summary"
             ],
             "forbidden_claims": [
@@ -1399,59 +1340,55 @@
             "unsupported_behavioral_inference"
           ],
           "allowed_claims": [
-            "bounded_count",
-            "presence_state",
             "timestamped_event_summary"
           ],
-          "reasoning_summary": "Deterministic template proposal generated for query tellme_1b4e90ad434e.",
+          "reasoning_summary": "FakeLLM semantic proposal for deterministic demo mode using only discovered sensors and APIs.",
           "executable": true,
-          "reason": "activity_lookup",
+          "reason": "general_lookup",
           "target_tracefix_path": "TraceFix-main/",
           "status": "stub",
           "caveats": [
             "This is a stub only; TraceFix-main is not invoked in V0.",
             "Real TraceFix multi-agent execution is not integrated yet.",
             "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-            "Mock CityOS structured context may be incomplete.",
-            "Confidence must remain bounded by available evidence.",
+            "Only the selected derived-context APIs may be used.",
             "Use CityOS structured context only.",
-            "Do not request raw sensor access, identity claims, unrestricted transcription, or medical diagnosis.",
             "Do not request raw sensor access.",
             "Do not identify a person, diagnose injury, or infer unsupported behavior."
           ]
         },
         "tracefix_bundle_summary": {
-          "task_id": "task_1b4e90ad434e",
+          "task_id": "task_1c033cdee25e",
           "agent_names": [
             "answer_synthesis_harness",
-            "video_context_harness"
+            "general_context_harness"
           ],
           "channel_count": 1,
           "resource_count": 2
         },
         "evidence_card_preview": {
-          "card_type": "temporal",
-          "metric_count": 4,
+          "card_type": "descriptive",
+          "metric_count": 5,
           "validation_status": "valid"
         }
       },
       "tracefix_task_spec": {
-        "task_id": "task_1b4e90ad434e",
-        "query_id": "tellme_1b4e90ad434e",
-        "user_query": "Design a system that allows a user to ask questions about events captured by two smart-room cameras on a specific date and time\n\nfor example, \n\nWhat happened in the room on June 14 between 2:00 PM and 3:00 PM?\n\nThe controller should retrieve and synchronize the relevant recordings from both cameras, combine their observations, remove duplicate information, resolve conflicting details, and return an accurate summary of what occurred during the requested period. Emergency or safety-related events should be highlighted, and occupant privacy must be protected.",
+        "task_id": "task_1c033cdee25e",
+        "query_id": "tellme_1c033cdee25e",
+        "user_query": "Coordinate three medication-delivery robots sharing one hospital corridor.",
         "space_id": "smart_room_1",
-        "intent": "activity_lookup",
-        "tracefix_reason": "Needs multi-step evidence gathering or consistency checks.",
+        "intent": "general_lookup",
+        "tracefix_reason": "Preserve routing, privacy, and output verification.",
         "required_capabilities": [
-          "video_context",
+          "general_context",
           "answer_synthesis"
         ],
         "input_artifacts": [
           {
-            "artifact_id": "video_findings_packet",
+            "artifact_id": "general_context_harness_packet",
             "artifact_type": "packet",
-            "time_range": "query_range:14:00->15:00",
-            "modality": "video",
+            "time_range": null,
+            "modality": null,
             "privacy_level": "structured_context_only"
           }
         ],
@@ -1467,32 +1404,25 @@
           "identity_inference_allowed": false
         },
         "success_criteria": [
-          "Return a privacy-bounded answer packet with confidence and evidence refs.",
+          "Return a privacy-bounded answer with confidence and evidence references.",
           "Return required fields only.",
           "Preserve privacy limits and caveats."
         ],
         "output_contract_name": "direct_answer_v1",
-        "route": "multi_agent",
-        "time_windows": [
-          {
-            "start": "14:00",
-            "end": "15:00",
-            "label": "query_range"
-          }
-        ],
+        "route": "single_agent",
+        "time_windows": [],
         "required_modalities": [
-          "context",
-          "video"
+          "context"
         ],
         "candidate_harnesses": [
-          "video_context_harness",
+          "general_context_harness",
           "answer_synthesis_harness"
         ],
         "application_goal": {
-          "goal_type": "temporal_correlation",
-          "user_intent": "activity_lookup",
-          "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
-          "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
+          "goal_type": "event_detection",
+          "user_intent": "general_lookup",
+          "success_condition": "Return a privacy-bounded answer with confidence and evidence references.",
+          "failure_condition": "Return insufficient_evidence when the bounded evidence is not enough.",
           "non_goals": [
             "identify person",
             "face recognition",
@@ -1502,11 +1432,11 @@
         },
         "evidence_plan": {
           "primary_evidence": [
-            "video_findings_packet"
+            "general_context_harness_packet"
           ],
           "supporting_evidence": [],
           "minimum_sufficient_evidence": [
-            "video_findings_packet"
+            "general_context_harness_packet"
           ],
           "conflicting_evidence_checks": []
         },
@@ -1521,8 +1451,6 @@
             "limitations"
           ],
           "allowed_claims": [
-            "bounded_count",
-            "presence_state",
             "timestamped_event_summary"
           ],
           "forbidden_claims": [
@@ -1538,25 +1466,26 @@
           "fallback_answer_type": "insufficient_evidence"
         },
         "evidence_card_contract": {
-          "card_type": "temporal",
-          "primary_question": "In what order did the events occur?",
+          "card_type": "descriptive",
+          "primary_question": "What did the structured context observe?",
           "title_template": "{primary_question}",
-          "claim_target": "bounded_temporal_sequence",
+          "claim_target": "observed_room_state",
           "allowed_conclusion_types": [
-            "temporal_order",
-            "bounded_temporal_sequence",
-            "event_match"
+            "observed_state",
+            "bounded_count",
+            "presence_state"
           ],
           "forbidden_conclusion_types": [
-            "causation",
-            "personal_identity",
-            "intent_inference",
-            "cause_or_intent_inference",
+            "causal_effect",
+            "statistical_significance",
+            "causal_graph_claim",
             "raw_sensor_access",
             "face_identity",
+            "personal_identity",
             "medical_diagnosis",
             "unsupported_behavioral_inference",
-            "confirmed_injury"
+            "confirmed_injury",
+            "cause_or_intent_inference"
           ],
           "badge_requirements": [
             {
@@ -1566,37 +1495,37 @@
               "required": true
             },
             {
-              "badge_id": "ordering",
-              "label_template": "{ordering}",
-              "source": "aggregator",
+              "badge_id": "modality",
+              "label_template": "{modalities}",
+              "source": "harness_output",
               "required": false
             }
           ],
           "metric_requirements": [
             {
-              "metric_id": "event_timestamps",
-              "display_label": "Event timestamps",
-              "description": "Timestamps of the correlated events.",
+              "metric_id": "observed_value",
+              "display_label": "Observed value",
+              "description": "The value observed in the time window (e.g. occupancy count or state).",
               "required": true,
-              "value_type": "timestamp",
+              "value_type": "category",
               "source": "harness_output",
-              "source_field": null,
+              "source_field": "value",
               "unavailable_behavior": "show_na"
             },
             {
-              "metric_id": "elapsed_duration",
-              "display_label": "Elapsed duration",
-              "description": "Time elapsed between the events.",
+              "metric_id": "time_window",
+              "display_label": "Time window",
+              "description": "Bounded window the observation covers.",
               "required": true,
-              "value_type": "duration",
-              "source": "aggregator",
-              "source_field": null,
+              "value_type": "range",
+              "source": "harness_output",
+              "source_field": "timestamp",
               "unavailable_behavior": "show_na"
             },
             {
-              "metric_id": "track_continuity",
-              "display_label": "Track continuity",
-              "description": "Whether continuity was maintained between events (identity-free).",
+              "metric_id": "modalities_used",
+              "display_label": "Modalities used",
+              "description": "Sensor modalities that contributed.",
               "required": true,
               "value_type": "category",
               "source": "aggregator",
@@ -1604,9 +1533,19 @@
               "unavailable_behavior": "show_na"
             },
             {
-              "metric_id": "evidence_agreement",
-              "display_label": "Evidence agreement",
-              "description": "Cross-source agreement on the sequence.",
+              "metric_id": "evidence_count",
+              "display_label": "Evidence count",
+              "description": "Number of supporting context packets.",
+              "required": true,
+              "value_type": "integer",
+              "source": "aggregator",
+              "source_field": null,
+              "unavailable_behavior": "show_na"
+            },
+            {
+              "metric_id": "sensor_agreement",
+              "display_label": "Sensor agreement",
+              "description": "Fraction of modalities in agreement.",
               "required": false,
               "value_type": "percentage",
               "source": "aggregator",
@@ -1615,13 +1554,13 @@
             }
           ],
           "summary_requirements": [
-            "State the temporal order without implying that one event caused the other."
+            "State the observed value and its bounded time window in one sentence."
           ],
           "confidence_requirements": {
-            "confidence_kind": "temporal_link_confidence",
+            "confidence_kind": "sensor_confidence",
             "required_inputs": [
-              "track_continuity",
-              "evidence_agreement"
+              "sensor_confidence",
+              "evidence_count"
             ],
             "minimum_threshold": null,
             "label_bands": {
@@ -1639,18 +1578,18 @@
               ]
             },
             "explanation_required": true,
-            "scoring_method": "temporal_link_confidence"
+            "scoring_method": "bounded_sensor_confidence"
           },
           "evidence_requirements": [
             {
-              "evidence_type": "event_sequence",
+              "evidence_type": "structured_context",
               "required": true,
-              "minimum_count": 2,
+              "minimum_count": 1,
               "accepted_packet_types": [
-                "entry_event_packet",
-                "fall_event_packet",
-                "tracking_packet",
-                "temporal_consistency_packet"
+                "occupancy_context_packet",
+                "room_state_packet",
+                "motion_context_packet",
+                "audio_context_packet"
               ],
               "include_evidence_refs": true,
               "include_time_window": true,
@@ -1658,11 +1597,10 @@
             }
           ],
           "caveat_requirements": [
-            "Temporal order does not establish causation.",
-            "No identity claim is made about any tracked person."
+            "Reflects structured context only; no causal interpretation."
           ],
           "provenance_requirements": [
-            "List event packets and the time windows compared."
+            "List the harness/packet ids backing the observed value."
           ],
           "fallback_card_type": "insufficient_evidence"
         },
@@ -1686,8 +1624,6 @@
           "answer_type": "direct_answer",
           "fallback_answer_type": "insufficient_evidence",
           "allowed_claims": [
-            "bounded_count",
-            "presence_state",
             "timestamped_event_summary"
           ],
           "forbidden_claims": [
@@ -1740,35 +1676,31 @@
           "unsupported_behavioral_inference"
         ],
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
           "timestamped_event_summary"
         ],
-        "reasoning_summary": "Deterministic template proposal generated for query tellme_1b4e90ad434e.",
+        "reasoning_summary": "FakeLLM semantic proposal for deterministic demo mode using only discovered sensors and APIs.",
         "executable": true,
-        "reason": "activity_lookup",
+        "reason": "general_lookup",
         "target_tracefix_path": "TraceFix-main/",
         "status": "stub",
         "caveats": [
           "This is a stub only; TraceFix-main is not invoked in V0.",
           "Real TraceFix multi-agent execution is not integrated yet.",
           "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-          "Mock CityOS structured context may be incomplete.",
-          "Confidence must remain bounded by available evidence.",
+          "Only the selected derived-context APIs may be used.",
           "Use CityOS structured context only.",
-          "Do not request raw sensor access, identity claims, unrestricted transcription, or medical diagnosis.",
           "Do not request raw sensor access.",
           "Do not identify a person, diagnose injury, or infer unsupported behavior."
         ]
       },
       "error_message": null
     },
-    "run_dir": "C:\\Users\\shrey\\TraceFixCityOS\\.runs\\tellme\\tellme_1b4e90ad434e",
+    "run_dir": "C:\\Users\\razer\\Downloads\\TeLLME Traceifx\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_1c033cdee25e",
     "warnings": []
   },
   "tracefix": {
-    "run_id": "4430b22eae",
-    "workspace": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260721_115533"
+    "run_id": "4c6a4c826a",
+    "workspace": "C:\\Users\\razer\\Downloads\\TeLLME Traceifx\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260727_115936"
   },
   "cityos": {}
 }

@@ -3,7 +3,7 @@
   "source_workspace": "workspace\\loaded_automatically_from_the_current_20260701_124442",
   "source_task_text": "Determine the number of people physically present in the conference room.",
   "created_at": "2026-07-01T17:04:41.788892+00:00",
-  "last_seen_at": "2026-07-01T17:04:41.788892+00:00",
+  "last_seen_at": "2026-07-23T17:15:02.010910+00:00",
   "agents_count": 1,
   "channels_count": 0,
   "resources_count": 0,
@@ -14,12 +14,14 @@
   "matched_existing_template": false,
   "suggested_pattern_name": "single_agent",
   "promotion_status": "candidate",
-  "usage_count": 1,
+  "usage_count": 2,
   "observed_workspaces": [
-    "workspace\\loaded_automatically_from_the_current_20260701_124442"
+    "workspace\\loaded_automatically_from_the_current_20260701_124442",
+    "C:\\Users\\razer\\Downloads\\TeLLME Traceifx\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260723_125840"
   ],
   "observed_tasks": [
-    "Determine the number of people physically present in the conference room."
+    "Determine the number of people physically present in the conference room.",
+    "TeLLMe structured smart-room application requirements.\nTreat this as compile-time input to TraceFix planning and verification.\nGenerate a complete multi-agent topology with explicit communication channels.\nDo not execute production agents or bypass PlusCal/TLC verification.\n\nStructured task specific"
   ],
   "notes": ""
 }
