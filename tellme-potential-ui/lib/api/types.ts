@@ -67,6 +67,19 @@ export interface Guideline {
   severity: GuidelineSeverity
 }
 
+export interface RecordingCandidate {
+  recordingId: string
+  label: string
+  detail?: string
+  dateLabel?: string
+  timeLabel?: string
+}
+
+export interface RecordingSelection {
+  prompt: string
+  candidates: RecordingCandidate[]
+}
+
 export interface QueryResult {
   id: string
   /** The prominent, grounded natural-language answer. */
@@ -87,6 +100,7 @@ export interface QueryResult {
   workflow?: {
     requiresVerification: boolean
   }
+  recordingSelection?: RecordingSelection
   createdAt: string
 }
 
@@ -118,5 +132,6 @@ export interface QuerySubmitOptions {
 /** The single integration point your backend plugs into. */
 export interface QueryApi {
   submitQuery(req: QueryRequest, options?: QuerySubmitOptions): Promise<QueryResult>
+  selectRecording(req: QueryRequest, recordingId: string, options?: QuerySubmitOptions): Promise<QueryResult>
   stopQuery(runId: string): Promise<void>
 }

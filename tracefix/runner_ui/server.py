@@ -951,9 +951,17 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         or payload.get("task_text")
         or ""
     ).strip()
+    request_timestamp = str(payload.get("timestamp") or payload.get("requestTimestamp") or "").strip()
+    if request_timestamp:
+        question_context = f"{question_context} at {request_timestamp}".strip()
+    recording_override = payload.get("recordingOverride") or payload.get("recording") or payload.get("selectedRecording")
+    current = _tellme_bridge(root).current() or {}
+    tellme = current.get("tellme") if isinstance(current.get("tellme"), dict) else {}
+    if not request_timestamp:
+        request_timestamp = str(tellme.get("timestamp") or "").strip()
+        if request_timestamp and request_timestamp not in question_context:
+            question_context = f"{question_context} at {request_timestamp}".strip()
     if not question_context:
-        current = _tellme_bridge(root).current() or {}
-        tellme = current.get("tellme") if isinstance(current.get("tellme"), dict) else {}
         spec = tellme.get("tracefix_task_spec") if isinstance(tellme.get("tracefix_task_spec"), dict) else {}
         question_context = str(tellme.get("query") or spec.get("user_query") or "").strip()
     return run_web_data_apps(
@@ -966,6 +974,7 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         handler_timeout_seconds=handler_timeout,
         max_bytes=max_bytes,
         question_context=question_context,
+        recording_override=recording_override,
     )
 def _open_local_path(path: Path) -> None:
     if not path.exists():
@@ -1912,7 +1921,7 @@ class RunnerHandler(BaseHTTPRequestHandler):
                 "workspaceType": workspace_type or "",
                 "cityosRoot": str(cityos_root) if cityos_root is not None else "",
                 "appsDir": str((cityos_root / "apps").resolve()) if cityos_root is not None else "",
-                "webDataUrl": "https://smartroom-mirror.vercel.app/api/v1",
+                "webDataUrl": "http://172.16.60.239:3000/api/v1",
                 "workspaces": workspaces,
             })
             return

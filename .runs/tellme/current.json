@@ -1,8 +1,9 @@
 {
-  "run_id": "tellme_e7a429e3a156",
+  "run_id": "tellme_20269d01467e",
   "tellme": {
-    "query_id": "tellme_e7a429e3a156",
-    "query": "Is a person jumping on June 24th? (Yes/No)",
+    "query_id": "tellme_20269d01467e",
+    "query": "july 22nd how many people in total are in the room",
+    "timestamp": null,
     "mode": "llm",
     "model": "gpt-4.1-mini",
     "api_key_detected": true,
@@ -10,11 +11,11 @@
     "status": "needs_tracefix",
     "route_decision": {
       "route": "single_agent",
-      "intent": "general",
-      "selected_agent": "general_context_agent",
-      "selected_tool": "cityos_context_lookup",
+      "intent": "historical_lookup",
+      "selected_agent": "occupancy_context_agent",
+      "selected_tool": "get_occupancy_context",
       "required_tools": [
-        "cityos_context_lookup"
+        "get_occupancy_context"
       ],
       "rationale": "The query appears answerable with one focused CityOS-style context lookup.",
       "time_window": null,
@@ -40,9 +41,9 @@
       "harness_subtasks": [
         {
           "expected_modalities": [
-            "context"
+            "video"
           ],
-          "harness_name": "answer_synthesis_harness",
+          "harness_name": "occupancy_context_harness",
           "space_id": "smart_room_1",
           "time_window": null
         }
@@ -54,9 +55,11 @@
       "needs_temporal_consistency": false,
       "output_contract": {
         "allowed_claims": [
-          "insufficient_evidence"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
-        "answer_type": "insufficient_evidence",
+        "answer_type": "direct_answer",
         "fallback_answer_type": "insufficient_evidence",
         "field_types": {
           "answer": "string",
@@ -71,8 +74,7 @@
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference",
-          "guessing"
+          "unsupported_behavioral_inference"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -87,17 +89,18 @@
         ]
       },
       "plan_type": "tracefix",
-      "query_id": "tellme_e7a429e3a156",
+      "query_id": "tellme_20269d01467e",
       "required_harnesses": [
-        "answer_synthesis_harness"
+        "occupancy_context_harness"
       ],
       "required_modalities": [
-        "context"
+        "video"
       ],
       "safety_caveats": [
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
+        "No available sensor supports 'room_state' context for this space.",
         "Mock CityOS structured context may be incomplete.",
         "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
@@ -109,7 +112,9 @@
     },
     "execution_brief": {
       "allowed_claims": [
-        "insufficient_evidence"
+        "bounded_count",
+        "presence_state",
+        "timestamped_event_summary"
       ],
       "ambiguity": {
         "ambiguity_type": null,
@@ -120,17 +125,18 @@
       },
       "answer_packet_requirements": {
         "allowed_claims": [
-          "insufficient_evidence"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
-        "answer_type": "insufficient_evidence",
+        "answer_type": "direct_answer",
         "fallback_answer_type": "insufficient_evidence",
         "forbidden_claims": [
           "raw_sensor_access",
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference",
-          "guessing"
+          "unsupported_behavioral_inference"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -146,7 +152,7 @@
       },
       "application_goal": {
         "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
-        "goal_type": "unsupported",
+        "goal_type": "occupancy_count",
         "non_goals": [
           "identify person",
           "face recognition",
@@ -154,16 +160,18 @@
           "infer cause or intent"
         ],
         "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
-        "user_intent": "general_lookup"
+        "user_intent": "occupancy_lookup"
       },
-      "brief_id": "brief_task_e7a429e3a156",
+      "brief_id": "brief_task_20269d01467e",
       "candidate_harnesses": [
+        "occupancy_context_harness",
         "answer_synthesis_harness"
       ],
       "caveats": [
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
+        "No available sensor supports 'room_state' context for this space.",
         "Mock CityOS structured context may be incomplete.",
         "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
@@ -178,7 +186,9 @@
       ],
       "evidence_card_requirements": {
         "allowed_conclusion_types": [
-          "insufficient_evidence"
+          "observed_state",
+          "bounded_count",
+          "presence_state"
         ],
         "badge_requirements": [
           {
@@ -186,15 +196,21 @@
             "label_template": "{card_type}",
             "required": true,
             "source": "query_analysis"
+          },
+          {
+            "badge_id": "modality",
+            "label_template": "{modalities}",
+            "required": false,
+            "source": "harness_output"
           }
         ],
-        "card_type": "insufficient_evidence",
+        "card_type": "descriptive",
         "caveat_requirements": [
-          "A stronger answer was not produced because the bounded evidence was insufficient."
+          "Reflects structured context only; no causal interpretation."
         ],
-        "claim_target": "insufficient_evidence",
+        "claim_target": "observed_room_state",
         "confidence_requirements": {
-          "confidence_kind": "composite_confidence",
+          "confidence_kind": "sensor_confidence",
           "explanation_required": true,
           "label_bands": {
             "high": [
@@ -211,83 +227,121 @@
             ]
           },
           "minimum_threshold": null,
-          "required_inputs": [],
-          "scoring_method": "none"
+          "required_inputs": [
+            "sensor_confidence",
+            "evidence_count"
+          ],
+          "scoring_method": "bounded_sensor_confidence"
         },
-        "evidence_requirements": [],
+        "evidence_requirements": [
+          {
+            "accepted_packet_types": [
+              "occupancy_context_packet",
+              "room_state_packet",
+              "motion_context_packet",
+              "audio_context_packet"
+            ],
+            "evidence_type": "structured_context",
+            "include_evidence_refs": true,
+            "include_modality": true,
+            "include_time_window": true,
+            "minimum_count": 1,
+            "required": true
+          }
+        ],
         "fallback_card_type": "insufficient_evidence",
         "forbidden_conclusion_types": [
-          "personal_identity",
-          "face_identity",
-          "medical_diagnosis",
-          "confirmed_injury",
-          "cause_or_intent_inference",
-          "unsupported_behavioral_inference",
+          "causal_effect",
+          "statistical_significance",
+          "causal_graph_claim",
           "raw_sensor_access",
-          "fabricated_confidence",
-          "guessing"
+          "face_identity",
+          "personal_identity",
+          "medical_diagnosis",
+          "unsupported_behavioral_inference",
+          "confirmed_injury",
+          "cause_or_intent_inference"
         ],
         "metric_requirements": [
           {
-            "description": "What the system could establish, if anything.",
-            "display_label": "What was determined",
-            "metric_id": "what_determined",
+            "description": "The value observed in the time window (e.g. occupancy count or state).",
+            "display_label": "Observed value",
+            "metric_id": "observed_value",
+            "required": true,
+            "source": "harness_output",
+            "source_field": "value",
+            "unavailable_behavior": "show_na",
+            "value_type": "category"
+          },
+          {
+            "description": "Bounded window the observation covers.",
+            "display_label": "Time window",
+            "metric_id": "time_window",
+            "required": true,
+            "source": "harness_output",
+            "source_field": "timestamp",
+            "unavailable_behavior": "show_na",
+            "value_type": "range"
+          },
+          {
+            "description": "Sensor modalities that contributed.",
+            "display_label": "Modalities used",
+            "metric_id": "modalities_used",
             "required": true,
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na",
-            "value_type": "text"
+            "value_type": "category"
           },
           {
-            "description": "What evidence was missing or insufficient.",
-            "display_label": "Missing evidence",
-            "metric_id": "missing_evidence",
+            "description": "Number of supporting context packets.",
+            "display_label": "Evidence count",
+            "metric_id": "evidence_count",
             "required": true,
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na",
-            "value_type": "text"
+            "value_type": "integer"
           },
           {
-            "description": "Which harness or modality failed, if safe to disclose.",
-            "display_label": "Failed harness/modality",
-            "metric_id": "failed_modality",
+            "description": "Fraction of modalities in agreement.",
+            "display_label": "Sensor agreement",
+            "metric_id": "sensor_agreement",
             "required": false,
-            "source": "tracefix_verification",
+            "source": "aggregator",
             "source_field": null,
-            "unavailable_behavior": "omit",
-            "value_type": "text"
+            "unavailable_behavior": "show_na",
+            "value_type": "percentage"
           }
         ],
-        "primary_question": "Could the system answer this from the available evidence?",
+        "primary_question": "What did the structured context observe?",
         "provenance_requirements": [
-          "List which expected packets were missing or empty."
+          "List the harness/packet ids backing the observed value."
         ],
         "summary_requirements": [
-          "State what could and could not be determined; do not fabricate confidence."
+          "State the observed value and its bounded time window in one sentence."
         ],
-        "title_template": "Insufficient evidence to answer confidently"
+        "title_template": "{primary_question}"
       },
       "evidence_plan": {
         "conflicting_evidence_checks": [],
         "minimum_sufficient_evidence": [
-          "general_context_packet"
+          "occupancy_context_packet"
         ],
         "primary_evidence": [
-          "general_context_packet"
+          "occupancy_context_packet"
         ],
         "supporting_evidence": []
       },
-      "executable": false,
+      "executable": true,
       "forbidden_claims": [
         "raw_sensor_access",
         "face_identity",
         "personal_identity",
         "medical_diagnosis",
-        "unsupported_behavioral_inference",
-        "guessing"
+        "unsupported_behavioral_inference"
       ],
-      "normalized_query": "is a person jumping on june 24th? (yes/no)",
+      "normalized_query": "july 22nd how many people in total are in the room",
       "privacy_policy": {
         "forbidden_inferences": [
           "raw_sensor_access",
@@ -305,10 +359,10 @@
         "privacy_scope": "cityos_structured_context_only",
         "raw_sensor_access_allowed": false
       },
-      "query_id": "tellme_e7a429e3a156",
-      "reasoning_summary": "Deterministic template proposal generated for query tellme_e7a429e3a156.",
+      "query_id": "tellme_20269d01467e",
+      "reasoning_summary": "Deterministic template proposal generated for query tellme_20269d01467e.",
       "required_modalities": [
-        "context"
+        "video"
       ],
       "room_capability_context": {
         "available_context_apis": [
@@ -330,15 +384,13 @@
           "get_motion_event_context",
           "get_occupancy_context",
           "get_posture_candidate_context",
-          "get_raw_audio_reference",
-          "get_raw_video_reference",
           "get_room_state",
           "get_speech_activity_context"
         ],
-        "coverage_gaps": [],
-        "notes": [
-          "No primary sensor is available for this query; planning relies on general context."
+        "coverage_gaps": [
+          "No available sensor supports 'room_state' context for this space."
         ],
+        "notes": [],
         "privacy_policy": {
           "forbidden_inferences": [
             "raw_sensor_access",
@@ -361,7 +413,7 @@
           "privacy_scope": "cityos_structured_context_only",
           "raw_sensor_access_allowed": false
         },
-        "query_id": "tellme_e7a429e3a156",
+        "query_id": "tellme_20269d01467e",
         "relevant_sensors": [
           {
             "allowed_api_names": [
@@ -388,8 +440,8 @@
               "Cannot verify events outside the doorway field of view."
             ],
             "modality": "video",
-            "reason": "Not directly targeted but available for corroboration.",
-            "relevance": "supporting",
+            "reason": "Modality or supported context type matches the query requirements.",
+            "relevance": "primary",
             "restricted_api_names": [
               "get_raw_video_reference"
             ],
@@ -426,8 +478,8 @@
               "Posture signals are candidate-level only."
             ],
             "modality": "video",
-            "reason": "Not directly targeted but available for corroboration.",
-            "relevance": "supporting",
+            "reason": "Modality or supported context type matches the query requirements.",
+            "relevance": "primary",
             "restricted_api_names": [
               "get_raw_video_reference"
             ],
@@ -533,9 +585,9 @@
       },
       "route": "single_agent",
       "space_id": "smart_room_1",
-      "task_category": "unsupported",
+      "task_category": "occupancy_count",
       "time_windows": [],
-      "user_query": "Is a person jumping on June 24th? (Yes/No)",
+      "user_query": "july 22nd how many people in total are in the room",
       "validation_policy": {
         "bounded_time_windows_required": true,
         "llm_proposal_untrusted": true,
@@ -543,27 +595,58 @@
         "repairs": [],
         "schema_validation_required": true,
         "validation_status": "accepted",
-        "warnings": [
-          "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
-        ]
+        "warnings": []
       }
     },
     "tracefix_task_spec": {
-      "task_id": "task_e7a429e3a156",
-      "query_id": "tellme_e7a429e3a156",
-      "user_query": "Is a person jumping on June 24th? (Yes/No)",
+      "task_id": "task_20269d01467e",
+      "query_id": "tellme_20269d01467e",
+      "user_query": "july 22nd how many people in total are in the room",
       "space_id": "smart_room_1",
+      "intent": "occupancy_lookup",
+      "tracefix_reason": "Preserve routing, privacy, and output verification.",
+      "required_capabilities": [
+        "occupancy_context",
+        "answer_synthesis"
+      ],
+      "input_artifacts": [
+        {
+          "artifact_id": "occupancy_context_packet",
+          "artifact_type": "packet",
+          "time_range": null,
+          "modality": "video",
+          "privacy_level": "structured_context_only"
+        }
+      ],
+      "constraints": {
+        "raw_media_allowed": false,
+        "allowed_outputs": [
+          "answer_packet",
+          "evidence_card"
+        ],
+        "require_evidence_refs": true,
+        "max_agents": 2,
+        "privacy_scope": "cityos_structured_context_only",
+        "identity_inference_allowed": false
+      },
+      "success_criteria": [
+        "Return a privacy-bounded answer packet with confidence and evidence refs.",
+        "Return required fields only.",
+        "Preserve privacy limits and caveats."
+      ],
+      "output_contract_name": "direct_answer_v1",
       "route": "single_agent",
       "time_windows": [],
       "required_modalities": [
-        "context"
+        "video"
       ],
       "candidate_harnesses": [
+        "occupancy_context_harness",
         "answer_synthesis_harness"
       ],
       "application_goal": {
-        "goal_type": "unsupported",
-        "user_intent": "general_lookup",
+        "goal_type": "occupancy_count",
+        "user_intent": "occupancy_lookup",
         "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
         "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
         "non_goals": [
@@ -575,16 +658,16 @@
       },
       "evidence_plan": {
         "primary_evidence": [
-          "general_context_packet"
+          "occupancy_context_packet"
         ],
         "supporting_evidence": [],
         "minimum_sufficient_evidence": [
-          "general_context_packet"
+          "occupancy_context_packet"
         ],
         "conflicting_evidence_checks": []
       },
       "answer_packet_requirements": {
-        "answer_type": "insufficient_evidence",
+        "answer_type": "direct_answer",
         "required_fields": [
           "answer",
           "confidence",
@@ -594,15 +677,16 @@
           "limitations"
         ],
         "allowed_claims": [
-          "insufficient_evidence"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
         "forbidden_claims": [
           "raw_sensor_access",
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference",
-          "guessing"
+          "unsupported_behavioral_inference"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -610,23 +694,26 @@
         "fallback_answer_type": "insufficient_evidence"
       },
       "evidence_card_contract": {
-        "card_type": "insufficient_evidence",
-        "primary_question": "Could the system answer this from the available evidence?",
-        "title_template": "Insufficient evidence to answer confidently",
-        "claim_target": "insufficient_evidence",
+        "card_type": "descriptive",
+        "primary_question": "What did the structured context observe?",
+        "title_template": "{primary_question}",
+        "claim_target": "observed_room_state",
         "allowed_conclusion_types": [
-          "insufficient_evidence"
+          "observed_state",
+          "bounded_count",
+          "presence_state"
         ],
         "forbidden_conclusion_types": [
-          "personal_identity",
-          "face_identity",
-          "medical_diagnosis",
-          "confirmed_injury",
-          "cause_or_intent_inference",
-          "unsupported_behavioral_inference",
+          "causal_effect",
+          "statistical_significance",
+          "causal_graph_claim",
           "raw_sensor_access",
-          "fabricated_confidence",
-          "guessing"
+          "face_identity",
+          "personal_identity",
+          "medical_diagnosis",
+          "unsupported_behavioral_inference",
+          "confirmed_injury",
+          "cause_or_intent_inference"
         ],
         "badge_requirements": [
           {
@@ -634,46 +721,75 @@
             "label_template": "{card_type}",
             "source": "query_analysis",
             "required": true
+          },
+          {
+            "badge_id": "modality",
+            "label_template": "{modalities}",
+            "source": "harness_output",
+            "required": false
           }
         ],
         "metric_requirements": [
           {
-            "metric_id": "what_determined",
-            "display_label": "What was determined",
-            "description": "What the system could establish, if anything.",
+            "metric_id": "observed_value",
+            "display_label": "Observed value",
+            "description": "The value observed in the time window (e.g. occupancy count or state).",
             "required": true,
-            "value_type": "text",
+            "value_type": "category",
+            "source": "harness_output",
+            "source_field": "value",
+            "unavailable_behavior": "show_na"
+          },
+          {
+            "metric_id": "time_window",
+            "display_label": "Time window",
+            "description": "Bounded window the observation covers.",
+            "required": true,
+            "value_type": "range",
+            "source": "harness_output",
+            "source_field": "timestamp",
+            "unavailable_behavior": "show_na"
+          },
+          {
+            "metric_id": "modalities_used",
+            "display_label": "Modalities used",
+            "description": "Sensor modalities that contributed.",
+            "required": true,
+            "value_type": "category",
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na"
           },
           {
-            "metric_id": "missing_evidence",
-            "display_label": "Missing evidence",
-            "description": "What evidence was missing or insufficient.",
+            "metric_id": "evidence_count",
+            "display_label": "Evidence count",
+            "description": "Number of supporting context packets.",
             "required": true,
-            "value_type": "text",
+            "value_type": "integer",
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na"
           },
           {
-            "metric_id": "failed_modality",
-            "display_label": "Failed harness/modality",
-            "description": "Which harness or modality failed, if safe to disclose.",
+            "metric_id": "sensor_agreement",
+            "display_label": "Sensor agreement",
+            "description": "Fraction of modalities in agreement.",
             "required": false,
-            "value_type": "text",
-            "source": "tracefix_verification",
+            "value_type": "percentage",
+            "source": "aggregator",
             "source_field": null,
-            "unavailable_behavior": "omit"
+            "unavailable_behavior": "show_na"
           }
         ],
         "summary_requirements": [
-          "State what could and could not be determined; do not fabricate confidence."
+          "State the observed value and its bounded time window in one sentence."
         ],
         "confidence_requirements": {
-          "confidence_kind": "composite_confidence",
-          "required_inputs": [],
+          "confidence_kind": "sensor_confidence",
+          "required_inputs": [
+            "sensor_confidence",
+            "evidence_count"
+          ],
           "minimum_threshold": null,
           "label_bands": {
             "low": [
@@ -690,14 +806,29 @@
             ]
           },
           "explanation_required": true,
-          "scoring_method": "none"
+          "scoring_method": "bounded_sensor_confidence"
         },
-        "evidence_requirements": [],
+        "evidence_requirements": [
+          {
+            "evidence_type": "structured_context",
+            "required": true,
+            "minimum_count": 1,
+            "accepted_packet_types": [
+              "occupancy_context_packet",
+              "room_state_packet",
+              "motion_context_packet",
+              "audio_context_packet"
+            ],
+            "include_evidence_refs": true,
+            "include_time_window": true,
+            "include_modality": true
+          }
+        ],
         "caveat_requirements": [
-          "A stronger answer was not produced because the bounded evidence was insufficient."
+          "Reflects structured context only; no causal interpretation."
         ],
         "provenance_requirements": [
-          "List which expected packets were missing or empty."
+          "List the harness/packet ids backing the observed value."
         ],
         "fallback_card_type": "insufficient_evidence"
       },
@@ -718,18 +849,19 @@
           "privacy_scope": "string",
           "limitations": "array"
         },
-        "answer_type": "insufficient_evidence",
+        "answer_type": "direct_answer",
         "fallback_answer_type": "insufficient_evidence",
         "allowed_claims": [
-          "insufficient_evidence"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
         "forbidden_claims": [
           "raw_sensor_access",
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference",
-          "guessing"
+          "unsupported_behavioral_inference"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -759,9 +891,7 @@
         "must_preserve_forbidden_claims": true,
         "validation_status": "accepted",
         "repairs": [],
-        "warnings": [
-          "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
-        ]
+        "warnings": []
       },
       "escalation_conditions": [
         "insufficient_evidence",
@@ -773,21 +903,23 @@
         "face_identity",
         "personal_identity",
         "medical_diagnosis",
-        "unsupported_behavioral_inference",
-        "guessing"
+        "unsupported_behavioral_inference"
       ],
       "allowed_claims": [
-        "insufficient_evidence"
+        "bounded_count",
+        "presence_state",
+        "timestamped_event_summary"
       ],
-      "reasoning_summary": "Deterministic template proposal generated for query tellme_e7a429e3a156.",
-      "executable": false,
-      "reason": "general_lookup",
+      "reasoning_summary": "Deterministic template proposal generated for query tellme_20269d01467e.",
+      "executable": true,
+      "reason": "occupancy_lookup",
       "target_tracefix_path": "TraceFix-main/",
       "status": "stub",
       "caveats": [
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
+        "No available sensor supports 'room_state' context for this space.",
         "Mock CityOS structured context may be incomplete.",
         "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
@@ -801,9 +933,19 @@
         {
           "name": "answer_synthesis_harness",
           "role": "Synthesize a final answer packet with caveats and evidence references."
+        },
+        {
+          "name": "occupancy_context_harness",
+          "role": "Retrieve occupancy-oriented structured context."
         }
       ],
-      "channels": [],
+      "channels": [
+        {
+          "from": "occupancy_context_harness",
+          "label": "occupancy_findings",
+          "to": "answer_synthesis_harness"
+        }
+      ],
       "notes": [
         "Dry-run bundle only; do not invoke real TraceFix-main.",
         "This bundle is an inspectable artifact representing future integration inputs.",
@@ -813,9 +955,11 @@
       ],
       "output_contract": {
         "allowed_claims": [
-          "insufficient_evidence"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
-        "answer_type": "insufficient_evidence",
+        "answer_type": "direct_answer",
         "fallback_answer_type": "insufficient_evidence",
         "field_types": {
           "answer": "string",
@@ -830,8 +974,7 @@
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference",
-          "guessing"
+          "unsupported_behavioral_inference"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -845,11 +988,11 @@
           "limitations"
         ]
       },
-      "query_id": "tellme_e7a429e3a156",
+      "query_id": "tellme_20269d01467e",
       "resources": [
         {
           "modalities": [
-            "context"
+            "video"
           ],
           "name": "cityos_structured_context",
           "space_id": "smart_room_1",
@@ -858,21 +1001,24 @@
         },
         {
           "name": "tellme_query_logs",
-          "query_id": "tellme_e7a429e3a156",
+          "query_id": "tellme_20269d01467e",
           "type": "local_query_run_directory"
         }
       ],
-      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\nIs a person jumping on June 24th? (Yes/No)\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- none specified\n\n## Required Modalities\n- context\n\n## Candidate Harnesses\n- answer_synthesis_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence or escalate when the structured context is inadequate.\n- goal_type: unsupported\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer packet with confidence and evidence refs.\n- user_intent: general_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['general_context_packet']\n- primary_evidence: ['general_context_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['insufficient_evidence']\n- answer_type: insufficient_evidence\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference', 'guessing']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- insufficient_evidence\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference, guessing\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
-      "task_id": "task_e7a429e3a156",
+      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\njuly 22nd how many people in total are in the room\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- none specified\n\n## Required Modalities\n- video\n\n## Candidate Harnesses\n- answer_synthesis_harness\n- occupancy_context_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence or escalate when the structured context is inadequate.\n- goal_type: occupancy_count\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer packet with confidence and evidence refs.\n- user_intent: occupancy_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['occupancy_context_packet']\n- primary_evidence: ['occupancy_context_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['bounded_count', 'presence_state', 'timestamped_event_summary']\n- answer_type: direct_answer\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- bounded_count, presence_state, timestamped_event_summary\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
+      "task_id": "task_20269d01467e",
       "tool_manifest": {
         "answer_synthesis_harness": [
           "synthesize_answer_packet"
+        ],
+        "occupancy_context_harness": [
+          "get_occupancy_context"
         ]
       },
-      "user_query": "Is a person jumping on June 24th? (Yes/No)"
+      "user_query": "july 22nd how many people in total are in the room"
     },
     "answer_packet": {
-      "query_id": "tellme_e7a429e3a156",
+      "query_id": "tellme_20269d01467e",
       "status": "needs_tracefix",
       "answer": "This query requires a future TraceFix multi-agent workflow and cannot be fully answered in V0.",
       "confidence": 0.0,
@@ -887,11 +1033,11 @@
       "selected_agent": null,
       "route_decision": {
         "route": "single_agent",
-        "intent": "general",
-        "selected_agent": "general_context_agent",
-        "selected_tool": "cityos_context_lookup",
+        "intent": "historical_lookup",
+        "selected_agent": "occupancy_context_agent",
+        "selected_tool": "get_occupancy_context",
         "required_tools": [
-          "cityos_context_lookup"
+          "get_occupancy_context"
         ],
         "rationale": "The query appears answerable with one focused CityOS-style context lookup.",
         "time_window": null,
@@ -904,7 +1050,7 @@
       },
       "agent_plan": {},
       "raw_outputs": {
-        "run_dir": "C:\\Users\\shrey\\TraceFixCityOS\\.runs\\tellme\\tellme_e7a429e3a156",
+        "run_dir": "C:\\Users\\shrey\\TraceFixCityOS\\.runs\\tellme\\tellme_20269d01467e",
         "logging_fallback_used": false,
         "llm_operational": {
           "agent_backend_mode": "llm",
@@ -915,16 +1061,16 @@
           "decomposition": {
             "model": "gpt-4.1-mini",
             "last_used": "primary",
-            "last_latency_ms": 13718.0,
+            "last_latency_ms": 28329.0,
             "fallback_reason": null,
             "primary_calls": 1,
             "fallback_calls": 0,
             "last_request": {
-              "request_start": "2026-07-09T17:23:36.665353+00:00",
-              "first_response_time": "2026-07-09T17:23:50.372817+00:00",
-              "request_end": "2026-07-09T17:23:50.375443+00:00",
-              "total_duration_ms": 13718.0,
-              "time_to_first_response_ms": 13718.0,
+              "request_start": "2026-07-27T17:27:50.626451+00:00",
+              "first_response_time": "2026-07-27T17:28:18.953432+00:00",
+              "request_end": "2026-07-27T17:28:18.953432+00:00",
+              "total_duration_ms": 28329.0,
+              "time_to_first_response_ms": 28329.0,
               "model": "gpt-4.1-mini",
               "provider": "https://api.openai.com/v1",
               "failed": false,
@@ -935,21 +1081,54 @@
         },
         "agent_backend_mode": "llm",
         "tracefix_task_spec": {
-          "task_id": "task_e7a429e3a156",
-          "query_id": "tellme_e7a429e3a156",
-          "user_query": "Is a person jumping on June 24th? (Yes/No)",
+          "task_id": "task_20269d01467e",
+          "query_id": "tellme_20269d01467e",
+          "user_query": "july 22nd how many people in total are in the room",
           "space_id": "smart_room_1",
+          "intent": "occupancy_lookup",
+          "tracefix_reason": "Preserve routing, privacy, and output verification.",
+          "required_capabilities": [
+            "occupancy_context",
+            "answer_synthesis"
+          ],
+          "input_artifacts": [
+            {
+              "artifact_id": "occupancy_context_packet",
+              "artifact_type": "packet",
+              "time_range": null,
+              "modality": "video",
+              "privacy_level": "structured_context_only"
+            }
+          ],
+          "constraints": {
+            "raw_media_allowed": false,
+            "allowed_outputs": [
+              "answer_packet",
+              "evidence_card"
+            ],
+            "require_evidence_refs": true,
+            "max_agents": 2,
+            "privacy_scope": "cityos_structured_context_only",
+            "identity_inference_allowed": false
+          },
+          "success_criteria": [
+            "Return a privacy-bounded answer packet with confidence and evidence refs.",
+            "Return required fields only.",
+            "Preserve privacy limits and caveats."
+          ],
+          "output_contract_name": "direct_answer_v1",
           "route": "single_agent",
           "time_windows": [],
           "required_modalities": [
-            "context"
+            "video"
           ],
           "candidate_harnesses": [
+            "occupancy_context_harness",
             "answer_synthesis_harness"
           ],
           "application_goal": {
-            "goal_type": "unsupported",
-            "user_intent": "general_lookup",
+            "goal_type": "occupancy_count",
+            "user_intent": "occupancy_lookup",
             "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
             "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
             "non_goals": [
@@ -961,16 +1140,16 @@
           },
           "evidence_plan": {
             "primary_evidence": [
-              "general_context_packet"
+              "occupancy_context_packet"
             ],
             "supporting_evidence": [],
             "minimum_sufficient_evidence": [
-              "general_context_packet"
+              "occupancy_context_packet"
             ],
             "conflicting_evidence_checks": []
           },
           "answer_packet_requirements": {
-            "answer_type": "insufficient_evidence",
+            "answer_type": "direct_answer",
             "required_fields": [
               "answer",
               "confidence",
@@ -980,15 +1159,16 @@
               "limitations"
             ],
             "allowed_claims": [
-              "insufficient_evidence"
+              "bounded_count",
+              "presence_state",
+              "timestamped_event_summary"
             ],
             "forbidden_claims": [
               "raw_sensor_access",
               "face_identity",
               "personal_identity",
               "medical_diagnosis",
-              "unsupported_behavioral_inference",
-              "guessing"
+              "unsupported_behavioral_inference"
             ],
             "must_include_confidence": true,
             "must_include_evidence_refs": true,
@@ -996,23 +1176,26 @@
             "fallback_answer_type": "insufficient_evidence"
           },
           "evidence_card_contract": {
-            "card_type": "insufficient_evidence",
-            "primary_question": "Could the system answer this from the available evidence?",
-            "title_template": "Insufficient evidence to answer confidently",
-            "claim_target": "insufficient_evidence",
+            "card_type": "descriptive",
+            "primary_question": "What did the structured context observe?",
+            "title_template": "{primary_question}",
+            "claim_target": "observed_room_state",
             "allowed_conclusion_types": [
-              "insufficient_evidence"
+              "observed_state",
+              "bounded_count",
+              "presence_state"
             ],
             "forbidden_conclusion_types": [
-              "personal_identity",
-              "face_identity",
-              "medical_diagnosis",
-              "confirmed_injury",
-              "cause_or_intent_inference",
-              "unsupported_behavioral_inference",
+              "causal_effect",
+              "statistical_significance",
+              "causal_graph_claim",
               "raw_sensor_access",
-              "fabricated_confidence",
-              "guessing"
+              "face_identity",
+              "personal_identity",
+              "medical_diagnosis",
+              "unsupported_behavioral_inference",
+              "confirmed_injury",
+              "cause_or_intent_inference"
             ],
             "badge_requirements": [
               {
@@ -1020,46 +1203,75 @@
                 "label_template": "{card_type}",
                 "source": "query_analysis",
                 "required": true
+              },
+              {
+                "badge_id": "modality",
+                "label_template": "{modalities}",
+                "source": "harness_output",
+                "required": false
               }
             ],
             "metric_requirements": [
               {
-                "metric_id": "what_determined",
-                "display_label": "What was determined",
-                "description": "What the system could establish, if anything.",
+                "metric_id": "observed_value",
+                "display_label": "Observed value",
+                "description": "The value observed in the time window (e.g. occupancy count or state).",
                 "required": true,
-                "value_type": "text",
+                "value_type": "category",
+                "source": "harness_output",
+                "source_field": "value",
+                "unavailable_behavior": "show_na"
+              },
+              {
+                "metric_id": "time_window",
+                "display_label": "Time window",
+                "description": "Bounded window the observation covers.",
+                "required": true,
+                "value_type": "range",
+                "source": "harness_output",
+                "source_field": "timestamp",
+                "unavailable_behavior": "show_na"
+              },
+              {
+                "metric_id": "modalities_used",
+                "display_label": "Modalities used",
+                "description": "Sensor modalities that contributed.",
+                "required": true,
+                "value_type": "category",
                 "source": "aggregator",
                 "source_field": null,
                 "unavailable_behavior": "show_na"
               },
               {
-                "metric_id": "missing_evidence",
-                "display_label": "Missing evidence",
-                "description": "What evidence was missing or insufficient.",
+                "metric_id": "evidence_count",
+                "display_label": "Evidence count",
+                "description": "Number of supporting context packets.",
                 "required": true,
-                "value_type": "text",
+                "value_type": "integer",
                 "source": "aggregator",
                 "source_field": null,
                 "unavailable_behavior": "show_na"
               },
               {
-                "metric_id": "failed_modality",
-                "display_label": "Failed harness/modality",
-                "description": "Which harness or modality failed, if safe to disclose.",
+                "metric_id": "sensor_agreement",
+                "display_label": "Sensor agreement",
+                "description": "Fraction of modalities in agreement.",
                 "required": false,
-                "value_type": "text",
-                "source": "tracefix_verification",
+                "value_type": "percentage",
+                "source": "aggregator",
                 "source_field": null,
-                "unavailable_behavior": "omit"
+                "unavailable_behavior": "show_na"
               }
             ],
             "summary_requirements": [
-              "State what could and could not be determined; do not fabricate confidence."
+              "State the observed value and its bounded time window in one sentence."
             ],
             "confidence_requirements": {
-              "confidence_kind": "composite_confidence",
-              "required_inputs": [],
+              "confidence_kind": "sensor_confidence",
+              "required_inputs": [
+                "sensor_confidence",
+                "evidence_count"
+              ],
               "minimum_threshold": null,
               "label_bands": {
                 "low": [
@@ -1076,14 +1288,29 @@
                 ]
               },
               "explanation_required": true,
-              "scoring_method": "none"
+              "scoring_method": "bounded_sensor_confidence"
             },
-            "evidence_requirements": [],
+            "evidence_requirements": [
+              {
+                "evidence_type": "structured_context",
+                "required": true,
+                "minimum_count": 1,
+                "accepted_packet_types": [
+                  "occupancy_context_packet",
+                  "room_state_packet",
+                  "motion_context_packet",
+                  "audio_context_packet"
+                ],
+                "include_evidence_refs": true,
+                "include_time_window": true,
+                "include_modality": true
+              }
+            ],
             "caveat_requirements": [
-              "A stronger answer was not produced because the bounded evidence was insufficient."
+              "Reflects structured context only; no causal interpretation."
             ],
             "provenance_requirements": [
-              "List which expected packets were missing or empty."
+              "List the harness/packet ids backing the observed value."
             ],
             "fallback_card_type": "insufficient_evidence"
           },
@@ -1104,18 +1331,19 @@
               "privacy_scope": "string",
               "limitations": "array"
             },
-            "answer_type": "insufficient_evidence",
+            "answer_type": "direct_answer",
             "fallback_answer_type": "insufficient_evidence",
             "allowed_claims": [
-              "insufficient_evidence"
+              "bounded_count",
+              "presence_state",
+              "timestamped_event_summary"
             ],
             "forbidden_claims": [
               "raw_sensor_access",
               "face_identity",
               "personal_identity",
               "medical_diagnosis",
-              "unsupported_behavioral_inference",
-              "guessing"
+              "unsupported_behavioral_inference"
             ],
             "must_include_confidence": true,
             "must_include_evidence_refs": true,
@@ -1145,9 +1373,7 @@
             "must_preserve_forbidden_claims": true,
             "validation_status": "accepted",
             "repairs": [],
-            "warnings": [
-              "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
-            ]
+            "warnings": []
           },
           "escalation_conditions": [
             "insufficient_evidence",
@@ -1159,21 +1385,23 @@
             "face_identity",
             "personal_identity",
             "medical_diagnosis",
-            "unsupported_behavioral_inference",
-            "guessing"
+            "unsupported_behavioral_inference"
           ],
           "allowed_claims": [
-            "insufficient_evidence"
+            "bounded_count",
+            "presence_state",
+            "timestamped_event_summary"
           ],
-          "reasoning_summary": "Deterministic template proposal generated for query tellme_e7a429e3a156.",
-          "executable": false,
-          "reason": "general_lookup",
+          "reasoning_summary": "Deterministic template proposal generated for query tellme_20269d01467e.",
+          "executable": true,
+          "reason": "occupancy_lookup",
           "target_tracefix_path": "TraceFix-main/",
           "status": "stub",
           "caveats": [
             "This is a stub only; TraceFix-main is not invoked in V0.",
             "Real TraceFix multi-agent execution is not integrated yet.",
             "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
+            "No available sensor supports 'room_state' context for this space.",
             "Mock CityOS structured context may be incomplete.",
             "Confidence must remain bounded by available evidence.",
             "Use CityOS structured context only.",
@@ -1183,35 +1411,69 @@
           ]
         },
         "tracefix_bundle_summary": {
-          "task_id": "task_e7a429e3a156",
+          "task_id": "task_20269d01467e",
           "agent_names": [
-            "answer_synthesis_harness"
+            "answer_synthesis_harness",
+            "occupancy_context_harness"
           ],
-          "channel_count": 0,
+          "channel_count": 1,
           "resource_count": 2
         },
         "evidence_card_preview": {
-          "card_type": "insufficient_evidence",
-          "metric_count": 3,
+          "card_type": "descriptive",
+          "metric_count": 5,
           "validation_status": "valid"
         }
       },
       "tracefix_task_spec": {
-        "task_id": "task_e7a429e3a156",
-        "query_id": "tellme_e7a429e3a156",
-        "user_query": "Is a person jumping on June 24th? (Yes/No)",
+        "task_id": "task_20269d01467e",
+        "query_id": "tellme_20269d01467e",
+        "user_query": "july 22nd how many people in total are in the room",
         "space_id": "smart_room_1",
+        "intent": "occupancy_lookup",
+        "tracefix_reason": "Preserve routing, privacy, and output verification.",
+        "required_capabilities": [
+          "occupancy_context",
+          "answer_synthesis"
+        ],
+        "input_artifacts": [
+          {
+            "artifact_id": "occupancy_context_packet",
+            "artifact_type": "packet",
+            "time_range": null,
+            "modality": "video",
+            "privacy_level": "structured_context_only"
+          }
+        ],
+        "constraints": {
+          "raw_media_allowed": false,
+          "allowed_outputs": [
+            "answer_packet",
+            "evidence_card"
+          ],
+          "require_evidence_refs": true,
+          "max_agents": 2,
+          "privacy_scope": "cityos_structured_context_only",
+          "identity_inference_allowed": false
+        },
+        "success_criteria": [
+          "Return a privacy-bounded answer packet with confidence and evidence refs.",
+          "Return required fields only.",
+          "Preserve privacy limits and caveats."
+        ],
+        "output_contract_name": "direct_answer_v1",
         "route": "single_agent",
         "time_windows": [],
         "required_modalities": [
-          "context"
+          "video"
         ],
         "candidate_harnesses": [
+          "occupancy_context_harness",
           "answer_synthesis_harness"
         ],
         "application_goal": {
-          "goal_type": "unsupported",
-          "user_intent": "general_lookup",
+          "goal_type": "occupancy_count",
+          "user_intent": "occupancy_lookup",
           "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
           "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
           "non_goals": [
@@ -1223,16 +1485,16 @@
         },
         "evidence_plan": {
           "primary_evidence": [
-            "general_context_packet"
+            "occupancy_context_packet"
           ],
           "supporting_evidence": [],
           "minimum_sufficient_evidence": [
-            "general_context_packet"
+            "occupancy_context_packet"
           ],
           "conflicting_evidence_checks": []
         },
         "answer_packet_requirements": {
-          "answer_type": "insufficient_evidence",
+          "answer_type": "direct_answer",
           "required_fields": [
             "answer",
             "confidence",
@@ -1242,15 +1504,16 @@
             "limitations"
           ],
           "allowed_claims": [
-            "insufficient_evidence"
+            "bounded_count",
+            "presence_state",
+            "timestamped_event_summary"
           ],
           "forbidden_claims": [
             "raw_sensor_access",
             "face_identity",
             "personal_identity",
             "medical_diagnosis",
-            "unsupported_behavioral_inference",
-            "guessing"
+            "unsupported_behavioral_inference"
           ],
           "must_include_confidence": true,
           "must_include_evidence_refs": true,
@@ -1258,23 +1521,26 @@
           "fallback_answer_type": "insufficient_evidence"
         },
         "evidence_card_contract": {
-          "card_type": "insufficient_evidence",
-          "primary_question": "Could the system answer this from the available evidence?",
-          "title_template": "Insufficient evidence to answer confidently",
-          "claim_target": "insufficient_evidence",
+          "card_type": "descriptive",
+          "primary_question": "What did the structured context observe?",
+          "title_template": "{primary_question}",
+          "claim_target": "observed_room_state",
           "allowed_conclusion_types": [
-            "insufficient_evidence"
+            "observed_state",
+            "bounded_count",
+            "presence_state"
           ],
           "forbidden_conclusion_types": [
-            "personal_identity",
-            "face_identity",
-            "medical_diagnosis",
-            "confirmed_injury",
-            "cause_or_intent_inference",
-            "unsupported_behavioral_inference",
+            "causal_effect",
+            "statistical_significance",
+            "causal_graph_claim",
             "raw_sensor_access",
-            "fabricated_confidence",
-            "guessing"
+            "face_identity",
+            "personal_identity",
+            "medical_diagnosis",
+            "unsupported_behavioral_inference",
+            "confirmed_injury",
+            "cause_or_intent_inference"
           ],
           "badge_requirements": [
             {
@@ -1282,46 +1548,75 @@
               "label_template": "{card_type}",
               "source": "query_analysis",
               "required": true
+            },
+            {
+              "badge_id": "modality",
+              "label_template": "{modalities}",
+              "source": "harness_output",
+              "required": false
             }
           ],
           "metric_requirements": [
             {
-              "metric_id": "what_determined",
-              "display_label": "What was determined",
-              "description": "What the system could establish, if anything.",
+              "metric_id": "observed_value",
+              "display_label": "Observed value",
+              "description": "The value observed in the time window (e.g. occupancy count or state).",
               "required": true,
-              "value_type": "text",
+              "value_type": "category",
+              "source": "harness_output",
+              "source_field": "value",
+              "unavailable_behavior": "show_na"
+            },
+            {
+              "metric_id": "time_window",
+              "display_label": "Time window",
+              "description": "Bounded window the observation covers.",
+              "required": true,
+              "value_type": "range",
+              "source": "harness_output",
+              "source_field": "timestamp",
+              "unavailable_behavior": "show_na"
+            },
+            {
+              "metric_id": "modalities_used",
+              "display_label": "Modalities used",
+              "description": "Sensor modalities that contributed.",
+              "required": true,
+              "value_type": "category",
               "source": "aggregator",
               "source_field": null,
               "unavailable_behavior": "show_na"
             },
             {
-              "metric_id": "missing_evidence",
-              "display_label": "Missing evidence",
-              "description": "What evidence was missing or insufficient.",
+              "metric_id": "evidence_count",
+              "display_label": "Evidence count",
+              "description": "Number of supporting context packets.",
               "required": true,
-              "value_type": "text",
+              "value_type": "integer",
               "source": "aggregator",
               "source_field": null,
               "unavailable_behavior": "show_na"
             },
             {
-              "metric_id": "failed_modality",
-              "display_label": "Failed harness/modality",
-              "description": "Which harness or modality failed, if safe to disclose.",
+              "metric_id": "sensor_agreement",
+              "display_label": "Sensor agreement",
+              "description": "Fraction of modalities in agreement.",
               "required": false,
-              "value_type": "text",
-              "source": "tracefix_verification",
+              "value_type": "percentage",
+              "source": "aggregator",
               "source_field": null,
-              "unavailable_behavior": "omit"
+              "unavailable_behavior": "show_na"
             }
           ],
           "summary_requirements": [
-            "State what could and could not be determined; do not fabricate confidence."
+            "State the observed value and its bounded time window in one sentence."
           ],
           "confidence_requirements": {
-            "confidence_kind": "composite_confidence",
-            "required_inputs": [],
+            "confidence_kind": "sensor_confidence",
+            "required_inputs": [
+              "sensor_confidence",
+              "evidence_count"
+            ],
             "minimum_threshold": null,
             "label_bands": {
               "low": [
@@ -1338,14 +1633,29 @@
               ]
             },
             "explanation_required": true,
-            "scoring_method": "none"
+            "scoring_method": "bounded_sensor_confidence"
           },
-          "evidence_requirements": [],
+          "evidence_requirements": [
+            {
+              "evidence_type": "structured_context",
+              "required": true,
+              "minimum_count": 1,
+              "accepted_packet_types": [
+                "occupancy_context_packet",
+                "room_state_packet",
+                "motion_context_packet",
+                "audio_context_packet"
+              ],
+              "include_evidence_refs": true,
+              "include_time_window": true,
+              "include_modality": true
+            }
+          ],
           "caveat_requirements": [
-            "A stronger answer was not produced because the bounded evidence was insufficient."
+            "Reflects structured context only; no causal interpretation."
           ],
           "provenance_requirements": [
-            "List which expected packets were missing or empty."
+            "List the harness/packet ids backing the observed value."
           ],
           "fallback_card_type": "insufficient_evidence"
         },
@@ -1366,18 +1676,19 @@
             "privacy_scope": "string",
             "limitations": "array"
           },
-          "answer_type": "insufficient_evidence",
+          "answer_type": "direct_answer",
           "fallback_answer_type": "insufficient_evidence",
           "allowed_claims": [
-            "insufficient_evidence"
+            "bounded_count",
+            "presence_state",
+            "timestamped_event_summary"
           ],
           "forbidden_claims": [
             "raw_sensor_access",
             "face_identity",
             "personal_identity",
             "medical_diagnosis",
-            "unsupported_behavioral_inference",
-            "guessing"
+            "unsupported_behavioral_inference"
           ],
           "must_include_confidence": true,
           "must_include_evidence_refs": true,
@@ -1407,9 +1718,7 @@
           "must_preserve_forbidden_claims": true,
           "validation_status": "accepted",
           "repairs": [],
-          "warnings": [
-            "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
-          ]
+          "warnings": []
         },
         "escalation_conditions": [
           "insufficient_evidence",
@@ -1421,21 +1730,23 @@
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference",
-          "guessing"
+          "unsupported_behavioral_inference"
         ],
         "allowed_claims": [
-          "insufficient_evidence"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
-        "reasoning_summary": "Deterministic template proposal generated for query tellme_e7a429e3a156.",
-        "executable": false,
-        "reason": "general_lookup",
+        "reasoning_summary": "Deterministic template proposal generated for query tellme_20269d01467e.",
+        "executable": true,
+        "reason": "occupancy_lookup",
         "target_tracefix_path": "TraceFix-main/",
         "status": "stub",
         "caveats": [
           "This is a stub only; TraceFix-main is not invoked in V0.",
           "Real TraceFix multi-agent execution is not integrated yet.",
           "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
+          "No available sensor supports 'room_state' context for this space.",
           "Mock CityOS structured context may be incomplete.",
           "Confidence must remain bounded by available evidence.",
           "Use CityOS structured context only.",
@@ -1446,2255 +1757,1289 @@
       },
       "error_message": null
     },
-    "run_dir": "C:\\Users\\shrey\\TraceFixCityOS\\.runs\\tellme\\tellme_e7a429e3a156",
-    "warnings": [
-      "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
-    ],
-    "answer_summary": "Recording rec_20260624_001 from day_05_2026-06-24 matched requested date June 24. cam1; peak occupancy 2; last observed occupancy 1; activities climb stairs, cross hands in front, falling down, hit, idle, jump up, jumping, person, pushup, put on jacket, rtmpose, run, shake head, sit, somersault, stand, stand up, talk, throw, turn, walk; tracks 2; sample frame C:\\Users\\shrey\\TraceFixCityOS\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260709-132352-synthesis-20260709-172400-486412\\source_data\\frames\\day_05_2026-06-24_rec_20260624_001_cam1_t5.0.jpg. cam2; peak occupancy 2; last observed occupancy 1; activities cross hands in front, eat meal, falling down, hopping, idle, jump up, jumping, person, pick, pick up, pushup, put on a shoe, rtmpose, run, salute, shake head, stand, throw, turn, walk, wave; tracks 5; sample frame C:\\Users\\shrey\\TraceFixCityOS\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260709-132352-synthesis-20260709-172400-486412\\source_data\\frames\\day_05_2026-06-24_rec_20260624_001_cam2_t5.0.jpg. For June 24 (day_05_2026-06-24 / rec_20260624_001), jumping: 18 people, person: 3 people. Camera breakdown: cam 1: jumping 9, person 2; cam 2: jumping 9, person 1. Counts are per detected activity label/track; ask for 'both' to compute overlap when matching track IDs are available.",
-    "chat_answer": "For June 24 (day_05_2026-06-24 / rec_20260624_001), jumping: 18 people, person: 3 people. Camera breakdown: cam 1: jumping 9, person 2; cam 2: jumping 9, person 1. Counts are per detected activity label/track; ask for 'both' to compute overlap when matching track IDs are available.",
+    "run_dir": "C:\\Users\\shrey\\TraceFixCityOS\\.runs\\tellme\\tellme_20269d01467e",
+    "warnings": [],
+    "answer_summary": "I found 76 smartroom recordings for July 22. Which take should I use? Options: day_16_2026-07-22 / rec_20260722_203900; day_16_2026-07-22 / rec_20260722_180300; day_16_2026-07-22 / rec_20260722_170600; day_16_2026-07-22 / rec_20260722_165700; day_16_2026-07-22 / rec_20260722_165400; day_16_2026-07-22 / rec_20260722_165100.",
+    "chat_answer": "I found 76 smartroom recordings for July 22. Which take should I use?",
     "web_data_answer": {
-      "question": "Is a person jumping on June 24th? (Yes/No)",
-      "text": "Recording rec_20260624_001 from day_05_2026-06-24 matched requested date June 24. cam1; peak occupancy 2; last observed occupancy 1; activities climb stairs, cross hands in front, falling down, hit, idle, jump up, jumping, person, pushup, put on jacket, rtmpose, run, shake head, sit, somersault, stand, stand up, talk, throw, turn, walk; tracks 2; sample frame C:\\Users\\shrey\\TraceFixCityOS\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260709-132352-synthesis-20260709-172400-486412\\source_data\\frames\\day_05_2026-06-24_rec_20260624_001_cam1_t5.0.jpg. cam2; peak occupancy 2; last observed occupancy 1; activities cross hands in front, eat meal, falling down, hopping, idle, jump up, jumping, person, pick, pick up, pushup, put on a shoe, rtmpose, run, salute, shake head, stand, throw, turn, walk, wave; tracks 5; sample frame C:\\Users\\shrey\\TraceFixCityOS\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260709-132352-synthesis-20260709-172400-486412\\source_data\\frames\\day_05_2026-06-24_rec_20260624_001_cam2_t5.0.jpg. For June 24 (day_05_2026-06-24 / rec_20260624_001), jumping: 18 people, person: 3 people. Camera breakdown: cam 1: jumping 9, person 2; cam 2: jumping 9, person 1. Counts are per detected activity label/track; ask for 'both' to compute overlap when matching track IDs are available.",
-      "chatAnswer": "For June 24 (day_05_2026-06-24 / rec_20260624_001), jumping: 18 people, person: 3 people. Camera breakdown: cam 1: jumping 9, person 2; cam 2: jumping 9, person 1. Counts are per detected activity label/track; ask for 'both' to compute overlap when matching track IDs are available.",
-      "chat_answer": "For June 24 (day_05_2026-06-24 / rec_20260624_001), jumping: 18 people, person: 3 people. Camera breakdown: cam 1: jumping 9, person 2; cam 2: jumping 9, person 1. Counts are per detected activity label/track; ask for 'both' to compute overlap when matching track IDs are available.",
-      "recording": {
-        "day": "day_05_2026-06-24",
-        "rec": "rec_20260624_001"
-      },
-      "selection": {
-        "mode": "requested_date",
-        "requestedDate": {
-          "year": null,
-          "month": 6,
-          "day": 24,
-          "label": "June 24"
-        },
-        "requestedDateLabel": "June 24",
-        "reason": "matched requested date June 24"
-      },
-      "activityCounts": {
-        "climb stairs": 9,
-        "cross hands in front": 18,
-        "eat meal": 9,
-        "falling down": 18,
-        "hit": 9,
-        "hopping": 9,
-        "idle": 18,
-        "jump up": 18,
-        "jumping": 18,
-        "person": 3,
-        "pick": 9,
-        "pick up": 9,
-        "pushup": 18,
-        "put on a shoe": 9,
-        "put on jacket": 9,
-        "rtmpose": 18,
-        "run": 18,
-        "salute": 9,
-        "shake head": 18,
-        "sit": 9,
-        "somersault": 9,
-        "stand": 18,
-        "stand up": 9,
-        "talk": 9,
-        "throw": 18,
-        "turn": 18,
-        "walk": 18,
-        "wave": 9
-      },
-      "requestedActivities": [
-        "jumping",
-        "person"
-      ],
-      "requestedActivityCounts": {
-        "jumping": 18,
-        "person": 3
-      },
-      "requestedActivityCombination": null,
-      "requestedActivityAnswer": "For June 24 (day_05_2026-06-24 / rec_20260624_001), jumping: 18 people, person: 3 people. Camera breakdown: cam 1: jumping 9, person 2; cam 2: jumping 9, person 1. Counts are per detected activity label/track; ask for 'both' to compute overlap when matching track IDs are available.",
-      "cameras": [
+      "question": "july 22nd how many people in total are in the room",
+      "text": "I found 76 smartroom recordings for July 22. Which take should I use? Options: day_16_2026-07-22 / rec_20260722_203900; day_16_2026-07-22 / rec_20260722_180300; day_16_2026-07-22 / rec_20260722_170600; day_16_2026-07-22 / rec_20260722_165700; day_16_2026-07-22 / rec_20260722_165400; day_16_2026-07-22 / rec_20260722_165100.",
+      "chatAnswer": "I found 76 smartroom recordings for July 22. Which take should I use?",
+      "chat_answer": "I found 76 smartroom recordings for July 22. Which take should I use?",
+      "needsClarification": true,
+      "clarificationPrompt": "I found 76 smartroom recordings for July 22. Which take should I use?",
+      "clarificationCandidates": [
         {
-          "camera": "cam1",
-          "node": "smartroom1",
-          "durationSec": 30,
-          "peakPeople": 2,
-          "lastPeople": 1,
-          "trackCount": 2,
-          "actions": [
-            "climb stairs",
-            "cross hands in front",
-            "falling down",
-            "hit",
-            "jump up",
-            "jumping",
-            "pushup",
-            "put on jacket",
-            "run",
-            "shake head",
-            "sit",
-            "somersault",
-            "stand",
-            "stand up",
-            "talk",
-            "throw",
-            "turn",
-            "walk"
+          "recordingId": "day_16_2026-07-22/rec_20260722_203900",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_203900",
+          "label": "day_16_2026-07-22 / rec_20260722_203900",
+          "detail": "July 22, 2026 - cam2-d435 - 98s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "8:39 PM",
+          "cameras": [
+            "cam2-d435"
           ],
-          "activities": [
-            "climb stairs",
-            "cross hands in front",
-            "falling down",
-            "hit",
-            "idle",
-            "jump up",
-            "jumping",
-            "person",
-            "pushup",
-            "put on jacket",
-            "rtmpose",
-            "run",
-            "shake head",
-            "sit",
-            "somersault",
-            "stand",
-            "stand up",
-            "talk",
-            "throw",
-            "turn",
-            "walk"
+          "cameraCount": 1,
+          "durationSec": 97.73,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
           ],
-          "activityEvents": [
-            {
-              "model": "action-hmdb",
-              "label": "climb stairs"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "hit"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "idle"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "jumping"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "pushup"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "rtmpose"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "run"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "sit"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "somersault"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "stand"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "talk"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "throw"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "turn"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "walk"
-            },
-            {
-              "model": "action",
-              "label": "cross hands in front"
-            },
-            {
-              "model": "action",
-              "label": "falling down"
-            },
-            {
-              "model": "action",
-              "label": "idle"
-            },
-            {
-              "model": "action",
-              "label": "jump up"
-            },
-            {
-              "model": "action",
-              "label": "jumping"
-            },
-            {
-              "model": "action",
-              "label": "put on jacket"
-            },
-            {
-              "model": "action",
-              "label": "rtmpose"
-            },
-            {
-              "model": "action",
-              "label": "shake head"
-            },
-            {
-              "model": "action",
-              "label": "stand up"
-            },
-            {
-              "model": "yolo26l",
-              "label": "person"
-            },
-            {
-              "model": "yolo26n-pose",
-              "label": "person"
-            }
+          "nodes": [
+            "smartroom2"
           ],
-          "activityCounts": {
-            "climb stairs": 9,
-            "cross hands in front": 9,
-            "falling down": 9,
-            "hit": 9,
-            "idle": 9,
-            "jump up": 9,
-            "jumping": 9,
-            "person": 2,
-            "pushup": 9,
-            "put on jacket": 9,
-            "rtmpose": 9,
-            "run": 9,
-            "shake head": 9,
-            "sit": 9,
-            "somersault": 9,
-            "stand": 9,
-            "stand up": 9,
-            "talk": 9,
-            "throw": 9,
-            "turn": 9,
-            "walk": 9
-          },
-          "activityTrackIds": {
-            "climb stairs": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "cross hands in front": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "falling down": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "hit": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "idle": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "jump up": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "jumping": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "pushup": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "put on jacket": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "rtmpose": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "run": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "shake head": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "sit": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "somersault": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "stand": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "stand up": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "talk": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "throw": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "turn": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "walk": [
-              "17",
-              "8",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ]
-          },
-          "pose": {
-            "models": [
-              {
-                "model": "action-hmdb",
-                "labels": [
-                  "climb stairs",
-                  "hit",
-                  "idle",
-                  "jumping",
-                  "pushup",
-                  "rtmpose",
-                  "run",
-                  "sit",
-                  "somersault",
-                  "stand",
-                  "talk",
-                  "throw",
-                  "turn",
-                  "walk"
-                ],
-                "keypointSets": 527,
-                "segmentSets": 28,
-                "centroidSets": 383,
-                "hasKeypoints": true
-              },
-              {
-                "model": "action",
-                "labels": [
-                  "cross hands in front",
-                  "falling down",
-                  "idle",
-                  "jump up",
-                  "jumping",
-                  "put on jacket",
-                  "rtmpose",
-                  "shake head",
-                  "stand up"
-                ],
-                "keypointSets": 527,
-                "segmentSets": 28,
-                "centroidSets": 383,
-                "hasKeypoints": true
-              },
-              {
-                "model": "yolo26n-pose",
-                "labels": [
-                  "person"
-                ],
-                "keypointSets": 8,
-                "segmentSets": 0,
-                "centroidSets": 0,
-                "hasKeypoints": true
-              }
-            ],
-            "available": true
-          },
-          "endpoints": {
-            "action-hmdb": "https://smartroom-mirror.vercel.app/api/v1/recordings/day_05_2026-06-24/rec_20260624_001/cam1/inference/action-hmdb",
-            "action": "https://smartroom-mirror.vercel.app/api/v1/recordings/day_05_2026-06-24/rec_20260624_001/cam1/inference/action",
-            "yolo26l": "https://smartroom-mirror.vercel.app/api/v1/recordings/day_05_2026-06-24/rec_20260624_001/cam1/inference/yolo26l",
-            "yolo26n-pose": "https://smartroom-mirror.vercel.app/api/v1/recordings/day_05_2026-06-24/rec_20260624_001/cam1/inference/yolo26n-pose"
-          },
-          "models": {
-            "action-hmdb": {
-              "status": "done",
-              "durationSec": 29.967,
-              "peakPeople": null,
-              "lastPeople": null,
-              "samples": 0,
-              "tracks": 2,
-              "actions": [
-                "talk",
-                "walk",
-                "turn",
-                "sit",
-                "pushup",
-                "somersault",
-                "stand",
-                "climb stairs",
-                "run",
-                "hit",
-                "throw",
-                "jumping"
-              ],
-              "trackActions": {
-                "8": "turn"
-              },
-              "activityLabels": [
-                "climb stairs",
-                "hit",
-                "idle",
-                "jumping",
-                "pushup",
-                "rtmpose",
-                "run",
-                "sit",
-                "somersault",
-                "stand",
-                "talk",
-                "throw",
-                "turn",
-                "walk"
-              ],
-              "activityCounts": {
-                "climb stairs": 9,
-                "hit": 9,
-                "idle": 9,
-                "jumping": 9,
-                "pushup": 9,
-                "rtmpose": 9,
-                "run": 9,
-                "sit": 9,
-                "somersault": 9,
-                "stand": 9,
-                "talk": 9,
-                "throw": 9,
-                "turn": 9,
-                "walk": 9
-              },
-              "activityTrackIds": {
-                "climb stairs": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "hit": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "idle": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "jumping": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "pushup": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "rtmpose": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "run": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "sit": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "somersault": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "stand": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "talk": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "throw": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "turn": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "walk": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ]
-              },
-              "pose": {
-                "model": "action-hmdb",
-                "labels": [
-                  "climb stairs",
-                  "hit",
-                  "idle",
-                  "jumping",
-                  "pushup",
-                  "rtmpose",
-                  "run",
-                  "sit",
-                  "somersault",
-                  "stand",
-                  "talk",
-                  "throw",
-                  "turn",
-                  "walk"
-                ],
-                "keypointSets": 527,
-                "segmentSets": 28,
-                "centroidSets": 383,
-                "hasKeypoints": true
-              },
-              "jumps": 4
-            },
-            "action": {
-              "status": "done",
-              "durationSec": 29.967,
-              "peakPeople": null,
-              "lastPeople": null,
-              "samples": 0,
-              "tracks": 2,
-              "actions": [
-                "shake head",
-                "falling down",
-                "stand up",
-                "put on jacket",
-                "jump up",
-                "cross hands in front",
-                "jumping"
-              ],
-              "trackActions": {
-                "8": "jump up"
-              },
-              "activityLabels": [
-                "cross hands in front",
-                "falling down",
-                "idle",
-                "jump up",
-                "jumping",
-                "put on jacket",
-                "rtmpose",
-                "shake head",
-                "stand up"
-              ],
-              "activityCounts": {
-                "cross hands in front": 9,
-                "falling down": 9,
-                "idle": 9,
-                "jump up": 9,
-                "jumping": 9,
-                "put on jacket": 9,
-                "rtmpose": 9,
-                "shake head": 9,
-                "stand up": 9
-              },
-              "activityTrackIds": {
-                "cross hands in front": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "falling down": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "idle": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "jump up": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "jumping": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "put on jacket": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "rtmpose": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "shake head": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "stand up": [
-                  "17",
-                  "8",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ]
-              },
-              "pose": {
-                "model": "action",
-                "labels": [
-                  "cross hands in front",
-                  "falling down",
-                  "idle",
-                  "jump up",
-                  "jumping",
-                  "put on jacket",
-                  "rtmpose",
-                  "shake head",
-                  "stand up"
-                ],
-                "keypointSets": 527,
-                "segmentSets": 28,
-                "centroidSets": 383,
-                "hasKeypoints": true
-              },
-              "jumps": 4
-            },
-            "yolo26l": {
-              "status": "done",
-              "durationSec": 29.967,
-              "peakPeople": 2,
-              "lastPeople": 1,
-              "samples": 135,
-              "tracks": null,
-              "actions": [],
-              "trackActions": {},
-              "activityLabels": [
-                "person"
-              ],
-              "activityCounts": {},
-              "activityTrackIds": {},
-              "pose": null,
-              "jumps": null
-            },
-            "yolo26n-pose": {
-              "status": "done",
-              "durationSec": 29.967,
-              "peakPeople": 2,
-              "lastPeople": 1,
-              "samples": 135,
-              "tracks": null,
-              "actions": [],
-              "trackActions": {},
-              "activityLabels": [
-                "person"
-              ],
-              "activityCounts": {
-                "person": 2
-              },
-              "activityTrackIds": {},
-              "pose": {
-                "model": "yolo26n-pose",
-                "labels": [
-                  "person"
-                ],
-                "keypointSets": 8,
-                "segmentSets": 0,
-                "centroidSets": 0,
-                "hasKeypoints": true
-              },
-              "jumps": null
-            }
-          },
-          "framePath": "C:\\Users\\shrey\\TraceFixCityOS\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260709-132352-synthesis-20260709-172400-486412\\source_data\\frames\\day_05_2026-06-24_rec_20260624_001_cam1_t5.0.jpg"
+          "mtime": 1784767320058.3975
         },
         {
-          "camera": "cam2",
-          "node": "smartroom2",
-          "durationSec": 30,
-          "peakPeople": 2,
-          "lastPeople": 1,
-          "trackCount": 5,
-          "actions": [
-            "cross hands in front",
-            "eat meal",
-            "falling down",
-            "hopping",
-            "jump up",
-            "jumping",
-            "pick",
-            "pick up",
-            "pushup",
-            "put on a shoe",
-            "run",
-            "salute",
-            "shake head",
-            "stand",
-            "throw",
-            "turn",
-            "walk",
-            "wave"
+          "recordingId": "day_16_2026-07-22/rec_20260722_180300",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_180300",
+          "label": "day_16_2026-07-22 / rec_20260722_180300",
+          "detail": "July 22, 2026 - cam2-d435 - 103s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "6:03 PM",
+          "cameras": [
+            "cam2-d435"
           ],
-          "activities": [
-            "cross hands in front",
-            "eat meal",
-            "falling down",
-            "hopping",
-            "idle",
-            "jump up",
-            "jumping",
-            "person",
-            "pick",
-            "pick up",
-            "pushup",
-            "put on a shoe",
-            "rtmpose",
-            "run",
-            "salute",
-            "shake head",
-            "stand",
-            "throw",
-            "turn",
-            "walk",
-            "wave"
+          "cameraCount": 1,
+          "durationSec": 102.73,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
           ],
-          "activityEvents": [
-            {
-              "model": "action-hmdb",
-              "label": "idle"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "jumping"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "pick"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "pushup"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "rtmpose"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "run"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "stand"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "turn"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "walk"
-            },
-            {
-              "model": "action-hmdb",
-              "label": "wave"
-            },
-            {
-              "model": "action",
-              "label": "cross hands in front"
-            },
-            {
-              "model": "action",
-              "label": "eat meal"
-            },
-            {
-              "model": "action",
-              "label": "falling down"
-            },
-            {
-              "model": "action",
-              "label": "hopping"
-            },
-            {
-              "model": "action",
-              "label": "idle"
-            },
-            {
-              "model": "action",
-              "label": "jump up"
-            },
-            {
-              "model": "action",
-              "label": "jumping"
-            },
-            {
-              "model": "action",
-              "label": "pick up"
-            },
-            {
-              "model": "action",
-              "label": "put on a shoe"
-            },
-            {
-              "model": "action",
-              "label": "rtmpose"
-            },
-            {
-              "model": "action",
-              "label": "salute"
-            },
-            {
-              "model": "action",
-              "label": "shake head"
-            },
-            {
-              "model": "action",
-              "label": "throw"
-            },
-            {
-              "model": "yolo26l",
-              "label": "person"
-            },
-            {
-              "model": "yolo26n-pose",
-              "label": "person"
-            }
+          "nodes": [
+            "smartroom2"
           ],
-          "activityCounts": {
-            "cross hands in front": 9,
-            "eat meal": 9,
-            "falling down": 9,
-            "hopping": 9,
-            "idle": 9,
-            "jump up": 9,
-            "jumping": 9,
-            "person": 1,
-            "pick": 9,
-            "pick up": 9,
-            "pushup": 9,
-            "put on a shoe": 9,
-            "rtmpose": 9,
-            "run": 9,
-            "salute": 9,
-            "shake head": 9,
-            "stand": 9,
-            "throw": 9,
-            "turn": 9,
-            "walk": 9,
-            "wave": 9
-          },
-          "activityTrackIds": {
-            "cross hands in front": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "eat meal": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "falling down": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "hopping": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "idle": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "jump up": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "jumping": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "pick": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "pick up": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "pushup": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "put on a shoe": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "rtmpose": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "run": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "salute": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "shake head": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "stand": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "throw": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "turn": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "walk": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ],
-            "wave": [
-              "1",
-              "2",
-              "3",
-              "5",
-              "7",
-              "model",
-              "nativeFps",
-              "persons",
-              "poseSource",
-              "schemaVersion",
-              "source",
-              "sourceMtimeMs",
-              "stride",
-              "window"
-            ]
-          },
-          "pose": {
-            "models": [
-              {
-                "model": "action-hmdb",
-                "labels": [
-                  "idle",
-                  "jumping",
-                  "pick",
-                  "pushup",
-                  "rtmpose",
-                  "run",
-                  "stand",
-                  "turn",
-                  "walk",
-                  "wave"
-                ],
-                "keypointSets": 884,
-                "segmentSets": 42,
-                "centroidSets": 690,
-                "hasKeypoints": true
-              },
-              {
-                "model": "action",
-                "labels": [
-                  "cross hands in front",
-                  "eat meal",
-                  "falling down",
-                  "hopping",
-                  "idle",
-                  "jump up",
-                  "jumping",
-                  "pick up",
-                  "put on a shoe",
-                  "rtmpose",
-                  "salute",
-                  "shake head",
-                  "throw"
-                ],
-                "keypointSets": 884,
-                "segmentSets": 36,
-                "centroidSets": 690,
-                "hasKeypoints": true
-              },
-              {
-                "model": "yolo26n-pose",
-                "labels": [
-                  "person"
-                ],
-                "keypointSets": 8,
-                "segmentSets": 0,
-                "centroidSets": 0,
-                "hasKeypoints": true
-              }
-            ],
-            "available": true
-          },
-          "endpoints": {
-            "action-hmdb": "https://smartroom-mirror.vercel.app/api/v1/recordings/day_05_2026-06-24/rec_20260624_001/cam2/inference/action-hmdb",
-            "action": "https://smartroom-mirror.vercel.app/api/v1/recordings/day_05_2026-06-24/rec_20260624_001/cam2/inference/action",
-            "yolo26l": "https://smartroom-mirror.vercel.app/api/v1/recordings/day_05_2026-06-24/rec_20260624_001/cam2/inference/yolo26l",
-            "yolo26n-pose": "https://smartroom-mirror.vercel.app/api/v1/recordings/day_05_2026-06-24/rec_20260624_001/cam2/inference/yolo26n-pose"
-          },
-          "models": {
-            "action-hmdb": {
-              "status": "done",
-              "durationSec": 30,
-              "peakPeople": null,
-              "lastPeople": null,
-              "samples": 0,
-              "tracks": 5,
-              "actions": [
-                "walk",
-                "turn",
-                "pick",
-                "stand",
-                "pushup",
-                "wave",
-                "run",
-                "jumping"
-              ],
-              "trackActions": {
-                "1": "walk",
-                "2": "walk",
-                "3": "pushup",
-                "5": "walk",
-                "7": "walk"
-              },
-              "activityLabels": [
-                "idle",
-                "jumping",
-                "pick",
-                "pushup",
-                "rtmpose",
-                "run",
-                "stand",
-                "turn",
-                "walk",
-                "wave"
-              ],
-              "activityCounts": {
-                "idle": 9,
-                "jumping": 9,
-                "pick": 9,
-                "pushup": 9,
-                "rtmpose": 9,
-                "run": 9,
-                "stand": 9,
-                "turn": 9,
-                "walk": 9,
-                "wave": 9
-              },
-              "activityTrackIds": {
-                "idle": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "jumping": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "pick": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "pushup": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "rtmpose": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "run": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "stand": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "turn": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "walk": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "wave": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ]
-              },
-              "pose": {
-                "model": "action-hmdb",
-                "labels": [
-                  "idle",
-                  "jumping",
-                  "pick",
-                  "pushup",
-                  "rtmpose",
-                  "run",
-                  "stand",
-                  "turn",
-                  "walk",
-                  "wave"
-                ],
-                "keypointSets": 884,
-                "segmentSets": 42,
-                "centroidSets": 690,
-                "hasKeypoints": true
-              },
-              "jumps": 2
-            },
-            "action": {
-              "status": "done",
-              "durationSec": 30,
-              "peakPeople": null,
-              "lastPeople": null,
-              "samples": 0,
-              "tracks": 5,
-              "actions": [
-                "shake head",
-                "hopping",
-                "falling down",
-                "put on a shoe",
-                "pick up",
-                "eat meal",
-                "cross hands in front",
-                "salute",
-                "throw",
-                "jump up",
-                "jumping"
-              ],
-              "trackActions": {
-                "1": "shake head",
-                "2": "shake head",
-                "3": "falling down",
-                "5": "hopping",
-                "7": "jump up"
-              },
-              "activityLabels": [
-                "cross hands in front",
-                "eat meal",
-                "falling down",
-                "hopping",
-                "idle",
-                "jump up",
-                "jumping",
-                "pick up",
-                "put on a shoe",
-                "rtmpose",
-                "salute",
-                "shake head",
-                "throw"
-              ],
-              "activityCounts": {
-                "cross hands in front": 9,
-                "eat meal": 9,
-                "falling down": 9,
-                "hopping": 9,
-                "idle": 9,
-                "jump up": 9,
-                "jumping": 9,
-                "pick up": 9,
-                "put on a shoe": 9,
-                "rtmpose": 9,
-                "salute": 9,
-                "shake head": 9,
-                "throw": 9
-              },
-              "activityTrackIds": {
-                "cross hands in front": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "eat meal": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "falling down": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "hopping": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "idle": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "jump up": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "jumping": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "pick up": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "put on a shoe": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "rtmpose": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "salute": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "shake head": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ],
-                "throw": [
-                  "1",
-                  "2",
-                  "3",
-                  "5",
-                  "7",
-                  "model",
-                  "nativeFps",
-                  "persons",
-                  "poseSource",
-                  "schemaVersion",
-                  "source",
-                  "sourceMtimeMs",
-                  "stride",
-                  "window"
-                ]
-              },
-              "pose": {
-                "model": "action",
-                "labels": [
-                  "cross hands in front",
-                  "eat meal",
-                  "falling down",
-                  "hopping",
-                  "idle",
-                  "jump up",
-                  "jumping",
-                  "pick up",
-                  "put on a shoe",
-                  "rtmpose",
-                  "salute",
-                  "shake head",
-                  "throw"
-                ],
-                "keypointSets": 884,
-                "segmentSets": 36,
-                "centroidSets": 690,
-                "hasKeypoints": true
-              },
-              "jumps": 2
-            },
-            "yolo26l": {
-              "status": "done",
-              "durationSec": 30,
-              "peakPeople": 2,
-              "lastPeople": 1,
-              "samples": 150,
-              "tracks": null,
-              "actions": [],
-              "trackActions": {},
-              "activityLabels": [
-                "person"
-              ],
-              "activityCounts": {},
-              "activityTrackIds": {},
-              "pose": null,
-              "jumps": null
-            },
-            "yolo26n-pose": {
-              "status": "done",
-              "durationSec": 30,
-              "peakPeople": 1,
-              "lastPeople": 1,
-              "samples": 150,
-              "tracks": null,
-              "actions": [],
-              "trackActions": {},
-              "activityLabels": [
-                "person"
-              ],
-              "activityCounts": {
-                "person": 1
-              },
-              "activityTrackIds": {},
-              "pose": {
-                "model": "yolo26n-pose",
-                "labels": [
-                  "person"
-                ],
-                "keypointSets": 8,
-                "segmentSets": 0,
-                "centroidSets": 0,
-                "hasKeypoints": true
-              },
-              "jumps": null
-            }
-          },
-          "framePath": "C:\\Users\\shrey\\TraceFixCityOS\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260709-132352-synthesis-20260709-172400-486412\\source_data\\frames\\day_05_2026-06-24_rec_20260624_001_cam2_t5.0.jpg"
+          "mtime": 1784757960008.3887
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_170600",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_170600",
+          "label": "day_16_2026-07-22 / rec_20260722_170600",
+          "detail": "July 22, 2026 - cam2-d435 - 103s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "5:06 PM",
+          "cameras": [
+            "cam2-d435"
+          ],
+          "cameraCount": 1,
+          "durationSec": 102.77,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784754540006.9612
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_165700",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_165700",
+          "label": "day_16_2026-07-22 / rec_20260722_165700",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 172s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:57 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 172.47,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784754000050.1758
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_165400",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_165400",
+          "label": "day_16_2026-07-22 / rec_20260722_165400",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 173s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:54 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 172.67,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784753820017.9138
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_165100",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_165100",
+          "label": "day_16_2026-07-22 / rec_20260722_165100",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 129s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:51 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 128.73,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784753640081.652
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_164800",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_164800",
+          "label": "day_16_2026-07-22 / rec_20260722_164800",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 170s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:48 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 170.13,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784753460029.39
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_164500",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_164500",
+          "label": "day_16_2026-07-22 / rec_20260722_164500",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:45 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 168.73,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784753280053.1274
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_164200",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_164200",
+          "label": "day_16_2026-07-22 / rec_20260722_164200",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 170s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:42 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 170.27,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784753100036.8645
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_163900",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_163900",
+          "label": "day_16_2026-07-22 / rec_20260722_163900",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:39 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 169.27,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784752920048.601
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_163600",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_163600",
+          "label": "day_16_2026-07-22 / rec_20260722_163600",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 166s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:36 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 166.4,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784752740100.337
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_163300",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_163300",
+          "label": "day_16_2026-07-22 / rec_20260722_163300",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:33 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 168.53,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784752560024.0713
         }
       ],
+      "recording": null,
+      "cameras": [],
+      "selection": {
+        "mode": "needs_clarification",
+        "requestedDate": {
+          "year": null,
+          "month": 7,
+          "day": 22,
+          "label": "July 22"
+        },
+        "requestedDateLabel": "July 22",
+        "needsClarification": true,
+        "clarificationPrompt": "I found 76 smartroom recordings for July 22. Which take should I use?",
+        "candidates": [
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_203900",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_203900",
+            "label": "day_16_2026-07-22 / rec_20260722_203900",
+            "detail": "July 22, 2026 - cam2-d435 - 98s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "8:39 PM",
+            "cameras": [
+              "cam2-d435"
+            ],
+            "cameraCount": 1,
+            "durationSec": 97.73,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784767320058.3975
+          },
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_180300",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_180300",
+            "label": "day_16_2026-07-22 / rec_20260722_180300",
+            "detail": "July 22, 2026 - cam2-d435 - 103s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "6:03 PM",
+            "cameras": [
+              "cam2-d435"
+            ],
+            "cameraCount": 1,
+            "durationSec": 102.73,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784757960008.3887
+          },
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_170600",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_170600",
+            "label": "day_16_2026-07-22 / rec_20260722_170600",
+            "detail": "July 22, 2026 - cam2-d435 - 103s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "5:06 PM",
+            "cameras": [
+              "cam2-d435"
+            ],
+            "cameraCount": 1,
+            "durationSec": 102.77,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784754540006.9612
+          },
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_165700",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_165700",
+            "label": "day_16_2026-07-22 / rec_20260722_165700",
+            "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 172s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "4:57 PM",
+            "cameras": [
+              "cam2-d455",
+              "cam2-d435"
+            ],
+            "cameraCount": 2,
+            "durationSec": 172.47,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784754000050.1758
+          },
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_165400",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_165400",
+            "label": "day_16_2026-07-22 / rec_20260722_165400",
+            "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 173s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "4:54 PM",
+            "cameras": [
+              "cam2-d455",
+              "cam2-d435"
+            ],
+            "cameraCount": 2,
+            "durationSec": 172.67,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784753820017.9138
+          },
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_165100",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_165100",
+            "label": "day_16_2026-07-22 / rec_20260722_165100",
+            "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 129s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "4:51 PM",
+            "cameras": [
+              "cam2-d455",
+              "cam2-d435"
+            ],
+            "cameraCount": 2,
+            "durationSec": 128.73,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784753640081.652
+          },
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_164800",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_164800",
+            "label": "day_16_2026-07-22 / rec_20260722_164800",
+            "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 170s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "4:48 PM",
+            "cameras": [
+              "cam2-d455",
+              "cam2-d435"
+            ],
+            "cameraCount": 2,
+            "durationSec": 170.13,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784753460029.39
+          },
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_164500",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_164500",
+            "label": "day_16_2026-07-22 / rec_20260722_164500",
+            "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "4:45 PM",
+            "cameras": [
+              "cam2-d455",
+              "cam2-d435"
+            ],
+            "cameraCount": 2,
+            "durationSec": 168.73,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784753280053.1274
+          },
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_164200",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_164200",
+            "label": "day_16_2026-07-22 / rec_20260722_164200",
+            "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 170s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "4:42 PM",
+            "cameras": [
+              "cam2-d455",
+              "cam2-d435"
+            ],
+            "cameraCount": 2,
+            "durationSec": 170.27,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784753100036.8645
+          },
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_163900",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_163900",
+            "label": "day_16_2026-07-22 / rec_20260722_163900",
+            "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "4:39 PM",
+            "cameras": [
+              "cam2-d455",
+              "cam2-d435"
+            ],
+            "cameraCount": 2,
+            "durationSec": 169.27,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784752920048.601
+          },
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_163600",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_163600",
+            "label": "day_16_2026-07-22 / rec_20260722_163600",
+            "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 166s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "4:36 PM",
+            "cameras": [
+              "cam2-d455",
+              "cam2-d435"
+            ],
+            "cameraCount": 2,
+            "durationSec": 166.4,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784752740100.337
+          },
+          {
+            "recordingId": "day_16_2026-07-22/rec_20260722_163300",
+            "day": "day_16_2026-07-22",
+            "rec": "rec_20260722_163300",
+            "label": "day_16_2026-07-22 / rec_20260722_163300",
+            "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+            "dateLabel": "July 22, 2026",
+            "timeLabel": "4:33 PM",
+            "cameras": [
+              "cam2-d455",
+              "cam2-d435"
+            ],
+            "cameraCount": 2,
+            "durationSec": 168.53,
+            "models": [
+              "action-ava",
+              "geo",
+              "yolo26m",
+              "yolo26n-pose"
+            ],
+            "nodes": [
+              "smartroom2"
+            ],
+            "mtime": 1784752560024.0713
+          }
+        ],
+        "reason": "recording selection required for requested date July 22"
+      },
       "errors": []
     },
-    "web_data_answer_path": "C:\\Users\\shrey\\TraceFixCityOS\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260709-132352-synthesis-20260709-172400-486412\\smartroom-answer.json",
+    "web_data_answer_path": "C:\\Users\\shrey\\TraceFixCityOS\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260727-132819-synthesis-20260727-172825-864183\\smartroom-answer.json",
+    "web_data_manifest_path": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\output\\cityos_synthesis\\tracefix-tellme-structured-smart-room-application-20260727-132819-synthesis.json",
     "web_data_snapshot_summary": {
-      "recordingCount": 17,
-      "selectedDay": "day_05_2026-06-24",
-      "selectedRecording": "rec_20260624_001",
-      "cameras": [
-        "cam1",
-        "cam2"
-      ],
-      "selectionMode": "requested_date",
-      "selectionReason": "matched requested date June 24",
+      "recordingCount": 174,
+      "selectedDay": null,
+      "selectedRecording": null,
+      "cameras": [],
+      "selectionMode": "needs_clarification",
+      "selectionReason": "recording selection required for requested date July 22",
       "requestedDate": {
         "year": null,
-        "month": 6,
-        "day": 24,
-        "label": "June 24"
+        "month": 7,
+        "day": 22,
+        "label": "July 22"
       },
-      "requestedDateLabel": "June 24",
-      "question": "Is a person jumping on June 24th? (Yes/No)",
-      "errors": 0
+      "requestedDateLabel": "July 22",
+      "question": "july 22nd how many people in total are in the room",
+      "errors": 0,
+      "needsClarification": true,
+      "clarificationPrompt": "I found 76 smartroom recordings for July 22. Which take should I use?",
+      "clarificationCandidates": [
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_203900",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_203900",
+          "label": "day_16_2026-07-22 / rec_20260722_203900",
+          "detail": "July 22, 2026 - cam2-d435 - 98s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "8:39 PM",
+          "cameras": [
+            "cam2-d435"
+          ],
+          "cameraCount": 1,
+          "durationSec": 97.73,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784767320058.3975
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_180300",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_180300",
+          "label": "day_16_2026-07-22 / rec_20260722_180300",
+          "detail": "July 22, 2026 - cam2-d435 - 103s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "6:03 PM",
+          "cameras": [
+            "cam2-d435"
+          ],
+          "cameraCount": 1,
+          "durationSec": 102.73,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784757960008.3887
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_170600",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_170600",
+          "label": "day_16_2026-07-22 / rec_20260722_170600",
+          "detail": "July 22, 2026 - cam2-d435 - 103s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "5:06 PM",
+          "cameras": [
+            "cam2-d435"
+          ],
+          "cameraCount": 1,
+          "durationSec": 102.77,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784754540006.9612
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_165700",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_165700",
+          "label": "day_16_2026-07-22 / rec_20260722_165700",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 172s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:57 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 172.47,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784754000050.1758
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_165400",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_165400",
+          "label": "day_16_2026-07-22 / rec_20260722_165400",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 173s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:54 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 172.67,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784753820017.9138
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_165100",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_165100",
+          "label": "day_16_2026-07-22 / rec_20260722_165100",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 129s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:51 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 128.73,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784753640081.652
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_164800",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_164800",
+          "label": "day_16_2026-07-22 / rec_20260722_164800",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 170s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:48 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 170.13,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784753460029.39
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_164500",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_164500",
+          "label": "day_16_2026-07-22 / rec_20260722_164500",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:45 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 168.73,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784753280053.1274
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_164200",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_164200",
+          "label": "day_16_2026-07-22 / rec_20260722_164200",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 170s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:42 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 170.27,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784753100036.8645
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_163900",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_163900",
+          "label": "day_16_2026-07-22 / rec_20260722_163900",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:39 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 169.27,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784752920048.601
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_163600",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_163600",
+          "label": "day_16_2026-07-22 / rec_20260722_163600",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 166s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:36 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 166.4,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784752740100.337
+        },
+        {
+          "recordingId": "day_16_2026-07-22/rec_20260722_163300",
+          "day": "day_16_2026-07-22",
+          "rec": "rec_20260722_163300",
+          "label": "day_16_2026-07-22 / rec_20260722_163300",
+          "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+          "dateLabel": "July 22, 2026",
+          "timeLabel": "4:33 PM",
+          "cameras": [
+            "cam2-d455",
+            "cam2-d435"
+          ],
+          "cameraCount": 2,
+          "durationSec": 168.53,
+          "models": [
+            "action-ava",
+            "geo",
+            "yolo26m",
+            "yolo26n-pose"
+          ],
+          "nodes": [
+            "smartroom2"
+          ],
+          "mtime": 1784752560024.0713
+        }
+      ],
+      "recordingOverride": null
     },
-    "web_data_payload_path": "C:\\Users\\shrey\\TraceFixCityOS\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260709-132352-synthesis-20260709-172400-486412\\source_data\\20260709-172406-608293_web_payload.json",
-    "web_data_source_url": "https://smartroom-mirror.vercel.app/api/v1",
+    "web_data_payload_path": "C:\\Users\\shrey\\TraceFixCityOS\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260727-132819-synthesis-20260727-172825-864183\\source_data\\20260727-172828-733805_web_payload.json",
+    "web_data_needs_clarification": true,
+    "web_data_clarification_prompt": "I found 76 smartroom recordings for July 22. Which take should I use?",
+    "web_data_clarification_candidates": [
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_203900",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_203900",
+        "label": "day_16_2026-07-22 / rec_20260722_203900",
+        "detail": "July 22, 2026 - cam2-d435 - 98s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "8:39 PM",
+        "cameras": [
+          "cam2-d435"
+        ],
+        "cameraCount": 1,
+        "durationSec": 97.73,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784767320058.3975
+      },
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_180300",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_180300",
+        "label": "day_16_2026-07-22 / rec_20260722_180300",
+        "detail": "July 22, 2026 - cam2-d435 - 103s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "6:03 PM",
+        "cameras": [
+          "cam2-d435"
+        ],
+        "cameraCount": 1,
+        "durationSec": 102.73,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784757960008.3887
+      },
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_170600",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_170600",
+        "label": "day_16_2026-07-22 / rec_20260722_170600",
+        "detail": "July 22, 2026 - cam2-d435 - 103s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "5:06 PM",
+        "cameras": [
+          "cam2-d435"
+        ],
+        "cameraCount": 1,
+        "durationSec": 102.77,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784754540006.9612
+      },
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_165700",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_165700",
+        "label": "day_16_2026-07-22 / rec_20260722_165700",
+        "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 172s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "4:57 PM",
+        "cameras": [
+          "cam2-d455",
+          "cam2-d435"
+        ],
+        "cameraCount": 2,
+        "durationSec": 172.47,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784754000050.1758
+      },
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_165400",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_165400",
+        "label": "day_16_2026-07-22 / rec_20260722_165400",
+        "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 173s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "4:54 PM",
+        "cameras": [
+          "cam2-d455",
+          "cam2-d435"
+        ],
+        "cameraCount": 2,
+        "durationSec": 172.67,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784753820017.9138
+      },
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_165100",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_165100",
+        "label": "day_16_2026-07-22 / rec_20260722_165100",
+        "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 129s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "4:51 PM",
+        "cameras": [
+          "cam2-d455",
+          "cam2-d435"
+        ],
+        "cameraCount": 2,
+        "durationSec": 128.73,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784753640081.652
+      },
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_164800",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_164800",
+        "label": "day_16_2026-07-22 / rec_20260722_164800",
+        "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 170s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "4:48 PM",
+        "cameras": [
+          "cam2-d455",
+          "cam2-d435"
+        ],
+        "cameraCount": 2,
+        "durationSec": 170.13,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784753460029.39
+      },
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_164500",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_164500",
+        "label": "day_16_2026-07-22 / rec_20260722_164500",
+        "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "4:45 PM",
+        "cameras": [
+          "cam2-d455",
+          "cam2-d435"
+        ],
+        "cameraCount": 2,
+        "durationSec": 168.73,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784753280053.1274
+      },
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_164200",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_164200",
+        "label": "day_16_2026-07-22 / rec_20260722_164200",
+        "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 170s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "4:42 PM",
+        "cameras": [
+          "cam2-d455",
+          "cam2-d435"
+        ],
+        "cameraCount": 2,
+        "durationSec": 170.27,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784753100036.8645
+      },
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_163900",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_163900",
+        "label": "day_16_2026-07-22 / rec_20260722_163900",
+        "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "4:39 PM",
+        "cameras": [
+          "cam2-d455",
+          "cam2-d435"
+        ],
+        "cameraCount": 2,
+        "durationSec": 169.27,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784752920048.601
+      },
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_163600",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_163600",
+        "label": "day_16_2026-07-22 / rec_20260722_163600",
+        "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 166s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "4:36 PM",
+        "cameras": [
+          "cam2-d455",
+          "cam2-d435"
+        ],
+        "cameraCount": 2,
+        "durationSec": 166.4,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784752740100.337
+      },
+      {
+        "recordingId": "day_16_2026-07-22/rec_20260722_163300",
+        "day": "day_16_2026-07-22",
+        "rec": "rec_20260722_163300",
+        "label": "day_16_2026-07-22 / rec_20260722_163300",
+        "detail": "July 22, 2026 - cam2-d455, cam2-d435 - 169s",
+        "dateLabel": "July 22, 2026",
+        "timeLabel": "4:33 PM",
+        "cameras": [
+          "cam2-d455",
+          "cam2-d435"
+        ],
+        "cameraCount": 2,
+        "durationSec": 168.53,
+        "models": [
+          "action-ava",
+          "geo",
+          "yolo26m",
+          "yolo26n-pose"
+        ],
+        "nodes": [
+          "smartroom2"
+        ],
+        "mtime": 1784752560024.0713
+      }
+    ],
+    "web_data_source_url": "http://172.16.60.239:3000/api/v1",
     "web_data_source_kind": "smartroom-control"
   },
   "tracefix": {
-    "run_id": "ad7f773b61",
-    "workspace": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352"
+    "run_id": "7dc96c3bb6",
+    "workspace": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819"
   },
   "cityos": {
-    "workspace": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352",
-    "planPath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352\\spec\\cityos_module_plan.json",
-    "appsDir": "C:\\Users\\shrey\\cityos\\apps",
-    "manifestPath": "C:\\Users\\shrey\\cityos\\apps\\tracefix-tellme-structured-smart-room-application-20260709-132352-synthesis.json",
-    "outputDir": "C:\\Users\\shrey\\cityos\\apps",
+    "workspace": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819",
+    "planPath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\spec\\cityos_module_plan.json",
+    "appsDir": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\output\\cityos_synthesis",
+    "manifestPath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\output\\cityos_synthesis\\tracefix-tellme-structured-smart-room-application-20260727-132819-synthesis.json",
+    "outputDir": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\output\\cityos_synthesis",
     "apps": [
       {
-        "name": "tracefix-tellme-structured-smart-room-application-20260709-132352-task-a",
+        "name": "tracefix-tellme-structured-smart-room-application-20260727-132819-occupa",
         "kind": "agent",
-        "agent": "TASK_AGENT",
-        "path": "C:\\Users\\shrey\\cityos\\apps\\tracefix-tellme-structured-smart-room-application-20260709-132352-task-a",
-        "buildCommand": "just build app=tracefix-tellme-structured-smart-room-application-20260709-132352-task-a"
+        "agent": "OCCUPANCY_ANALYZER",
+        "path": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\output\\cityos_synthesis\\tracefix-tellme-structured-smart-room-application-20260727-132819-occupa",
+        "buildCommand": "just build app=tracefix-tellme-structured-smart-room-application-20260727-132819-occupa"
       },
       {
-        "name": "tracefix-tellme-structured-smart-room-application-20260709-132352-monito",
+        "name": "tracefix-tellme-structured-smart-room-application-20260727-132819-monito",
         "kind": "monitor",
         "agent": null,
-        "path": "C:\\Users\\shrey\\cityos\\apps\\tracefix-tellme-structured-smart-room-application-20260709-132352-monito",
-        "buildCommand": "just build app=tracefix-tellme-structured-smart-room-application-20260709-132352-monito"
+        "path": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\output\\cityos_synthesis\\tracefix-tellme-structured-smart-room-application-20260727-132819-monito",
+        "buildCommand": "just build app=tracefix-tellme-structured-smart-room-application-20260727-132819-monito"
       }
     ],
     "summary": {
-      "name": "tellme_structured_smart_room_application_20260709_132352",
-      "path": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352",
-      "lastModified": 1783617837.6921172,
-      "planPath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352\\spec\\cityos_module_plan.json",
+      "name": "tellme_structured_smart_room_application_20260727_132819",
+      "path": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819",
+      "lastModified": 1785173303.4084134,
+      "planPath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\spec\\cityos_module_plan.json",
       "hasPlan": true,
       "productionReady": true,
       "verificationStatus": "verified",
@@ -3712,66 +3057,66 @@
       "tlcStatus": "passed",
       "planStatus": "ready",
       "workspaceType": "custom",
-      "taskText": "Is a person jumping on June 24th? (Yes/No)",
+      "taskText": "july 22nd how many people in total are in the room",
       "taskSource": "tellme",
       "agents": [
-        "TASK_AGENT"
+        "OCCUPANCY_ANALYZER"
       ],
       "channels": [],
       "resources": [],
       "requirements": [
         {
           "path": "spec/cityos_module_plan.json",
-          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352\\spec\\cityos_module_plan.json",
+          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\spec\\cityos_module_plan.json",
           "exists": true,
           "createdBy": "Generate Verified Plan or Export Intermediary Plan",
           "required": true
         },
         {
           "path": "spec/ir.json",
-          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352\\spec\\ir.json",
+          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\spec\\ir.json",
           "exists": true,
           "createdBy": "Generate Verified Plan",
           "required": true
         },
         {
           "path": "spec/states.json",
-          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352\\spec\\states.json",
+          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\spec\\states.json",
           "exists": true,
           "createdBy": "Run TraceFix verification until TLC/state extraction completes",
           "required": true
         },
         {
           "path": "spec/Protocol.tla",
-          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352\\spec\\Protocol.tla",
+          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\spec\\Protocol.tla",
           "exists": true,
           "createdBy": "Run TraceFix protocol generation",
           "required": true
         },
         {
           "path": "spec/Protocol.cfg",
-          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352\\spec\\Protocol.cfg",
+          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\spec\\Protocol.cfg",
           "exists": true,
           "createdBy": "Run TraceFix protocol generation",
           "required": true
         },
         {
           "path": "spec/summary.json",
-          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352\\spec\\summary.json",
+          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\spec\\summary.json",
           "exists": true,
           "createdBy": "Run TraceFix verification until summary is written",
           "required": false
         },
         {
           "path": "spec/Protocol_translated.tla",
-          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352\\spec\\Protocol_translated.tla",
+          "absolutePath": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\spec\\Protocol_translated.tla",
           "exists": true,
           "createdBy": "PlusCal translation",
           "required": false
         }
       ],
       "missingRequired": [],
-      "outputDir": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260709_132352\\output\\cityos_synthesis",
+      "outputDir": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260727_132819\\output\\cityos_synthesis",
       "ready": true
     }
   }

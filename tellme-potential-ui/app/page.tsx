@@ -9,7 +9,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { queryApi } from '@/lib/api/client'
-import type { QueryProgressStage, QueryResult } from '@/lib/api/types'
+import type { QueryProgressStage, QueryResult, RecordingCandidate } from '@/lib/api/types'
 import { AppHeader, type WorkspaceTab } from '@/components/app-header'
 import type { AppearanceSettings } from '@/components/settings-menu'
 import {
@@ -54,7 +54,7 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   appModel: 'gpt-4.1-mini',
   openaiApiKey: '',
   spaceId: 'smart_room_1',
-  mirrorApiUrl: 'https://smartroom-mirror.vercel.app/api/v1',
+  mirrorApiUrl: 'http://172.16.60.239:3000/api/v1',
   timestamp: '',
   tracefixProvider: 'openrouter',
   tracefixModel: 'z-ai/glm-5.2',
@@ -185,9 +185,13 @@ export default function Page() {
     const storedRuntimeConfig = window.localStorage.getItem(RUNTIME_CONFIG_STORAGE_KEY)
     if (storedRuntimeConfig) {
       try {
+        const savedConfig = JSON.parse(storedRuntimeConfig) as Partial<RuntimeConfig>
         setRuntimeConfig({
           ...DEFAULT_RUNTIME_CONFIG,
-          ...JSON.parse(storedRuntimeConfig),
+          ...savedConfig,
+          mirrorApiUrl: savedConfig.mirrorApiUrl === 'https://smartroom-mirror.vercel.app/api/v1'
+            ? DEFAULT_RUNTIME_CONFIG.mirrorApiUrl
+            : savedConfig.mirrorApiUrl || DEFAULT_RUNTIME_CONFIG.mirrorApiUrl,
           mode: 'llm',
           openaiApiKey: '',
           tracefixApiKey: '',
@@ -340,6 +344,54 @@ export default function Page() {
       if (requestControllersRef.current[id] === controller) {
         delete requestControllersRef.current[id]
       }
+    }
+  }
+
+  async function handleRecordingSelection(turn: Turn, candidate: RecordingCandidate) {
+    const controller = new AbortController()
+    requestControllersRef.current[turn.id]?.abort()
+    requestControllersRef.current[turn.id] = controller
+    setIsLoading(true)
+    updateTurn(turn.id, (current) => ({
+      ...current,
+      status: 'loading',
+      visibleAnswer: '',
+      errorMessage: undefined,
+      progressStage: 'answering',
+    }))
+    try {
+      const result = await queryApi.selectRecording({
+        query: turn.query,
+        spaceId: runtimeConfig.spaceId,
+        timestamp: runtimeConfig.timestamp || undefined,
+        mode: runtimeConfig.mode,
+        model: runtimeConfig.appModel,
+        mirrorApiUrl: runtimeConfig.mirrorApiUrl,
+        openaiApiKey: runtimeConfig.openaiApiKey,
+        tracefixProvider: runtimeConfig.tracefixProvider,
+        tracefixModel: runtimeConfig.tracefixModel,
+        tracefixApiKey: runtimeConfig.tracefixApiKey,
+      }, candidate.recordingId, { signal: controller.signal })
+      if (settings.streamingEnabled) beginStreaming(turn.id, result)
+      else {
+        updateTurn(turn.id, (current) => ({
+          ...current,
+          status: 'done',
+          result,
+          visibleAnswer: result.answer,
+          responseMs: Math.max(1, Date.now() - (current.startedAt ?? Date.now())),
+        }))
+        setIsLoading(false)
+      }
+    } catch (error) {
+      updateTurn(turn.id, (current) => ({
+        ...current,
+        status: 'error',
+        errorMessage: error instanceof Error ? error.message : 'The selected recording could not be retrieved.',
+      }))
+      setIsLoading(false)
+    } finally {
+      if (requestControllersRef.current[turn.id] === controller) delete requestControllersRef.current[turn.id]
     }
   }
 
@@ -677,6 +729,7 @@ export default function Page() {
                           onFeedback={(feedback) => setFeedback(turn.id, feedback)}
                           onRegenerate={() => handleSubmit(turn.query, turn.id)}
                           onEditPrompt={() => startEditing(turn)}
+                          onSelectRecording={(candidate) => handleRecordingSelection(turn, candidate)}
                         />
                       )}
                       {turn.status === 'streaming' && (

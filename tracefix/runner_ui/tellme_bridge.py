@@ -114,6 +114,7 @@ class TellMeBridge:
         data = {
             "query_id": answer.query_id,
             "query": query,
+            "timestamp": timestamp,
             "mode": backend_mode,
             "model": selected_model,
             "api_key_detected": bool(effective_api_key),
@@ -249,10 +250,22 @@ class TellMeBridge:
             tellme["web_data_answer"] = answer
         if result.get("answerPath"):
             tellme["web_data_answer_path"] = str(result.get("answerPath"))
+        if result.get("manifestPath"):
+            tellme["web_data_manifest_path"] = str(result.get("manifestPath"))
+        if result.get("recordingOverride"):
+            tellme["web_data_recording_override"] = result.get("recordingOverride")
         if result.get("payload"):
             payload = result.get("payload") if isinstance(result.get("payload"), dict) else {}
-            tellme["web_data_snapshot_summary"] = payload.get("snapshotSummary")
+            summary = payload.get("snapshotSummary") if isinstance(payload.get("snapshotSummary"), dict) else None
+            tellme["web_data_snapshot_summary"] = summary
             tellme["web_data_payload_path"] = payload.get("payloadPath")
+            if summary:
+                tellme["web_data_needs_clarification"] = bool(summary.get("needsClarification"))
+                tellme["web_data_clarification_prompt"] = summary.get("clarificationPrompt") or ""
+                tellme["web_data_clarification_candidates"] = summary.get("clarificationCandidates") or []
+                if not tellme["web_data_needs_clarification"]:
+                    tellme.pop("web_data_clarification_prompt", None)
+                    tellme.pop("web_data_clarification_candidates", None)
         tellme["web_data_source_url"] = result.get("sourceUrl")
         tellme["web_data_source_kind"] = result.get("sourceKind")
         state["tellme"] = tellme

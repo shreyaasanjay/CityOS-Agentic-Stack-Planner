@@ -22,7 +22,8 @@ const state = {
     apiKeyDetected: false,
     envKeyDetected: false,
     model: "gpt-4.1-mini",
-    taskText: "",  // actual TeLLMe spec text — set on handoff, used by startRun()
+    taskText: "",
+    clarificationCandidates: [],  // actual TeLLMe spec text — set on handoff, used by startRun()
   },
   synth: {
     workspaces: [],
@@ -31,7 +32,7 @@ const state = {
     workspaceType: "custom",
     cityosRoot: "",
     appsDir: "",
-    webDataUrl: "https://smartroom-mirror.vercel.app/api/v1",
+    webDataUrl: "http://172.16.60.239:3000/api/v1",
   },
 };
 
@@ -70,6 +71,7 @@ const els = {
   tellmeRunStatus: document.querySelector("#tellmeRunStatus"),
   tellmeRunId: document.querySelector("#tellmeRunId"),
   tellmeMessages: document.querySelector("#tellmeMessages"),
+  tellmeClarification: document.querySelector("#tellmeClarification"),
   tellmeIntent: document.querySelector("#tellmeIntent"),
   tellmeTaskSpec: document.querySelector("#tellmeTaskSpec"),
   tellmeHandoffMeta: document.querySelector("#tellmeHandoffMeta"),
@@ -322,6 +324,15 @@ function bindEvents() {
 
   els.tellmeToTracefix.addEventListener("click", async () => {
     await startTraceFixFromTellMe();
+  });
+
+  els.tellmeClarification?.addEventListener("click", async (event) => {
+    const target = event.target instanceof Element ? event.target.closest("[data-recording-choice]") : null;
+    if (!target) return;
+    const recordingId = target.getAttribute("data-recording-id") || "";
+    const candidate = state.tellme.clarificationCandidates
+      ?.find((item) => stableRecordingId(item) === recordingId);
+    await runSmartroomClarificationChoice(candidate);
   });
 
   els.tellmeTracefixProvider.addEventListener("change", () => {
@@ -772,6 +783,17 @@ async function processTellMeQuery() {
     showToast("Enter a smart-room request");
     return null;
   }
+  const pending = state.tellme.pendingRecordingSelection;
+  if (pending) {
+    const candidate = resolveRecordingChoice(query, pending.candidates);
+    if (!candidate) {
+      appendTellMeMessage("warning", "That is not one of the available takes. Enter a take number, such as 2 or Take 2, or use a listed recording name.");
+      renderTellMeClarification(state.tellme.current);
+      showToast("Choose a listed take");
+      return null;
+    }
+    return runSmartroomClarificationChoice(candidate);
+  }
   els.tellmeProcess.disabled = true;
   els.tellmeRunAll.disabled = true;
   els.tellmeRunStatus.textContent = "Processing";
@@ -823,7 +845,7 @@ function appendTellMeMessage(kind, text) {
 function pipelineWebDataUrl() {
   const fromTellMe = els.tellmeWebDataUrl?.value?.trim() || "";
   const fromSynth = els.synthWebDataUrl?.value?.trim() || "";
-  const url = fromTellMe || fromSynth || state.synth.webDataUrl || "https://smartroom-mirror.vercel.app/api/v1";
+  const url = fromTellMe || fromSynth || state.synth.webDataUrl || "http://172.16.60.239:3000/api/v1";
   if (els.tellmeWebDataUrl) els.tellmeWebDataUrl.value = url;
   if (els.synthWebDataUrl) els.synthWebDataUrl.value = url;
   state.synth.webDataUrl = url;
@@ -839,6 +861,143 @@ async function refreshTellMeCurrentFromServer() {
   }
   syncTellMeAnswerButton();
   return response.data || null;
+}
+
+function smartroomClarification(data = state.tellme.current) {
+  if (!data) return null;
+  const answer = data.web_data_answer || data.answer_packet?.answer || null;
+  const snapshot = data.web_data_snapshot_summary || {};
+  const needs = Boolean(
+    data.web_data_needs_clarification
+    || answer?.needsClarification
+    || snapshot?.needsClarification
+    || answer?.selection?.needsClarification
+  );
+  if (!needs) return null;
+  const candidates = Array.isArray(answer?.clarificationCandidates) ? answer.clarificationCandidates
+    : Array.isArray(snapshot?.clarificationCandidates) ? snapshot.clarificationCandidates
+    : Array.isArray(data.web_data_clarification_candidates) ? data.web_data_clarification_candidates
+    : Array.isArray(answer?.selection?.candidates) ? answer.selection.candidates
+    : [];
+  const prompt = answer?.clarificationPrompt
+    || snapshot?.clarificationPrompt
+    || data.web_data_clarification_prompt
+    || answer?.chatAnswer
+    || answer?.chat_answer
+    || "Which smartroom recording should I use?";
+  return { prompt, candidates };
+}
+
+function recordingOptionTitle(candidate) {
+  return candidate?.label || [candidate?.day, candidate?.rec].filter(Boolean).join(" / ") || "Smartroom recording";
+}
+
+function recordingOptionMeta(candidate) {
+  const pieces = [];
+  if (candidate?.detail) pieces.push(candidate.detail);
+  else if (candidate?.dateLabel) pieces.push(candidate.dateLabel);
+  if (Array.isArray(candidate?.cameras) && candidate.cameras.length) pieces.push(`cameras ${candidate.cameras.join(", ")}`);
+  if (Array.isArray(candidate?.models) && candidate.models.length) pieces.push(`models ${candidate.models.slice(0, 5).join(", ")}`);
+  return pieces.join(" | ");
+}
+
+function stableRecordingId(candidate) {
+  return candidate?.recordingId || [candidate?.day, candidate?.rec].filter(Boolean).join("/");
+}
+
+function resolveRecordingChoice(input, candidates) {
+  const text = String(input || "").trim();
+  if (!text || !Array.isArray(candidates)) return null;
+  const take = text.match(/^(?:take\s*)?(\d+)$/i);
+  if (take) return candidates[Number(take[1]) - 1] || null;
+  const normalized = text.toLocaleLowerCase();
+  return candidates.find((candidate) => [stableRecordingId(candidate), candidate?.rec, candidate?.label]
+    .some((value) => String(value || "").toLocaleLowerCase() === normalized)) || null;
+}
+
+function renderTellMeClarification(data) {
+  const clarification = smartroomClarification(data);
+  if (!els.tellmeClarification) return;
+  if (!clarification) {
+    state.tellme.clarificationCandidates = [];
+    state.tellme.pendingRecordingSelection = null;
+    els.tellmeClarification.classList.add("hidden");
+    els.tellmeClarification.innerHTML = "";
+    return;
+  }
+  state.tellme.clarificationCandidates = clarification.candidates;
+  state.tellme.pendingRecordingSelection = {
+    originalQuestion: state.tellme.current?.query || els.tellmeQuery.value.trim(),
+    candidates: clarification.candidates,
+  };
+  const options = clarification.candidates.length
+    ? clarification.candidates.map((candidate, index) => `
+        <button class="recording-choice" type="button" data-recording-choice="${index}" data-recording-id="${escapeHtml(stableRecordingId(candidate))}">
+          <strong>${escapeHtml(recordingOptionTitle(candidate))}</strong>
+          <span>${escapeHtml(recordingOptionMeta(candidate) || "Use this recording")}</span>
+        </button>
+      `).join("")
+    : `<div class="clarification-empty">No recording options were returned by the API.</div>`;
+  els.tellmeClarification.classList.remove("hidden");
+  els.tellmeClarification.innerHTML = `
+    <div class="clarification-copy">
+      <h3>Choose the exact recording</h3>
+      <p>${escapeHtml(clarification.prompt)}</p>
+    </div>
+    <div class="clarification-options">${options}</div>
+  `;
+}
+
+function currentWebDataManifestPath() {
+  const displayed = els.synthManifestPath?.textContent?.trim() || "";
+  return state.synth.result?.manifestPath
+    || state.tellme.current?.web_data_manifest_path
+    || (displayed && displayed !== "No synthesis yet" ? displayed : "");
+}
+
+async function runSmartroomClarificationChoice(choice) {
+  const candidate = typeof choice === "number"
+    ? state.tellme.clarificationCandidates?.[choice]
+    : choice;
+  if (!candidate) {
+    showToast("Choose a listed recording");
+    return;
+  }
+  const manifestPath = currentWebDataManifestPath();
+  if (!manifestPath) {
+    showToast("Generate CityOS artifacts before choosing a recording");
+    return;
+  }
+  const buttons = Array.from(els.tellmeClarification?.querySelectorAll("[data-recording-choice]") || []);
+  buttons.forEach((button) => { button.disabled = true; });
+  const label = recordingOptionTitle(candidate);
+  appendTellMeMessage("info", `Using ${label} and rerunning the smartroom data step...`);
+  try {
+    const sourceUrl = els.tellmeWebDataUrl?.value?.trim()
+      || state.tellme.current?.web_data_source_url
+      || pipelineWebDataUrl();
+    const result = await postJson("/api/synth/run-web-data", {
+      manifestPath,
+      sourceUrl,
+      sourceMode: "auto",
+      timeoutSeconds: 30,
+      question: state.tellme.pendingRecordingSelection?.originalQuestion || state.tellme.current?.query || els.tellmeQuery.value.trim(),
+      recordingOverride: { recordingId: stableRecordingId(candidate), day: candidate.day || "", rec: candidate.rec || "" },
+    });
+    state.synth.webDataResult = result;
+    await refreshTellMeCurrentFromServer();
+    const stillNeedsClarification = smartroomClarification();
+    if (!stillNeedsClarification) state.tellme.pendingRecordingSelection = null;
+    appendTellMeMessage(stillNeedsClarification ? "warning" : "success", stillNeedsClarification
+      ? "That did not identify one exact recording yet. Choose one of the updated options."
+      : "Recording selected. The Answer section now uses that exact smartroom JSON/video set.");
+    showToast(stillNeedsClarification ? "Choose a recording" : "Answer updated");
+  } catch (error) {
+    appendTellMeMessage("error", error.message);
+    showToast(error.message);
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; });
+  }
 }
 
 function hasTellMeAnswer(data = state.tellme.current) {
@@ -941,6 +1100,12 @@ async function processTellMeFullPipeline() {
     });
     state.synth.webDataResult = webResult;
     await refreshTellMeCurrentFromServer();
+    const clarification = smartroomClarification();
+    if (clarification) {
+      appendTellMeMessage("warning", "I found multiple possible recordings. Choose the exact take below, then I will rerun the smartroom data step.");
+      showToast("Choose a recording");
+      return;
+    }
     appendTellMeMessage(webResult.ok ? "success" : "warning", webResult.ok
       ? "Full pipeline complete. The Answer Summary now contains the requested smartroom result."
       : "Full pipeline finished, but one or more generated apps reported errors. Check the CityOS Synthesizer output.");
@@ -1055,6 +1220,8 @@ function conciseActivityOverviewAnswer(answer) {
 
 function renderTellMeChatAnswer(data) {
   if (!data) return "No answer yet. Run the full pipeline to generate a data-backed response.";
+  const clarification = smartroomClarification(data);
+  if (clarification) return clarification.prompt;
   const answer = data.web_data_answer || data.answer_packet?.answer || null;
   const fallback = data.chat_answer || answer?.chatAnswer || answer?.chat_answer || "";
   if (!answer) return fallback || "No smartroom camera result is available yet. Run the web data apps after synthesis to generate the answer.";
@@ -1079,7 +1246,21 @@ function renderTellMeAnswerSummary(data) {
   if (!data) return "No answer summary yet.";
   const lines = [];
   const answer = data.web_data_answer || data.answer_packet?.answer || null;
+  const clarification = smartroomClarification(data);
   const answerText = data.answer_summary || answer?.text || answer?.answer || "";
+  if (clarification) {
+    lines.push("Needs Clarification");
+    lines.push(clarification.prompt);
+    if (clarification.candidates.length) {
+      lines.push("");
+      lines.push("Candidate recordings");
+      clarification.candidates.forEach((candidate) => {
+        const meta = recordingOptionMeta(candidate);
+        lines.push(`- ${recordingOptionTitle(candidate)}${meta ? ` (${meta})` : ""}`);
+      });
+    }
+    return lines.join("\n");
+  }
   if (answerText) {
     lines.push("Answer Summary");
     lines.push(answerText);
@@ -1172,6 +1353,7 @@ function renderTellMe(data, errors = [], warnings = []) {
       ? `Exact payload · ${handoffText.length.toLocaleString()} chars`
       : "No handoff";
   }
+  renderTellMeClarification(data);
   els.tellmeAnswer.textContent = renderTellMeAnswerSummary(data);
   if (els.tellmeChatAnswer) els.tellmeChatAnswer.textContent = renderTellMeChatAnswer(data);
   syncTellMeAnswerButton();
@@ -1181,7 +1363,10 @@ function renderTellMe(data, errors = [], warnings = []) {
     ...(errors || []).map((text) => ({ kind: "error", text })),
     ...(warnings || []).map((text) => ({ kind: "warning", text })),
   ];
-  if (data && !messages.length) {
+  const clarification = smartroomClarification(data);
+  if (clarification) {
+    messages.push({ kind: "warning", text: clarification.prompt });
+  } else if (data && !messages.length) {
     messages.push({
       kind: privacy.status === "blocked" ? "error" : "success",
       text: privacy.status === "blocked"
@@ -1483,7 +1668,7 @@ async function runWebDataApps() {
     showToast("Generate CityOS artifacts first");
     return;
   }
-  const sourceUrl = els.synthWebDataUrl?.value?.trim() || state.synth.webDataUrl || "https://smartroom-mirror.vercel.app/api/v1";
+  const sourceUrl = els.synthWebDataUrl?.value?.trim() || state.synth.webDataUrl || "http://172.16.60.239:3000/api/v1";
   els.synthRunWebData.disabled = true;
   els.synthOutputStatus.textContent = "Running web data apps...";
   const prior = els.synthOutput.textContent || "";
@@ -1499,7 +1684,13 @@ async function runWebDataApps() {
     els.synthOutputStatus.textContent = result.ok ? "Web data run complete" : "Web data run failed";
     els.synthOutput.textContent = `${els.synthOutput.textContent}\n${renderWebDataRunResult(result)}`;
     await refreshTellMeCurrentFromServer();
-    showToast(result.ok ? "Web data apps completed" : "Web data apps reported errors");
+    const clarification = smartroomClarification();
+    if (clarification) {
+      showToast("Choose a recording in TeLLMe");
+      setWorkflow("tellme");
+    } else {
+      showToast(result.ok ? "Web data apps completed" : "Web data apps reported errors");
+    }
   } catch (error) {
     els.synthOutputStatus.textContent = "Web data run failed";
     els.synthOutput.textContent = `${els.synthOutput.textContent}\n${error.message}\n`;
@@ -1519,6 +1710,7 @@ function renderWebDataRunResult(result) {
   if (result.question) lines.push(`Question: ${result.question}`);
   if (result.payload?.payloadPath) lines.push(`Payload: ${result.payload.payloadPath}`);
   if (result.payload?.snapshotSummary) lines.push(`Snapshot: ${JSON.stringify(result.payload.snapshotSummary)}`);
+  if (result.answer?.needsClarification) lines.push(`Needs clarification: ${result.answer.clarificationPrompt || "choose a recording"}`);
   if (result.answer?.chatAnswer || result.answer?.chat_answer) lines.push(`Answer: ${result.answer.chatAnswer || result.answer.chat_answer}`);
   else if (result.answer?.text) lines.push(`Answer: ${result.answer.text}`);
   if (result.answerPath) lines.push(`Answer file: ${result.answerPath}`);

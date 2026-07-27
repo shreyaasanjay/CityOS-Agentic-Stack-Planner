@@ -31,4 +31,6 @@ tracefix.pipeline/
 .tracefix-ui/web-data-runs/
 .tracefix-ui/ocsort-labels/
 .tracefix-ui/smoke-*/
+.tracefix-ui/llm_usage_totals.json
+.runs/tellme/current.json
 .runs/tellme/tellme_*/
