@@ -170,24 +170,15 @@ Fix any gaps found BEFORE running verification.
 
 ### Phase 3: Verify & Repair
 
-**Step 0 — Initialize tracking**: Before the first verify call, create `summary.json`:
-```json
-{
-  "task": "task description or ID",
-  "total_repairs": 0,
-  "tlc_passed": false,
-  "repairs": []
-}
-```
-
+**Step 0 — Runtime-owned verdict**: Never create or edit `summary.json`; the deterministic TraceFix TLC execution gate owns `tlc_passed`.
 1. Call `verify_spec()` — validates IR, translates PlusCal, runs TLC in one step
-2. If verification passes: update `summary.json` to set `"tlc_passed": true`, then proceed to **Phase 4**
+2. If verification passes: proceed to **Phase 4** without writing a TLC verdict
 3. If PlusCal syntax error: read the error message with line numbers, consult `PLUSCAL_RULES.md`, \
 then fix Protocol.tla with `edit_file`
 4. If TLC violation: use think() to diagnose root cause from the error trace, then fix Protocol.tla \
 with `edit_file`. **Always edit the PlusCal source (Protocol.tla), never the translated TLA+** — \
 the translation happens in a temp directory and is discarded after each verify_spec call.
-5. After any repair, append a record to `summary.json`:
+5. After any repair, append a record to `repair_notes.md`:
    ```json
    {"attempt": 1, "error_type": "Deadlock", "description": "...", "fix": "..."}
    ```
@@ -195,7 +186,7 @@ the translation happens in a temp directory and is discarded after each verify_s
 6. Audit all structurally similar processes for the same issue, then go back to step 1. \
 Maximum 5 verify_spec calls total — after the 5th failure, stop.
 
-**If 5 verify_spec calls are exhausted without passing**: Set `"tlc_passed": false` in `summary.json` and report:
+**If 5 verify_spec calls are exhausted without passing**: leave the TLC verdict to TraceFix and report:
 
 ```
 Verification Failed After 5 Attempts
@@ -1134,6 +1125,34 @@ releases at `a_release_ok`/`a_release_abort`. The lock is genuinely held during 
 - **Terminal state = closing `}`**: each process simply falls through to "Done"
 - **No Counter for loops**: this is a single-round protocol. Multi-round protocols use `while(TRUE)` loops.\
 """
+
+
+# The deterministic runtime owns the verification verdict. Keep the shared
+# legacy workflow text useful for implementation while removing its obsolete
+# instruction that an OpenCode agent should author summary.json/tlc_passed.
+_phase3_start = SYSTEM_PROMPT.find("### Phase 3: Verify & Repair")
+_phase4_start = SYSTEM_PROMPT.find("### Phase 4", _phase3_start)
+if _phase3_start != -1 and _phase4_start != -1:
+    SYSTEM_PROMPT = (
+        SYSTEM_PROMPT[:_phase3_start]
+        + "### Phase 3: Verify & Repair\n\n"
+        + "Run verify_spec() and repair Protocol.tla up to five times. Never create or edit "
+        + "summary.json or tlc_passed; the deterministic TraceFix TLC execution gate owns "
+        + "the verdict consumed by promotion. Keep optional repair history in repair_notes.md.\n\n"
+        + SYSTEM_PROMPT[_phase4_start:]
+    )
+_phase1_start = SYSTEM_PROMPT.find("### Phase 1: Structured Analysis")
+_phase2_start = SYSTEM_PROMPT.find("### Phase 2: Write PlusCal Process Bodies", _phase1_start)
+if _phase1_start != -1 and _phase2_start != -1:
+    SYSTEM_PROMPT = (
+        SYSTEM_PROMPT[:_phase1_start]
+        + "### Phase 1: Structured Analysis\n\n"
+        + "Treat TraceFix's canonical Template attributes and deterministically selected procedure as "
+        + "authoritative. Do not identify, infer, rename, or rediscover agents, roles, coordination "
+        + "patterns, communication flow, counts, limitations, or procedure from task prose. Derive only "
+        + "low-level implementation details for explicitly unknown values.\n\n"
+        + SYSTEM_PROMPT[_phase2_start:]
+    )
 
 
 PROMPT_GEN_SYSTEM_PROMPT = """\

@@ -7,6 +7,8 @@ the child environment, and streams stdout/stderr to the browser with SSE.
 from __future__ import annotations
 
 import argparse
+from email.parser import BytesParser
+from email.policy import default as email_policy_default
 import json
 import mimetypes
 import os
@@ -26,6 +28,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from tracefix.runner_ui.tellme_bridge import TellMeBridge
 from tracefix.pipeline_timing import append_stage
+from tracefix.runtime.context_manager import clear_context, get_context, max_context_bytes, set_context, summary as context_summary
 from tracefix.textio import safe_read_json, safe_read_text
 
 
@@ -90,6 +93,45 @@ def _api_envelope(
     if api_key_detected is not None:
         payload["api_key_detected"] = api_key_detected
     return payload
+
+
+def _parse_uploaded_json_upload(content_type: str, body: bytes) -> tuple[str, Any, int]:
+    """Parse and validate a multipart JSON upload."""
+
+    max_bytes = max_context_bytes()
+    if len(body) > max_bytes:
+        raise ValueError(f"JSON upload is too large. Limit is {max_bytes} bytes.")
+    if not content_type.lower().startswith("multipart/form-data"):
+        raise ValueError("Upload must use multipart/form-data.")
+    message = BytesParser(policy=email_policy_default).parsebytes(
+        b"Content-Type: " + content_type.encode("utf-8") + b"\r\n"
+        b"MIME-Version: 1.0\r\n\r\n"
+        + body
+    )
+    file_part = None
+    for part in message.iter_parts():
+        filename = part.get_filename()
+        if filename:
+            file_part = part
+            break
+    if file_part is None:
+        raise ValueError("No JSON file was uploaded.")
+    filename = str(file_part.get_filename() or "").strip()
+    if not filename.lower().endswith(".json"):
+        raise ValueError("Uploaded file must have a .json extension.")
+    part_type = (file_part.get_content_type() or "").lower()
+    if part_type and part_type not in {"application/json", "text/json", "text/plain", "application/octet-stream"}:
+        raise ValueError(f"Uploaded JSON file has unsupported content type: {part_type}")
+    raw = file_part.get_payload(decode=True) or b""
+    if len(raw) > max_bytes:
+        raise ValueError(f"JSON upload is too large. Limit is {max_bytes} bytes.")
+    try:
+        parsed = json.loads(raw.decode("utf-8-sig"))
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"Uploaded JSON must be UTF-8 text: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Malformed JSON upload: {exc.msg} at line {exc.lineno}, column {exc.colno}") from exc
+    return filename, parsed, len(raw)
 
 
 def _tellme_bridge(root: Path) -> TellMeBridge:
@@ -1352,7 +1394,7 @@ class RunState:
 
 
 def _env_updates_for_provider(payload: dict[str, Any], *, require_key: bool) -> dict[str, str]:
-    provider = str(payload.get("provider", "openai"))
+    provider = str(payload.get("provider", "openai")).strip().lower() or "openai"
     env_updates: dict[str, str] = {}
     key_map = {
         "openai": ("OPENAI_API_KEY", "openaiKey"),
@@ -1367,7 +1409,39 @@ def _env_updates_for_provider(payload: dict[str, Any], *, require_key: bool) -> 
         env_updates[env_name] = api_key
     elif require_key:
         raise ValueError(f"{env_name} is required for provider {provider}")
+    _add_attribute_extractor_env(payload, env_updates)
     return env_updates
+
+
+def _add_attribute_extractor_env(payload: dict[str, Any], env_updates: dict[str, str]) -> None:
+    """Let the first-stage extractor reuse the selected TraceFix provider key."""
+
+    provider = str(payload.get("provider", "openai")).strip().lower() or "openai"
+    model = str(payload.get("model", "")).strip()
+    current_env = os.environ
+
+    if provider == "openrouter":
+        key = env_updates.get("OPENROUTER_API_KEY") or current_env.get("OPENROUTER_API_KEY", "")
+        if key:
+            env_updates["TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_API_KEY"] = key
+        env_updates["TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_BASE_URL"] = "https://openrouter.ai/api/v1"
+        if model:
+            env_updates["TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_MODEL"] = (
+                model.removeprefix("openrouter/") if model.startswith("openrouter/") else model
+            )
+        return
+
+    if provider == "openai":
+        key = env_updates.get("OPENAI_API_KEY") or current_env.get("OPENAI_API_KEY", "")
+        if key:
+            env_updates["TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_API_KEY"] = key
+        env_updates["TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_BASE_URL"] = (
+            current_env.get("OPENAI_BASE_URL", "").strip() or "https://api.openai.com/v1"
+        )
+        if model:
+            env_updates["TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_MODEL"] = (
+                model.removeprefix("openai/") if model.startswith("openai/") else model
+            )
 
 
 def _model_for_tracefix(payload: dict[str, Any]) -> str:
@@ -1500,6 +1574,10 @@ def _build_design_command(root: Path, payload: dict[str, Any]) -> tuple[list[str
         "--opencode-bin",
         opencode_bin,
     ]
+    task_mode = str(payload.get("taskMode", "benchmark"))
+    custom_task = str(payload.get("customTask", "")).strip()
+    if task_mode == "custom" and custom_task in {"", _TELLME_PLACEHOLDER}:
+        command.extend(["--task-spec", str(TellMeBridge(root).tracefix_task_spec_path())])
     model = _model_for_tracefix(payload)
     if model:
         command.extend(["--model", model])
@@ -1854,6 +1932,18 @@ class RunnerHandler(BaseHTTPRequestHandler):
                 api_key_detected=config["api_key_detected"],
             ))
             return
+        if path == "/api/context/current":
+            query = parse_qs(parsed.query)
+            data = context_summary()
+            if (query.get("include") or [""])[0].lower() in {"1", "true", "yes"}:
+                current_context = get_context()
+                if current_context is not None:
+                    data = {**data, "context": current_context.get("data")}
+            self._send_json(_api_envelope(
+                ok=True,
+                data=data,
+            ))
+            return
         if path == "/api/tracefix/current":
             data = _tracefix_current(self.root)
             run_id = str(data.get("id") or data.get("run_id") or "")
@@ -1987,6 +2077,34 @@ class RunnerHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/context/upload":
+            try:
+                length = int(self.headers.get("Content-Length", "0") or 0)
+            except ValueError:
+                length = 0
+            max_bytes = max_context_bytes()
+            if length > max_bytes:
+                self._send_json(
+                    _api_envelope(ok=False, errors=[f"JSON upload is too large. Limit is {max_bytes} bytes."]),
+                    status=413,
+                )
+                return
+            raw = self.rfile.read(length)
+            try:
+                filename, parsed_json, size_bytes = _parse_uploaded_json_upload(
+                    self.headers.get("Content-Type", ""),
+                    raw,
+                )
+                uploaded = set_context(parsed_json, filename=filename, size_bytes=size_bytes)
+            except Exception as exc:  # noqa: BLE001 - upload errors should be user-readable
+                self._send_json(_api_envelope(ok=False, errors=[str(exc)]), status=400)
+                return
+            self._send_json(_api_envelope(ok=True, data=uploaded), status=201)
+            return
+        if parsed.path == "/api/context/clear":
+            clear_context()
+            self._send_json(_api_envelope(ok=True, data=context_summary()))
+            return
         if parsed.path == "/api/tellme/query":
             payload = self._read_json_body()
             if payload is None:
@@ -2006,15 +2124,6 @@ class RunnerHandler(BaseHTTPRequestHandler):
             env_api_key = _clean_key(os.getenv("TELLME_API_KEY") or os.getenv("OPENAI_API_KEY") or "")
             effective_api_key = request_api_key or env_api_key
             api_key_detected = bool(effective_api_key)
-            if requested_mode == "llm" and not effective_api_key:
-                self._send_json(_api_envelope(
-                    ok=False,
-                    errors=["LLM mode selected, but no API key was provided. Paste an API key in the TeLLMe panel or set OPENAI_API_KEY/TELLME_API_KEY."],
-                    mode=requested_mode,
-                    model=requested_model,
-                    api_key_detected=False,
-                ), status=400)
-                return
             try:
                 data = bridge.process_query(
                     query=str(payload.get("query") or payload.get("user_query") or ""),

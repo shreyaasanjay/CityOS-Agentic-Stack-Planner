@@ -225,34 +225,33 @@ button {
   line-height: 1.45;
 }
 
-.raw-data-status {
+.json-context-upload {
+  display: grid;
+  gap: 8px;
+}
+
+.context-status {
   min-height: 28px;
+  padding: 6px 9px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 7px 9px;
   color: var(--muted);
-  background: #15181b;
-  font-size: 11px;
-  line-height: 1.25;
+  background: var(--panel-soft);
+  font-size: 12px;
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
 
-.raw-data-clear {
-  height: 34px;
+.context-status.loaded {
+  color: #b5efd0;
+  border-color: rgba(95, 175, 136, 0.45);
+  background: var(--green-soft);
 }
 
-input[type="file"] {
-  color: var(--muted);
-}
-
-input[type="file"]::file-selector-button {
-  margin-right: 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  padding: 5px 9px;
-  color: #d8e2de;
-  background: #20262a;
-  font-weight: 800;
+.context-status.error {
+  color: #ffdada;
+  border-color: rgba(196, 92, 92, 0.45);
+  background: var(--red-soft);
 }
 
 .sidebar-section {

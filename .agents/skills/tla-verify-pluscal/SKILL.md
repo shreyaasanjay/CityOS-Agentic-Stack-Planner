@@ -123,33 +123,24 @@ Fix any gaps found BEFORE running verification.
 
 ### Phase 3: Verify & Repair
 
-**Step 0 — Initialize tracking**: Before the first verify call, create `summary.json` using the Write tool:
-
-```json
-{
-  "task": "task description or ID",
-  "total_repairs": 0,
-  "tlc_passed": false,
-  "repairs": []
-}
-```
+**Step 0 — Runtime-owned verdict**: Never create or edit `summary.json`; the deterministic TraceFix TLC execution gate owns `tlc_passed`.
 
 **Step 1 — Verify**: Run `tla-verify-pluscal verify .` — translates PlusCal (pcal.trans) and runs TLC in one step. On failure, the current `Protocol.tla`, `tlc_error.md`, and `tlc_output.log` are automatically archived to `history/attempt_{N}/` (use `--no-history` to skip).
 
-**Step 2 — If verification passes**: Update `summary.json` to set `"tlc_passed": true`, then proceed directly to **Phase 4** (extract states).
+**Step 2 — If verification passes**: Proceed directly to **Phase 4** (extract states) without writing a TLC verdict.
 
 **Step 3 — If verification fails**: Diagnose and repair:
 1. If PlusCal syntax error: read the error message with line numbers, fix Protocol.tla with Edit tool
 2. If TLC violation: diagnose root cause from the error trace (`tlc_error.md`), then fix Protocol.tla with Edit tool. **Always edit the PlusCal source (Protocol.tla), never the translated TLA+** — the translation happens in a temp directory and is discarded after each verify call
 3. After any repair, audit all structurally similar processes for the same issue
-4. Append a repair record to `summary.json`:
+4. Append a repair record to `repair_notes.md`:
    ```json
    {"attempt": 1, "error_type": "Deadlock", "description": "...", "fix": "..."}
    ```
    Increment `"total_repairs"` by 1.
 5. Go back to **Step 1**. Maximum 5 verify calls total — after the 5th failure, stop.
 
-**If 5 verify calls are exhausted without passing**: Set `"tlc_passed": false` in `summary.json` and report to the user:
+**If 5 verify calls are exhausted without passing**: Leave the TLC verdict to TraceFix and report to the user:
 
 ```
 Verification Failed After 5 Attempts

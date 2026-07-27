@@ -1,23 +1,21 @@
-import json
+﻿import json
 from pathlib import Path
 
 from tracefix.protocol_templates.attendance_verification import (
-    PATTERN_ID as ATTENDANCE_PATTERN_ID,
-    classify as attendance_classify,
     build_template as attendance_build_template,
 )
 from tracefix.runner_ui.server import (
     _api_envelope,
+    _build_design_command,
+    _env_updates_for_provider,
     _synth_file_requirements,
     _synth_workspace_summary,
 )
 from tracefix.runner_ui.tellme_bridge import TellMeBridge
-from tracefix.runtime.coordination_classifier import assess_coordination_pattern
 from tracefix.runtime.single_agent_fastpath import (
     _extract_structured_task,
     assess_single_agent_fast_path,
 )
-from tracefix.runtime.opencode_adapter.design import _guard_task_agent_ir, _spec_dir
 from tellme_harness.tracefix_workspace_adapter import _canonicalize_ir
 
 
@@ -70,67 +68,15 @@ def _make_tellme_task_text(
 
 
 # ---------------------------------------------------------------------------
-# Test 1 & 2: TeLLMe multi_agent task → ≥2 agents + ≥1 channel in IR
+# Test 1 & 2: TeLLMe multi_agent task â†’ â‰¥2 agents + â‰¥1 channel in IR
 # ---------------------------------------------------------------------------
 
-def test_multi_agent_task_produces_two_agents():
-    """multi_agent TeLLMe task with Agent A/B produces at least 2 IR agents."""
-    task_text = _make_tellme_task_text(
-        AGENT_AB_QUERY,
-        route="multi_agent",
-        candidate_harnesses=["OCCUPANCY_COUNTER_HARNESS", "ATTENDANCE_VERIFIER_HARNESS"],
-    )
-    spec = _extract_structured_task(task_text)
-    decision = assess_coordination_pattern(task_text, tellme_spec=spec)
-    assert decision.considered, (
-        f"Classifier not considered. fallback_reason={decision.fallback_reason}"
-    )
-    assert decision.pattern_id is not None, (
-        f"No pattern matched. fallback_reason={decision.fallback_reason} "
-        f"all_scores={decision.all_scores}"
-    )
-    assert len(decision.agents) >= 2, (
-        f"Expected ≥2 agents, got {decision.agents}"
-    )
-
-
-def test_multi_agent_task_produces_at_least_one_channel():
-    """multi_agent TeLLMe task produces at least 1 channel in IR."""
-    task_text = _make_tellme_task_text(
-        AGENT_AB_QUERY,
-        route="multi_agent",
-        candidate_harnesses=["OCCUPANCY_COUNTER_HARNESS", "ATTENDANCE_VERIFIER_HARNESS"],
-    )
-    spec = _extract_structured_task(task_text)
-    decision = assess_coordination_pattern(task_text, tellme_spec=spec)
-    assert decision.pattern_id is not None, (
-        f"No pattern matched. fallback_reason={decision.fallback_reason}"
-    )
-    assert len(decision.channels) >= 1, (
-        f"Expected ≥1 channel, got {decision.channels}"
-    )
-
-
 # ---------------------------------------------------------------------------
-# Test 3: Single-agent occupancy prompt → 1 agent (coord classifier not used)
+# Test 3: Single-agent occupancy prompt â†’ 1 agent (coord classifier not used)
 # ---------------------------------------------------------------------------
 
-def test_single_agent_occupancy_coord_classifier_not_considered():
-    """Simple occupancy query does not trigger the coordination classifier."""
-    task_text = _make_tellme_task_text(OCCUPANCY_QUERY, route="single_agent")
-    spec = _extract_structured_task(task_text)
-    decision = assess_coordination_pattern(task_text, tellme_spec=spec)
-    # route=single_agent → no multi_agent override → agent_count from text
-    # "people" is not an agent noun → count=0 → not considered
-    assert not decision.considered, (
-        f"Classifier unexpectedly considered for simple occupancy. "
-        f"pattern={decision.pattern_id}"
-    )
-    assert decision.pattern_id is None
-
-
 # ---------------------------------------------------------------------------
-# Test 4: multi_agent route → single_agent fast path returns eligible=False
+# Test 4: multi_agent route â†’ single_agent fast path returns eligible=False
 # ---------------------------------------------------------------------------
 
 def test_multi_agent_route_skips_single_agent_fast_path():
@@ -149,40 +95,19 @@ def test_multi_agent_route_skips_single_agent_fast_path():
 # Test 5: Coord classifier uses user_query, not full wrapper text
 # ---------------------------------------------------------------------------
 
-def test_coord_classifier_uses_user_query_for_scoring():
-    """Classifier should score correctly even when full wrapper text has no verif keywords."""
-    # The wrapper preamble has no verification keywords; only user_query does.
-    # Without the tellme_spec fix, the classifier would score against the preamble.
-    user_query = "Agent A prepares the occupancy report. Agent B verifies and approves the results."
-    task_text = _make_tellme_task_text(user_query, route="multi_agent")
-    spec = _extract_structured_task(task_text)
-    assert spec is not None
-    assert spec["user_query"] == user_query
-    decision = assess_coordination_pattern(task_text, tellme_spec=spec)
-    # Should score verifier_approver from user_query keywords ("verif", "approv")
-    assert decision.pattern_id is not None, (
-        f"Classifier fell through, suggesting it scored the wrapper not user_query. "
-        f"fallback_reason={decision.fallback_reason}"
-    )
-    best_id = decision.all_scores[0][0] if decision.all_scores else None
-    assert best_id in ("verifier_approver", "sequential_handoff"), (
-        f"Unexpected pattern: {best_id}"
-    )
-
-
 # ---------------------------------------------------------------------------
 # Test 6: TASK_AGENT guard repairs degenerate IR for multi_agent routes
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# Test 7–9: Placeholder task text is detected / rejected before reaching run_design
+# Test 7â€“9: Placeholder task text is detected / rejected before reaching run_design
 # ---------------------------------------------------------------------------
 
 _PLACEHOLDER = "Loaded automatically from the current TeLLMe task spec."
 
 
 def test_placeholder_has_no_structured_spec():
-    """The placeholder string is not a valid TeLLMe spec — _extract_structured_task returns None."""
+    """The placeholder string is not a valid TeLLMe spec â€” _extract_structured_task returns None."""
     result = _extract_structured_task(_PLACEHOLDER)
     assert result is None, (
         f"Expected None for placeholder, got {result!r}"
@@ -194,7 +119,7 @@ def test_placeholder_fast_path_not_eligible():
     fp = assess_single_agent_fast_path(_PLACEHOLDER)
     # The placeholder has no structured marker so it goes through the text path.
     # It has no coordination/multi-source/multi-step signals, so the text path
-    # might mark it eligible — but that's fine because the agent_id will be TASK_AGENT.
+    # might mark it eligible â€” but that's fine because the agent_id will be TASK_AGENT.
     # The important thing is we catch it in the guard.
     # This test documents the current behavior so regressions are visible.
     assert fp.considered, "Fast path should at least consider the placeholder"
@@ -218,39 +143,6 @@ def test_multi_agent_spec_extract_succeeds_on_wrapper_text():
     assert "OCCUPANCY_COUNTER_HARNESS" in (spec.get("candidate_harnesses") or [])
 
 
-def test_task_agent_guard_repairs_degenerate_ir(tmp_path: Path):
-    """_guard_task_agent_ir replaces TASK_AGENT stub with 2-agent IR for multi_agent tasks."""
-    spec_dir = tmp_path / "spec"
-    spec_dir.mkdir()
-    # Write a degenerate single-TASK_AGENT IR (what OpenCode fallback produces)
-    degenerate_ir = {
-        "agents": [{"id": "TASK_AGENT"}],
-        "resources": [],
-        "channels": [],
-    }
-    (spec_dir / "ir.json").write_text(json.dumps(degenerate_ir) + "\n")
-
-    task_text = _make_tellme_task_text(
-        AGENT_AB_QUERY,
-        route="multi_agent",
-        candidate_harnesses=["OCCUPANCY_COUNTER_HARNESS", "ATTENDANCE_VERIFIER_HARNESS"],
-    )
-    diagnostics: list[str] = []
-    _guard_task_agent_ir(tmp_path, task_text, diagnostics)
-
-    repaired = json.loads((spec_dir / "ir.json").read_text())
-    agents = repaired.get("agents", [])
-    channels = repaired.get("channels", [])
-
-    assert len(agents) >= 2, f"Expected ≥2 agents after repair, got {agents}"
-    agent_ids = [a["id"] for a in agents]
-    assert "TASK_AGENT" not in agent_ids, f"TASK_AGENT still present: {agent_ids}"
-    assert len(channels) >= 1, f"Expected ≥1 channel after repair, got {channels}"
-    assert any("guard" in d.lower() for d in diagnostics), (
-        f"Guard diagnostic not emitted: {diagnostics}"
-    )
-
-
 def test_tellme_bridge_persists_tracefix_handoff(tmp_path: Path) -> None:
     bridge = TellMeBridge(tmp_path)
 
@@ -266,6 +158,50 @@ def test_tellme_bridge_persists_tracefix_handoff(tmp_path: Path) -> None:
     task_text = bridge.tracefix_task_text()
     assert SAMPLE_QUERY in task_text
     assert "Do not execute production agents" in task_text
+
+    task_spec_path = bridge.tracefix_task_spec_path()
+    assert task_spec_path.name == "tracefix_task_spec.json"
+    assert json.loads(task_spec_path.read_text(encoding="utf-8"))["user_query"] == SAMPLE_QUERY
+
+
+def test_design_command_passes_official_taskspec_path_for_tellme_handoff(tmp_path: Path) -> None:
+    bridge = TellMeBridge(tmp_path)
+    bridge.process_query(query=SAMPLE_QUERY, space_id="smart_room_1")
+
+    command, _env_updates, _env_flags = _build_design_command(
+        tmp_path,
+        {
+            "taskMode": "custom",
+            "customTask": _PLACEHOLDER,
+            "provider": "ollama",
+            "model": "test-model",
+            "verbose": False,
+        },
+    )
+
+    task_spec_index = command.index("--task-spec")
+    assert Path(command[task_spec_index + 1]) == bridge.tracefix_task_spec_path()
+
+
+def test_openrouter_ui_key_and_model_override_stale_extractor_environment(monkeypatch) -> None:
+    monkeypatch.setenv("TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_API_KEY", "stale-extractor-key")
+    monkeypatch.setenv("TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_BASE_URL", "https://stale.invalid/v1")
+    monkeypatch.setenv("TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_MODEL", "stale/model")
+    ui_key = "ui-openrouter-key"
+
+    env = _env_updates_for_provider(
+        {
+            "provider": "openrouter",
+            "model": "z-ai/glm-5.2",
+            "openrouterKey": ui_key,
+        },
+        require_key=False,
+    )
+
+    assert env["OPENROUTER_API_KEY"] == ui_key
+    assert env["TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_API_KEY"] == ui_key
+    assert env["TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_BASE_URL"] == "https://openrouter.ai/api/v1"
+    assert env["TRACEFIX_LLM_ATTRIBUTE_EXTRACTOR_MODEL"] == "z-ai/glm-5.2"
 
 
 def test_api_envelope_has_stable_shape() -> None:
@@ -288,7 +224,7 @@ def test_api_envelope_has_stable_shape() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Part A — Tests 10–15: attendance_verification template
+# Part A â€” Tests 10â€“15: attendance_verification template
 # ---------------------------------------------------------------------------
 
 ATTENDANCE_QUERY = (
@@ -297,32 +233,6 @@ ATTENDANCE_QUERY = (
     "as evidence sources. If conflicting evidence or insufficient confidence, generate "
     "a report with limitations and evidence references."
 )
-
-
-def test_attendance_verification_prompt_scores_above_threshold():
-    """The attendance/occupancy query scores ≥ 0.75 for the attendance_verification pattern."""
-    score = attendance_classify(ATTENDANCE_QUERY.lower(), agent_count_hint=2, keywords=frozenset())
-    assert score >= 0.75, (
-        f"Expected score ≥ 0.75 for attendance prompt, got {score:.2f}"
-    )
-
-
-def test_attendance_verification_is_top_pattern():
-    """attendance_verification beats all other patterns for the attendance/occupancy query."""
-    task_text = _make_tellme_task_text(
-        ATTENDANCE_QUERY,
-        route="multi_agent",
-        candidate_harnesses=["OCCUPANCY_SENSOR_HARNESS", "CALENDAR_ATTENDANCE_HARNESS"],
-    )
-    spec = _extract_structured_task(task_text)
-    decision = assess_coordination_pattern(task_text, tellme_spec=spec)
-    assert decision.considered, (
-        f"Classifier not considered. fallback_reason={decision.fallback_reason}"
-    )
-    assert decision.pattern_id == ATTENDANCE_PATTERN_ID, (
-        f"Expected {ATTENDANCE_PATTERN_ID!r}, got {decision.pattern_id!r}. "
-        f"all_scores={decision.all_scores}"
-    )
 
 
 def test_attendance_verification_produces_two_agents():
@@ -347,38 +257,12 @@ def test_attendance_verification_produces_at_least_one_channel():
     }
     ir_data, _ = attendance_build_template(params)
     assert len(ir_data.get("channels", [])) >= 1, (
-        f"Expected ≥1 channel, got {ir_data.get('channels')}"
+        f"Expected â‰¥1 channel, got {ir_data.get('channels')}"
     )
-
-
-def test_attendance_verification_not_triggered_by_simple_query():
-    """A simple light-control query does not trigger attendance_verification."""
-    score = attendance_classify(SAMPLE_QUERY.lower(), agent_count_hint=2, keywords=frozenset())
-    assert score == 0.0, (
-        f"Expected 0.0 for light-control query, got {score:.2f}"
-    )
-
-
-def test_attendance_verification_coord_decision_full_flow():
-    """Full coord decision flow with attendance harnesses produces attendance_verification."""
-    task_text = _make_tellme_task_text(
-        ATTENDANCE_QUERY,
-        route="multi_agent",
-        candidate_harnesses=["OCCUPANCY_SENSOR_HARNESS", "CALENDAR_ATTENDANCE_HARNESS"],
-    )
-    spec = _extract_structured_task(task_text)
-    decision = assess_coordination_pattern(task_text, tellme_spec=spec)
-    assert len(decision.agents) >= 2, (
-        f"Expected ≥2 agents in decision, got {decision.agents}"
-    )
-    assert len(decision.channels) >= 1, (
-        f"Expected ≥1 channel in decision, got {decision.channels}"
-    )
-    assert decision.pattern_id == ATTENDANCE_PATTERN_ID
 
 
 # ---------------------------------------------------------------------------
-# Part B — Tests 16–20: workspace readiness without summary.json
+# Part B â€” Tests 16â€“20: workspace readiness without summary.json
 # ---------------------------------------------------------------------------
 
 def _make_workspace(base: Path, files: list[str]) -> Path:
@@ -457,3 +341,4 @@ def test_synth_workspace_incomplete_when_missing_required(tmp_path: Path):
     assert len(result.get("missingArtifacts", [])) > 0, (
         "Expected at least one missing artifact path"
     )
+

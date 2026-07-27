@@ -193,6 +193,7 @@ def cmd_design(args: argparse.Namespace) -> int:
     opencode_cmd = shlex.split(args.opencode_bin) if args.opencode_bin else ["opencode"]
     result = asyncio.run(run_design(
         args.task, name=args.name, model=args.model,
+        task_spec_path=args.task_spec,
         opencode_cmd=opencode_cmd, timeout=args.timeout, verbose=args.verbose,
         live=args.live, live_port=args.live_port, live_hold=args.live_hold))
 
@@ -261,6 +262,8 @@ def main(argv=None) -> None:
     design.add_argument("task", help="The MAS requirement, in natural language")
     design.add_argument("--name", default=None,
                         help="Workspace name (default: derived from the task)")
+    design.add_argument("--task-spec", default=None,
+                        help="Read-only path to the official TeLLMe tracefix_task_spec.json")
     design.add_argument("--model", default=None,
                         help="opencode model, provider/modelID (e.g. openai/gpt-5.4)")
     design.add_argument("--timeout", type=float, default=1800.0,

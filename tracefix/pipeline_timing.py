@@ -221,8 +221,7 @@ class PipelineTimingReport:
         repair = _load_repair_progress(self.run_dir)
         ir_sanitization = _latest_ir_sanitization(self.stages)
         fast_path = _latest_fast_path(self.stages)
-        coord_template = _latest_coord_template(self.stages)
-        pattern_repository = _latest_pattern_repository(self.stages)
+        llm_attribute_extraction = _latest_coordination_attributes(self.stages)
         usage = self.usage.summary()
         if repair.get("stop_reason") and repair.get("stop_reason") != "tlc_passed":
             recommendation = str(repair.get("recommendation") or recommendation)
@@ -248,8 +247,7 @@ class PipelineTimingReport:
             "repair": repair,
             "ir_sanitization": ir_sanitization,
             "single_agent_fast_path": fast_path,
-            "coordination_pattern_template": coord_template,
-            "pattern_repository": pattern_repository,
+            "llm_attribute_extraction": llm_attribute_extraction,
             "summary": {
                 "slowest_stage": slowest.get("stage") if slowest else None,
                 "slowest_stage_duration_ms": slowest.get("duration_ms") if slowest else None,
@@ -440,46 +438,23 @@ def _latest_fast_path(stages: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _latest_coord_template(stages: list[dict[str, Any]]) -> dict[str, Any]:
+def _latest_coordination_attributes(stages: list[dict[str, Any]]) -> dict[str, Any]:
     for stage in reversed(stages):
-        report = stage.get("coord_template")
-        if isinstance(report, dict):
-            return report
+        if stage.get("stage") != "llm_attribute_extraction":
+            continue
+        return {
+            "attempted": True,
+            "success": bool(stage.get("success")),
+            "attributes": stage.get("extracted_coordination_attributes") or {},
+            "template_mapping_status": stage.get("template_mapping_status"),
+            "error": stage.get("error"),
+        }
     return {
-        "considered": False,
-        "used": False,
-        "pattern_id": None,
-        "confidence": 0.0,
-        "reason": None,
-        "fallback_reason": None,
-        "fallback_to_opencode": True,
+        "attempted": False,
+        "success": False,
+        "attributes": {},
+        "template_mapping_status": "not_attempted",
         "error": None,
-        "evidence_sources_detected": [],
-        "evidence_source_count": 0,
-        "decision_agent_id": None,
-        "fan_in_decision_used": False,
-        "pattern_scores": {},
-        "template_priority_reason": None,
-        "app_agent_count": 0,
-        "monitor_count": 1,
-    }
-
-
-def _latest_pattern_repository(stages: list[dict[str, Any]]) -> dict[str, Any]:
-    for stage in reversed(stages):
-        report = stage.get("pattern_repository")
-        if isinstance(report, dict):
-            return report
-    return {
-        "pattern_repository_enabled": None,
-        "candidate_harvest_attempted": False,
-        "candidate_saved": False,
-        "candidate_id": None,
-        "normalized_topology_hash": None,
-        "candidate_deduplicated": False,
-        "candidate_usage_count": 0,
-        "candidate_path": None,
-        "harvest_skip_reason": None,
     }
 
 
@@ -487,8 +462,8 @@ def _to_markdown(payload: dict[str, Any]) -> str:
     summary = payload.get("summary") or {}
     sanitization = payload.get("ir_sanitization") or {}
     fast_path = payload.get("single_agent_fast_path") or {}
-    coord = payload.get("coordination_pattern_template") or {}
-    repo = payload.get("pattern_repository") or {}
+    coord_attrs = payload.get("llm_attribute_extraction") or {}
+    attrs = coord_attrs.get("attributes") or {}
     usage = payload.get("usage") or {}
     total_cost = usage.get("total_estimated_cost_usd")
     cost_text = "unavailable" if total_cost is None else f"${total_cost:.6f}"
@@ -515,28 +490,16 @@ def _to_markdown(payload: dict[str, Any]) -> str:
         f"- Fast-path reason: {fast_path.get('reason') or 'unavailable'}",
         f"- Fast-path fallback to OpenCode: {'yes' if fast_path.get('fallback_to_opencode') else 'no'}",
         f"- Fast-path IR duration: {float(fast_path.get('ir_generation_duration_ms') or 0):.2f} ms",
-        f"- Coord template considered: {'yes' if coord.get('considered') else 'no'}",
-        f"- Coord template used: {'yes' if coord.get('used') else 'no'}",
-        f"- Coord pattern: {coord.get('pattern_id') or 'none'}",
-        f"- Coord confidence: {float(coord.get('confidence') or 0):.2f}",
-        f"- Coord fallback reason: {coord.get('fallback_reason') or 'n/a'}",
-        f"- Fan-in decision used: {'yes' if coord.get('fan_in_decision_used') else 'no'}",
-        f"- Evidence source count: {coord.get('evidence_source_count') or 0}",
-        "- Evidence sources: "
-        + (", ".join(coord.get("evidence_sources_detected") or []) or "none"),
-        f"- Decision agent: {coord.get('decision_agent_id') or 'n/a'}",
-        f"- Template priority: {coord.get('template_priority_reason') or 'n/a'}",
-        f"- Application agents: {coord.get('app_agent_count') or 0}",
-        f"- Runtime monitors: {coord.get('monitor_count') or 0}",
-        f"- Pattern scores: {json.dumps(coord.get('pattern_scores') or {}, sort_keys=True)}",
-        f"- Pattern repository enabled: {repo.get('pattern_repository_enabled')}",
-        f"- Candidate harvest attempted: {'yes' if repo.get('candidate_harvest_attempted') else 'no'}",
-        f"- Candidate saved: {'yes' if repo.get('candidate_saved') else 'no'}",
-        f"- Candidate deduplicated: {'yes' if repo.get('candidate_deduplicated') else 'no'}",
-        f"- Candidate id: {repo.get('candidate_id') or 'n/a'}",
-        f"- Topology hash: {repo.get('normalized_topology_hash') or 'n/a'}",
-        f"- Candidate usage count: {repo.get('candidate_usage_count') or 0}",
-        f"- Harvest skip reason: {repo.get('harvest_skip_reason') or 'n/a'}",
+        f"- Coordination attribute extraction attempted: {'yes' if coord_attrs.get('attempted') else 'no'}",
+        f"- Coordination attribute extraction success: {'yes' if coord_attrs.get('success') else 'no'}",
+        f"- Template mapping status: {coord_attrs.get('template_mapping_status') or 'not_attempted'}",
+        "- Extracted coordination patterns: "
+        + (", ".join(attrs.get("coordination_patterns") or []) or "none"),
+        f"- Extracted agent count: {attrs.get('number_of_agents')}",
+        f"- Extracted resource count: {attrs.get('number_of_resources')}",
+        f"- Extracted channel count: {attrs.get('number_of_channels')}",
+        "- Extracted agent roles: "
+        + (", ".join(attrs.get("agent_roles") or []) or "none"),
         "- IR fields removed: "
         + (", ".join(sanitization.get("removed_fields") or []) or "none"),
         "- IR fields normalized: "

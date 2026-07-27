@@ -251,6 +251,8 @@ async def run_opencode_agent(
     env_overrides: dict | None = None,
     usage_tracker: UsageTracker | None = None,
     usage_stage: str = "opencode",
+    procedure: str | None = None,
+    template_id: str | None = None,
 ) -> dict:
     """Run one agent via OpenCode; return its disposition.
 
@@ -262,7 +264,12 @@ async def run_opencode_agent(
         kickoff: the message that starts the run (protocol is in the system prompt).
         timeout: wall-clock cap; on expiry the process is SIGTERM'd then SIGKILL'd.
         on_event: optional ``(agent_id, event_dict)`` callback for live visualization.
+        procedure: deterministic procedure associated with this call, for audit logging.
+        template_id: selected template associated with this call, if any.
     """
+    if procedure in {"exact_reuse", "parameterized_reuse"}:
+        raise RuntimeError(f"OpenCode execution is forbidden for {procedure}.")
+
     key = agent_key(agent_id)
     env = {**os.environ, **to_env(config), **(env_overrides or {})}
     cmd = [*_spawnable_command(opencode_cmd), "run", kickoff, "--agent", key,
@@ -277,7 +284,8 @@ async def run_opencode_agent(
     if usage_tracker is not None:
         usage_tracker.ensure_can_call(usage_stage)
     print(
-        f"[TRACEFIX LLM START] agent={agent_id} model={model or '(opencode default)'} "
+        f"[TRACEFIX LLM START] agent={agent_id} procedure={procedure or 'none'} "
+        f"template={template_id or 'none'} model={model or '(opencode default)'} "
         f"started_at={started_at}",
         file=sys.stderr,
         flush=True,

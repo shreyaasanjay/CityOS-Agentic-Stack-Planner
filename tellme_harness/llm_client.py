@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -85,6 +87,97 @@ def _sanitize_error(exc: Exception) -> str:
     if isinstance(exc, (ValueError, TypeError)):
         return "invalid_response"
     return f"error_{name}"
+
+
+_SENSITIVE_PROVIDER_FIELDS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "bearer",
+    "cookie",
+    "secret",
+    "token",
+)
+
+
+def _redact_provider_error_value(value: Any, *, api_key: str | None) -> Any:
+    """Remove credential-like values from a provider-owned error payload."""
+
+    if isinstance(value, dict):
+        sanitized: Dict[str, Any] = {}
+        for key, child in value.items():
+            normalized_key = str(key).lower().replace("-", "_")
+            if any(fragment in normalized_key for fragment in _SENSITIVE_PROVIDER_FIELDS):
+                sanitized[str(key)] = "[REDACTED]"
+            else:
+                sanitized[str(key)] = _redact_provider_error_value(child, api_key=api_key)
+        return sanitized
+    if isinstance(value, list):
+        return [_redact_provider_error_value(item, api_key=api_key) for item in value]
+    if isinstance(value, str):
+        return _redact_provider_error_text(value, api_key=api_key)
+    return value
+
+
+def _redact_provider_error_text(text: str, *, api_key: str | None) -> str:
+    sanitized = text
+    if api_key:
+        sanitized = sanitized.replace(api_key, "[REDACTED]")
+    sanitized = re.sub(r"(?i)\bBearer\s+[^\s,;\"']+", "Bearer [REDACTED]", sanitized)
+    sanitized = re.sub(r"\bsk-[A-Za-z0-9._-]+", "[REDACTED]", sanitized)
+    sanitized = re.sub(
+        r"(?i)(api[_-]?key|authorization|cookie|token|secret)(\s*[:=]\s*)([^\r\n,;]+)",
+        r"\1\2[REDACTED]",
+        sanitized,
+    )
+    return sanitized
+
+
+def _sanitized_provider_error_body(body: str, *, api_key: str | None) -> str:
+    try:
+        parsed = json.loads(body)
+    except (json.JSONDecodeError, TypeError):
+        return _redact_provider_error_text(body, api_key=api_key)
+    sanitized = _redact_provider_error_value(parsed, api_key=api_key)
+    return json.dumps(sanitized, indent=2, ensure_ascii=False)
+
+
+def _provider_name(base_url: str) -> str:
+    normalized = base_url.lower()
+    if "openrouter.ai" in normalized:
+        return "OpenRouter"
+    if "api.openai.com" in normalized:
+        return "OpenAI"
+    return "OpenAI-compatible provider"
+
+
+def _print_provider_http_error(
+    error: urllib.error.HTTPError,
+    *,
+    provider: str,
+    endpoint: str,
+    model: str,
+    api_key: str | None,
+) -> None:
+    """Print a secret-safe provider response while preserving the original error."""
+
+    try:
+        body = error.read().decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 - diagnostics must never mask the HTTPError
+        body = "(provider response body unavailable)"
+    response = _sanitized_provider_error_body(body, api_key=api_key)
+
+    # This distinguishes invalid keys, limits/credits, model permissions,
+    # provider restrictions, malformed requests, and other provider failures.
+    print("=" * 50, file=sys.stderr)
+    print("TRACEFIX PROVIDER ERROR", file=sys.stderr)
+    print(f"Provider: {provider}", file=sys.stderr)
+    print(f"HTTP Status: {error.code}", file=sys.stderr)
+    print(f"Endpoint: {endpoint}", file=sys.stderr)
+    print(f"Model: {model}", file=sys.stderr)
+    print("\nResponse:", file=sys.stderr)
+    print(response, file=sys.stderr)
+    print("=" * 50, file=sys.stderr, flush=True)
 
 
 class FakeLLMClient(LLMClient):
@@ -255,6 +348,23 @@ class OpenAICompatibleLLMClient(LLMClient):
         first_response_at: str | None = None
         first_response_ms: float | None = None
         request_error: str | None = None
+        endpoint = self.base_url + "/chat/completions"
+        provider_name = _provider_name(self.base_url)
+        self.last_request_metadata = {
+            "request_start": request_started_at,
+            "first_response_time": None,
+            "request_end": None,
+            "total_duration_ms": None,
+            "time_to_first_response_ms": None,
+            "model": self.model,
+            "provider": self.base_url,
+            "provider_name": provider_name,
+            "endpoint": endpoint,
+            "failed": False,
+            "error": None,
+            "http_status": None,
+            "retry_count": 0,
+        }
         payload = {
             "model": self.model,
             "messages": [
@@ -268,7 +378,7 @@ class OpenAICompatibleLLMClient(LLMClient):
             "temperature": 0,
         }
         request = urllib.request.Request(
-            url=self.base_url + "/chat/completions",
+            url=endpoint,
             data=json.dumps(payload).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
@@ -281,12 +391,23 @@ class OpenAICompatibleLLMClient(LLMClient):
                 first_response_at = datetime.now(timezone.utc).isoformat()
                 first_response_ms = time.monotonic() * 1000.0
                 body = response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            request_error = _sanitize_error(exc)
+            self.last_request_metadata["http_status"] = exc.code
+            _print_provider_http_error(
+                exc,
+                provider=provider_name,
+                endpoint=endpoint,
+                model=self.model,
+                api_key=self.api_key,
+            )
+            raise
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             request_error = _sanitize_error(exc)
             raise
         finally:
             request_finished_ms = time.monotonic() * 1000.0
-            self.last_request_metadata = {
+            self.last_request_metadata.update({
                 "request_start": request_started_at,
                 "first_response_time": first_response_at,
                 "request_end": datetime.now(timezone.utc).isoformat(),
@@ -298,10 +419,12 @@ class OpenAICompatibleLLMClient(LLMClient):
                 ),
                 "model": self.model,
                 "provider": self.base_url,
+                "provider_name": provider_name,
+                "endpoint": endpoint,
                 "failed": request_error is not None,
                 "error": request_error,
                 "retry_count": 0,
-            }
+            })
 
         try:
             parsed = json.loads(body)

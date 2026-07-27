@@ -1,0 +1,177 @@
+{
+  "states": [
+    {
+      "id": "oa_gather_camera_occupancy",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_gather_entry_events"
+        }
+      ]
+    },
+    {
+      "id": "oa_gather_entry_events",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_gather_exit_events"
+        }
+      ]
+    },
+    {
+      "id": "oa_gather_exit_events",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_gather_anonymous_tracks"
+        }
+      ]
+    },
+    {
+      "id": "oa_gather_anonymous_tracks",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_gather_motion_events"
+        }
+      ]
+    },
+    {
+      "id": "oa_gather_motion_events",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_gather_camera_coverage"
+        }
+      ]
+    },
+    {
+      "id": "oa_gather_camera_coverage",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_synthesize"
+        }
+      ]
+    },
+    {
+      "id": "oa_synthesize",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_verify"
+        }
+      ]
+    },
+    {
+      "id": "oa_verify",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_verify_pass_privacy"
+        },
+        {
+          "next_state": "oa_verify_fail"
+        }
+      ]
+    },
+    {
+      "id": "oa_verify_pass_privacy",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_verify_pass_evidence"
+        }
+      ]
+    },
+    {
+      "id": "oa_verify_pass_evidence",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_verify_pass_fields"
+        }
+      ]
+    },
+    {
+      "id": "oa_verify_pass_fields",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_decide"
+        }
+      ]
+    },
+    {
+      "id": "oa_verify_fail",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_verify_violation"
+        },
+        {
+          "next_state": "oa_verify_insufficient"
+        }
+      ]
+    },
+    {
+      "id": "oa_verify_violation",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_decide"
+        }
+      ]
+    },
+    {
+      "id": "oa_verify_insufficient",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_decide"
+        }
+      ]
+    },
+    {
+      "id": "oa_decide",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "oa_emit_answer"
+        },
+        {
+          "next_state": "oa_synthesize"
+        },
+        {
+          "next_state": "oa_emit_insufficient"
+        }
+      ]
+    },
+    {
+      "id": "oa_emit_answer",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "occupancy_answer_agent_done"
+        }
+      ]
+    },
+    {
+      "id": "oa_emit_insufficient",
+      "agent": "occupancy_answer_agent",
+      "actions": [
+        {
+          "next_state": "occupancy_answer_agent_done"
+        }
+      ]
+    },
+    {
+      "id": "occupancy_answer_agent_done",
+      "agent": "occupancy_answer_agent",
+      "actions": []
+    }
+  ],
+  "initial_states": {
+    "occupancy_answer_agent": "oa_gather_camera_occupancy"
+  }
+}

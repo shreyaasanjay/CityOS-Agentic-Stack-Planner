@@ -5,6 +5,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from tracefix.runtime.llm_attribute_extractor import (
+    AttributeExtractionError,
+    ExtractedCoordinationAttributes,
+)
+import tracefix.runtime.opencode_adapter.design as design_module
 from tracefix.runtime.opencode_adapter.config_gen import build_design_config
 from tracefix.runtime.opencode_adapter.design import (
     _channel_diagnostics,
@@ -45,6 +52,11 @@ def test_designer_prompt_embeds_skill_without_frontmatter():
     assert ".claude/skills/tla-prompt-gen/SKILL.md" in prompt  # Phase-5 redirection
     assert "Do NOT emit top-level or nested" in prompt
     assert "`locks`, `counters`" in prompt
+    assert "Derive the coordination structure yourself" not in prompt
+    assert "create `summary.json`" not in prompt
+    assert 'set `"tlc_passed": true`' not in prompt
+    assert "canonical Template attributes" in prompt
+    assert "deterministic procedure" in prompt
 
 
 def test_designer_prompt_preserves_literal_ir_json_examples():
@@ -197,6 +209,22 @@ def test_judge_ready(tmp_path):
 def test_judge_verify_failed_is_honest(tmp_path):
     r = judge(_make_ws(tmp_path, tlc_passed=False))
     assert not r.success and r.status == "tlc_error"
+
+
+def test_forged_summary_never_skips_deterministic_verification_gate(tmp_path):
+    ws = tmp_path / "ws"
+    spec = ws / "spec"
+    spec.mkdir(parents=True)
+    (spec / "ir.json").write_text(json.dumps({"agents": [{"id": "A"}], "resources": [], "channels": []}))
+    (spec / "Protocol.tla").write_text("---- MODULE Protocol ----\n====\n")
+    (spec / "Protocol.cfg").write_text("SPECIFICATION Spec\n")
+    (spec / "summary.json").write_text(json.dumps({"tlc_passed": True}))
+    (spec / "states.json").write_text("{}")
+
+    needed, diagnostics = design_module._verification_needed_after_scaffold(ws)
+
+    assert needed is True
+    assert any("Deterministic post-scaffold TLC" in item for item in diagnostics)
 
 
 def test_judge_missing_prompt_for_an_agent_is_incomplete(tmp_path):
@@ -694,3 +722,385 @@ def test_channel_diagnostics_reports_added_channels():
     assert diagnostics == [
         "IR repair added channel a_to_b: A -> B labels=[handoff, review]"
     ]
+
+
+@pytest.mark.asyncio
+async def test_run_design_exact_reuse_instantiates_artifacts_without_opencode(monkeypatch, capsys):
+    def fake_extract(query, *, model=None, client=None):
+        assert "three robots" in query.lower()
+        assert model == "test-model"
+        return ExtractedCoordinationAttributes(
+            coordination_patterns=[
+                "Request-Grant",
+                "Exclusive Resource Access",
+                "Task Prioritization",
+                "Queue-Based Scheduling",
+                "Reservation",
+            ],
+            number_of_agents=None,
+            agent_roles=[],
+            communication_flow=[],
+            limitations=[],
+            number_of_resources=1,
+            number_of_channels=None,
+        )
+
+    monkeypatch.setattr(design_module, "extract_coordination_attributes", fake_extract)
+    monkeypatch.setattr(design_module, "_verification_needed_after_scaffold", lambda _ws: (False, []))
+
+    async def unexpected_opencode(*_args, **_kwargs):
+        raise AssertionError("exact reuse must not invoke OpenCode")
+
+    monkeypatch.setattr(design_module, "run_opencode_agent", unexpected_opencode)
+
+    extractor_input = "Coordinate three robots through a shared corridor."
+    result = await design_module.run_design(
+        extractor_input,
+        name="pytest_attr_extract_success",
+        model="openrouter/test-model",
+        timeout=1,
+    )
+
+    ws = Path(result.workspace)
+    artifact = ws / "spec" / "extracted_coordination_attributes.json"
+    timing = json.loads((ws / "output" / "pipeline_timing_report.json").read_text(encoding="utf-8"))
+
+    decision = json.loads((ws / "spec" / "procedure_decision.json").read_text(encoding="utf-8"))
+    validation_audit = json.loads(
+        (ws / "spec" / "template_validation_results.json").read_text(encoding="utf-8")
+    )
+    execution_audit = json.loads(
+        (ws / "spec" / "procedure_execution.json").read_text(encoding="utf-8")
+    )
+    terminal = capsys.readouterr().out
+    assert decision["selected_procedure"] == "exact_reuse"
+    assert decision["reason_codes"]
+    assert decision["selected_template_id"] == validation_audit["ranked_candidates"][0]["template_id"]
+    extractor_audit = json.loads((ws / "spec" / "extractor_input.txt").read_text(encoding="utf-8"))
+    assert extractor_audit["secondary_original_request"] == extractor_input
+    assert artifact.is_file()
+    assert json.loads(artifact.read_text(encoding="utf-8"))["number_of_resources"] == 1
+    assert timing["llm_attribute_extraction"]["template_mapping_status"] == "deterministic_exact_reuse_selected"
+    assert (ws / "spec" / "template_rankings.json").exists()
+    assert (ws / "spec" / "template_validation_result.json").exists()
+    assert (ws / "spec" / "procedure_options.json").exists()
+    assert (ws / "spec" / "procedure_decision.json").exists()
+    assert (ws / "spec" / "procedure_execution_context.json").exists()
+    assert validation_audit["candidate_count"] == len(validation_audit["ranked_candidates"])
+    assert validation_audit["ranked_candidates"][0]["rank"] == 1
+    assert "field_results" in validation_audit["ranked_candidates"][0]
+    assert execution_audit["executor"] == "deterministic_builder"
+    assert execution_audit["llm_expected"] is False
+    assert execution_audit["success"] is True
+    assert (ws / "spec" / "Protocol.tla").exists()
+    assert (ws / "spec" / "Protocol.cfg").exists()
+    assert (ws / "spec" / "ir.json").exists()
+    assert not (ws / "spec" / "procedure_selection_prompt.txt").exists()
+    for marker in (
+        "[TRACEFIX EXTRACTOR INPUT START]",
+        "[TRACEFIX EXTRACTOR OUTPUT START]",
+        "[TRACEFIX VALIDATOR OUTPUT START]",
+        "[TRACEFIX PROCEDURE SELECTED]",
+        "[TRACEFIX PROCEDURE DECISION START]",
+        "[TRACEFIX PROCEDURE EXECUTION START]",
+        "[TRACEFIX PROCEDURE EXECUTION END]",
+    ):
+        assert marker in terminal
+    assert extractor_input in terminal
+
+
+@pytest.mark.asyncio
+async def test_run_design_routes_extracted_single_agent_without_template_validation_or_opencode(
+    monkeypatch,
+    capsys,
+):
+    def fake_extract(_query, *, model=None, client=None):
+        assert model == "test-model"
+        return ExtractedCoordinationAttributes(
+            coordination_patterns=[],
+            number_of_agents=1,
+            agent_roles=["occupancy_analyzer"],
+            communication_flow=[],
+            limitations=[],
+            number_of_resources=0,
+            number_of_channels=0,
+        )
+
+    generated = []
+
+    def fake_single_agent_generation(ws, decision, _timing):
+        generated.append(decision)
+        (ws / "spec" / "ir.json").write_text(
+            json.dumps({
+                "agents": [{"id": decision.agent_id}],
+                "resources": [],
+                "channels": [],
+                "state_tasks": {f"{decision.agent_id}_start": decision.task_text},
+            }),
+            encoding="utf-8",
+        )
+        return ["single-agent test generation completed"]
+
+    async def unexpected_opencode(*_args, **_kwargs):
+        raise AssertionError("single_agent_generation must not invoke OpenCode")
+
+    monkeypatch.setattr(design_module, "extract_coordination_attributes", fake_extract)
+    monkeypatch.setattr(
+        design_module,
+        "_generate_and_verify_single_agent",
+        fake_single_agent_generation,
+    )
+    monkeypatch.setattr(design_module, "run_opencode_agent", unexpected_opencode)
+    monkeypatch.setattr(design_module, "_verification_needed_after_scaffold", lambda _ws: (False, []))
+
+    result = await design_module.run_design(
+        "How many people are in the room?",
+        task_spec={
+            "route": "single_agent",
+            "user_query": "How many people are in the room?",
+        },
+        name="pytest_single_agent_procedure",
+        model="openrouter/test-model",
+        timeout=1,
+    )
+
+    ws = Path(result.workspace)
+    decision = json.loads(
+        (ws / "spec" / "procedure_decision.json").read_text(encoding="utf-8")
+    )
+    rankings = json.loads(
+        (ws / "spec" / "template_rankings.json").read_text(encoding="utf-8")
+    )
+    validation = json.loads(
+        (ws / "spec" / "template_validation_results.json").read_text(encoding="utf-8")
+    )
+    terminal = capsys.readouterr().out
+
+    assert generated
+    assert decision["selected_procedure"] == "single_agent_generation"
+    assert decision["reason_codes"] == ["single_agent_request"]
+    assert "full_generation_fallback" not in decision["reason_codes"]
+    assert rankings == []
+    assert validation["skipped"] is True
+    assert validation["reason"] == "single_agent_request"
+    assert "[TRACEFIX PROCEDURE SELECTED] mode=single_agent_generation" in terminal
+    assert "[TRACEFIX PROCEDURE SELECTED] mode=full_generation" not in terminal
+
+
+@pytest.mark.asyncio
+async def test_run_design_full_generation_decision_falls_back_to_opencode(monkeypatch):
+    def fake_extract(query, *, model=None, client=None):
+        assert "three robots" in query.lower()
+        assert model == "test-model"
+        return ExtractedCoordinationAttributes(
+            coordination_patterns=["Subscription"],
+            number_of_agents=3,
+            agent_roles=["robot", "scheduler"],
+            communication_flow=["request", "grant", "release"],
+            limitations=["one robot in corridor"],
+            number_of_resources=1,
+            number_of_channels=3,
+        )
+
+    opencode_calls: list[tuple[str, str]] = []
+
+    async def fake_run_opencode_agent(agent_name, _cfg, **kwargs):
+        opencode_calls.append((agent_name, kwargs.get("kickoff", "")))
+        return {
+            "status": "success",
+            "events": 0,
+            "stderr_tail": [],
+            "returncode": 0,
+            "provider": None,
+            "model": None,
+        }
+
+    monkeypatch.setattr(design_module, "extract_coordination_attributes", fake_extract)
+    monkeypatch.setattr(design_module, "run_opencode_agent", fake_run_opencode_agent)
+
+    result = await design_module.run_design(
+        "Coordinate three robots through a shared corridor.",
+        name="pytest_full_generation_fallback",
+        model="openrouter/test-model",
+        timeout=1,
+    )
+
+    ws = Path(result.workspace)
+    timing = json.loads((ws / "output" / "pipeline_timing_report.json").read_text(encoding="utf-8"))
+
+    assert any(agent_name == "designer" for agent_name, _kickoff in opencode_calls)
+    assert timing["llm_attribute_extraction"]["template_mapping_status"] == "deterministic_full_generation_selected"
+    initial_prompt = opencode_calls[0][1]
+    assert "not allowed to select, substitute, or recommend another procedure" in initial_prompt
+    assert '"selected_procedure": "full_generation"' in initial_prompt
+    assert any(
+        "Deterministic full_generation execution was run through OpenCode." in line
+        for line in result.diagnostics
+    )
+    execution_audit = json.loads(
+        (ws / "spec" / "procedure_execution.json").read_text(encoding="utf-8")
+    )
+    assert execution_audit["selected_procedure"] == "full_generation"
+    assert execution_audit["llm_expected"] is True
+    assert execution_audit["executor"] == "opencode"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode", "communication_flow", "number_of_agents"),
+    [
+        ("parameterized_reuse", ["work", "handoff", "receive", "continue"], 3),
+        ("partial_recomposition", ["work", "handoff", "receive", "continue", "acknowledge"], 2),
+    ],
+)
+async def test_run_design_reuse_modes_dispatch_fixed_execution_prompt(
+    monkeypatch,
+    mode,
+    communication_flow,
+    number_of_agents,
+):
+    def fake_extract(_query, *, model=None, client=None):
+        return ExtractedCoordinationAttributes(
+            coordination_patterns=["Sequential Handoff"],
+            number_of_agents=number_of_agents,
+            agent_roles=["upstream_agent", "downstream_agent"],
+            communication_flow=communication_flow,
+            limitations=["no_acknowledgement_required"],
+            number_of_resources=2,
+            number_of_channels=1,
+        )
+
+    opencode_calls = []
+
+    async def fake_run_opencode_agent(agent_name, _cfg, **kwargs):
+        opencode_calls.append((agent_name, kwargs.get("kickoff", "")))
+        return {
+            "status": "success",
+            "events": 0,
+            "stderr_tail": [],
+            "returncode": 0,
+            "provider": None,
+            "model": None,
+        }
+
+    monkeypatch.setattr(design_module, "extract_coordination_attributes", fake_extract)
+    monkeypatch.setattr(design_module, "run_opencode_agent", fake_run_opencode_agent)
+
+    result = await design_module.run_design(
+        "Coordinate multiple agents in a sequential handoff.",
+        name=f"pytest_{mode}_dispatch",
+        model="openrouter/test-model",
+        timeout=1,
+    )
+
+    ws = Path(result.workspace)
+    decision = json.loads((ws / "spec" / "procedure_decision.json").read_text(encoding="utf-8"))
+    context = json.loads((ws / "spec" / "procedure_execution_context.json").read_text(encoding="utf-8"))
+    prompt_path = ws / "spec" / "procedure_execution_prompt.txt"
+
+    assert decision["selected_procedure"] == mode
+    assert context["selected_procedure"] == mode
+    if mode == "parameterized_reuse":
+        assert not prompt_path.exists()
+        assert not opencode_calls
+        assert result.status == "parameterized_reuse_execution_failed"
+    else:
+        prompt = prompt_path.read_text(encoding="utf-8")
+        assert opencode_calls
+        assert opencode_calls[0][1] == prompt
+        assert f'"selected_procedure": "{mode}"' in prompt
+        assert "not allowed to select, substitute, or recommend another procedure" in prompt
+    assert result.status != "procedure_decision_complete"
+    execution_audit = json.loads(
+        (ws / "spec" / "procedure_execution.json").read_text(encoding="utf-8")
+    )
+    assert execution_audit["selected_procedure"] == mode
+    assert execution_audit["llm_expected"] is (mode != "parameterized_reuse")
+    assert execution_audit["allowed_fields"] == (
+        decision["parameterizable_fields"]
+        if mode == "parameterized_reuse"
+        else decision["adaptable_fields"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_design_reports_attribute_extraction_failure(monkeypatch):
+    def fake_extract(query, *, model=None, client=None):
+        raise AttributeExtractionError("provider unavailable")
+
+    monkeypatch.setattr(design_module, "extract_coordination_attributes", fake_extract)
+
+    result = await design_module.run_design(
+        "Coordinate three robots through a shared corridor.",
+        name="pytest_attr_extract_failure",
+        model="openrouter/test-model",
+        timeout=1,
+    )
+
+    ws = Path(result.workspace)
+    timing = json.loads((ws / "output" / "pipeline_timing_report.json").read_text(encoding="utf-8"))
+
+    assert result.status == "attribute_extraction_failed"
+    assert not (ws / "spec" / "extracted_coordination_attributes.json").exists()
+    assert timing["llm_attribute_extraction"]["template_mapping_status"] == "attribute_extraction_failed"
+
+
+@pytest.mark.asyncio
+async def test_persistent_taskspec_contradiction_stops_before_template_validator(monkeypatch):
+    task_spec = {
+        "task_id": "task_agent_cap",
+        "query_id": "query_agent_cap",
+        "user_query": "Coordinate at most two robots.",
+        "route": "multi_agent",
+        "constraints": {"max_agents": 2},
+    }
+    before = json.dumps(task_spec, sort_keys=True)
+    calls = []
+
+    def contradictory_extract(
+        _query=None,
+        *,
+        task_spec=None,
+        original_request=None,
+        correction_feedback=None,
+        model=None,
+        client=None,
+    ):
+        calls.append(correction_feedback)
+        return ExtractedCoordinationAttributes(
+            coordination_patterns=["Exclusive Resource Access"],
+            number_of_agents=3,
+            agent_roles=["robot"],
+            communication_flow=[],
+            limitations=[],
+            number_of_resources=1,
+            number_of_channels=2,
+        )
+
+    class UnexpectedValidator:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("Template validator must not run after persistent contradiction")
+
+    monkeypatch.setattr(design_module, "extract_coordination_attributes", contradictory_extract)
+    monkeypatch.setattr(design_module, "DeterministicTemplateEngine", UnexpectedValidator)
+
+    result = await design_module.run_design(
+        "Secondary original wording.",
+        task_spec=task_spec,
+        name="pytest_taskspec_persistent_contradiction",
+        model="openrouter/test-model",
+        timeout=1,
+    )
+
+    ws = Path(result.workspace)
+    report = json.loads(
+        (ws / "spec" / "attribute_validation_report.json").read_text(encoding="utf-8")
+    )
+    assert result.status == "attribute_extraction_failed"
+    assert len(calls) == 3
+    assert calls[0] is None
+    assert all("number_of_agents" in feedback for feedback in calls[1:])
+    assert report["status"] == "failed"
+    assert report["attempts"] == 3
+    assert json.dumps(task_spec, sort_keys=True) == before
+    assert not (ws / "spec" / "template_validation_results.json").exists()

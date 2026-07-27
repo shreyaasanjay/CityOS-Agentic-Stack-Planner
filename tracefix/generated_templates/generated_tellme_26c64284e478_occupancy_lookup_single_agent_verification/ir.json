@@ -1,0 +1,22 @@
+{
+  "agents": [
+    {
+      "id": "occupancy_answer_agent"
+    }
+  ],
+  "resources": [],
+  "channels": [],
+  "state_tasks": {
+    "oa_gather_camera_occupancy": "Collect bounded camera occupancy context packet from door camera (privacy-safe structured context only).",
+    "oa_gather_entry_events": "Collect entry-event context packet from door camera for timestamped event summary.",
+    "oa_gather_exit_events": "Collect exit-event context packet from door camera for timestamped event summary.",
+    "oa_gather_anonymous_tracks": "Collect anonymous track context from room camera (no identity inference).",
+    "oa_gather_motion_events": "Collect motion event context from room camera.",
+    "oa_gather_camera_coverage": "Collect camera coverage metadata for smart_room_1 (coverage-gap reasoning).",
+    "oa_synthesize": "Synthesize a privacy-bounded occupancy answer (bounded_count, presence_state, timestamped_event_summary) per direct_answer_v1 contract.",
+    "oa_verify": "Verify the synthesized answer against privacy constraints, evidence-refs requirement, and required-fields-only rule.",
+    "oa_emit_answer": "Emit the verified direct_answer_v1 packet with confidence, evidence_refs, caveats, privacy_scope, limitations.",
+    "oa_emit_insufficient": "Emit the insufficient_evidence fallback packet when structured context is inadequate.",
+    "oa_done": "Terminal state: answer packet emitted and protocol complete."
+  }
+}

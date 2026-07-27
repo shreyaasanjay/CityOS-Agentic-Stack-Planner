@@ -148,6 +148,14 @@ def build_template(params: dict) -> tuple[dict, str]:
 
     channel_bound = int(params.get("channel_bound", 3))
     variant_name = str(params.get("variant_name") or _variant_name(approach_ids, include_emergency, include_pedestrian))
+    status_label = _safe_label(params.get("status_label") or "status_report")
+    timeout_label = _safe_label(params.get("timeout_label") or "timeout")
+    failure_label = _safe_label(params.get("failure_label") or "failure_notice")
+    grant_label = _safe_label(params.get("grant_label") or "grant_green")
+    hold_label = _safe_label(params.get("hold_label") or "set_red")
+    stop_label = _safe_label(params.get("stop_label") or "all_red")
+    primary_lock_id = _safe_id(params.get("primary_lock_id") or "intersection_green_lock")
+    phase_var_suffix = _safe_id(params.get("phase_var_suffix") or "green")
 
     agents = [{"id": approach_id} for approach_id in approach_ids]
     if include_emergency:
@@ -161,7 +169,7 @@ def build_template(params: dict) -> tuple[dict, str]:
             "id": f"{approach_id}_to_{controller_id}",
             "from": approach_id,
             "to": controller_id,
-            "labels": ["status_report", "timeout", "failure_notice"],
+            "labels": [status_label, timeout_label, failure_label],
         }
         for approach_id in approach_ids
     ]
@@ -170,7 +178,7 @@ def build_template(params: dict) -> tuple[dict, str]:
             "id": f"{controller_id}_to_{approach_id}",
             "from": controller_id,
             "to": approach_id,
-            "labels": ["grant_green", "set_red", "all_red"],
+            "labels": [grant_label, hold_label, stop_label],
         }
         for approach_id in approach_ids
     ]
@@ -199,7 +207,7 @@ def build_template(params: dict) -> tuple[dict, str]:
         ])
     channels.extend(_extra_channels(params, {agent["id"] for agent in agents}, {channel["id"] for channel in channels}))
 
-    resources = [{"id": "intersection_green_lock", "type": "Lock"}]
+    resources = [{"id": primary_lock_id, "type": "Lock"}]
     if include_emergency:
         resources.append({"id": "emergency_override_lock", "type": "Lock"})
     if include_pedestrian:
@@ -218,6 +226,18 @@ def build_template(params: dict) -> tuple[dict, str]:
             emergency_id=emergency_id,
             include_pedestrian=include_pedestrian,
             pedestrian_id=pedestrian_id,
+            approach_task=str(
+                params.get("approach_task")
+                or "Submit traffic or failure status for {agent_id}."
+            ),
+            controller_coordinate_task=str(
+                params.get("controller_coordinate_task")
+                or "Coordinate safe signal phases and enter all-red on failure."
+            ),
+            controller_command_task=str(
+                params.get("controller_command_task")
+                or "Publish verified signal commands to controlled approaches."
+            ),
         ),
     }
     return ir_data, _render_protocol(
@@ -232,6 +252,10 @@ def build_template(params: dict) -> tuple[dict, str]:
         pedestrian_id=pedestrian_id,
         channel_bound=channel_bound,
         variant_name=variant_name,
+        status_label=status_label,
+        stop_label=stop_label,
+        primary_lock_id=primary_lock_id,
+        phase_var_suffix=phase_var_suffix,
     )
 
 
@@ -305,14 +329,17 @@ def _state_tasks(
     emergency_id: str,
     include_pedestrian: bool,
     pedestrian_id: str,
+    approach_task: str,
+    controller_coordinate_task: str,
+    controller_command_task: str,
 ) -> dict[str, str]:
     tasks = {
         **{
-            f"{approach_id}_request": f"Submit traffic or failure status for {approach_id}."
+            f"{approach_id}_request": approach_task.format(agent_id=approach_id)
             for approach_id in approach_ids
         },
-        f"{controller_id}_coordinate": "Coordinate safe signal phases and enter all-red on failure.",
-        f"{controller_id}_command": "Publish verified signal commands to controlled approaches.",
+        f"{controller_id}_coordinate": controller_coordinate_task,
+        f"{controller_id}_command": controller_command_task,
     }
     if include_emergency:
         tasks[f"{emergency_id}_detect"] = "Report emergency vehicle priority requests to the controller."
@@ -336,12 +363,16 @@ def _render_protocol(
     pedestrian_id: str,
     channel_bound: int,
     variant_name: str,
+    status_label: str,
+    stop_label: str,
+    primary_lock_id: str,
+    phase_var_suffix: str,
 ) -> str:
     constants = {agent["id"]: _agent_id_to_const(agent["id"]) for agent in agents}
     channel_vars = {channel["id"]: _sanitize_id(channel["id"]) for channel in channels}
     all_consts = "{" + ", ".join(constants.values()) + "}"
     lock_type_set = "{" + ", ".join(constants.values()) + ', "FREE"}'
-    green_vars = {approach_id: _green_var(approach_id) for approach_id in approach_ids}
+    green_vars = {approach_id: _phase_var(approach_id, phase_var_suffix) for approach_id in approach_ids}
 
     lines = [
         "---- MODULE Protocol ----",
@@ -394,7 +425,7 @@ def _render_protocol(
             'variables msg = "";',
             "{",
             f"  {approach_var}_request:",
-            f'    send({inbound_var}, "status_report");',
+            f'    send({inbound_var}, "{status_label}");',
             f"  {approach_var}_await_command:",
             f"    receive({outbound_var}, msg);",
             f"  {approach_var}_done:",
@@ -461,7 +492,7 @@ def _render_protocol(
 
     lines.extend([
         f"  {controller_var}_acquire_intersection:",
-        "    acquire_lock(intersection_green_lock);",
+        f"    acquire_lock({_sanitize_id(primary_lock_id)});",
         f"  {controller_var}_safe_phase:",
     ])
     for index, approach_id in enumerate(approach_ids):
@@ -471,7 +502,7 @@ def _render_protocol(
         lines.append(f"    {green_vars[approach_id]} := FALSE;")
     lines.extend([
         f"  {controller_var}_release_intersection:",
-        "    release_lock(intersection_green_lock);",
+        f"    release_lock({_sanitize_id(primary_lock_id)});",
     ])
 
     if include_emergency:
@@ -510,7 +541,7 @@ def _render_protocol(
     for index, approach_id in enumerate(approach_ids, start=1):
         lines.extend([
             f"  {controller_var}_command_{index}:",
-            f'    send({channel_vars[f"{controller_id}_to_{approach_id}"]}, "all_red");',
+            f'    send({channel_vars[f"{controller_id}_to_{approach_id}"]}, "{stop_label}");',
         ])
     lines.extend([
         f"  {controller_var}_done:",
@@ -562,11 +593,15 @@ def _render_protocol(
 
 
 def _green_var(approach_id: str) -> str:
+    return _phase_var(approach_id, "green")
+
+
+def _phase_var(approach_id: str, suffix: str) -> str:
     parts = [part for part in _sanitize_id(approach_id).split("_") if part and part != "approach"]
     base = parts[0] if parts else "approach"
     if base.startswith("approach") and base[-1:].isdigit():
         base = base.replace("approach", "approach_")
-    return _sanitize_id(base + "_green")
+    return _sanitize_id(base + "_" + suffix)
 
 
 def _safe_id(value: object) -> str:

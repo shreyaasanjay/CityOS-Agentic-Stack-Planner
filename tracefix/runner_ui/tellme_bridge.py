@@ -13,6 +13,7 @@ from tellme_harness import TellMeHarness
 from tellme_harness.config import DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_TIMEOUT_SECONDS, get_llm_config
 from tellme_harness.tracefix_projection import build_tracefix_task_projection
 from tracefix.pipeline_timing import PipelineTimingReport
+from tracefix.runtime.context_manager import answer_uploaded_context_query
 
 
 class TellMeBridge:
@@ -39,6 +40,17 @@ class TellMeBridge:
             raise ValueError("A natural-language smart-room request is required.")
         if backend_mode not in {"deterministic", "fake_llm", "llm"}:
             raise ValueError("TeLLMe backend mode must be deterministic, fake_llm, or llm.")
+
+        uploaded_answer = answer_uploaded_context_query(query, space_id=space_id, timestamp=timestamp)
+        if uploaded_answer is not None:
+            state = {
+                "run_id": uploaded_answer["query_id"],
+                "tellme": uploaded_answer,
+                "tracefix": {},
+                "cityos": {},
+            }
+            self._write_json(self.current_path, state)
+            return uploaded_answer
 
         config = get_llm_config()
         effective_api_key = (request_api_key or "").strip() or config.api_key
@@ -206,6 +218,17 @@ class TellMeBridge:
                 json.dumps(compact_spec, indent=2, ensure_ascii=False),
             ]
         )
+
+    def tracefix_task_spec_path(self) -> Path:
+        """Return the official, immutable TeLLMe TaskSpec artifact path."""
+
+        current = self.current() or {}
+        tellme = current.get("tellme") if isinstance(current.get("tellme"), dict) else {}
+        run_dir = Path(str(tellme.get("run_dir") or ""))
+        path = (run_dir / "tracefix_task_spec.json").resolve()
+        if not path.is_file():
+            raise ValueError("The current TeLLMe run has no persisted tracefix_task_spec.json artifact.")
+        return path
 
     def record_tracefix_run(self, run_id: str) -> dict[str, Any]:
         state = self.current()

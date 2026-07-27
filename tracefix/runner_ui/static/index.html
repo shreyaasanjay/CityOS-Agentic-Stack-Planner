@@ -72,6 +72,11 @@
               <p class="environment-note">
                 Paste an API key above, or set OPENAI_API_KEY / TELLME_API_KEY before starting the server.
               </p>
+              <div class="json-context-upload">
+                <button id="uploadJsonButton" class="secondary-button" type="button">Upload JSON</button>
+                <input id="jsonContextFile" class="hidden" type="file" accept=".json,application/json" />
+                <div id="jsonContextStatus" class="context-status">No JSON context loaded</div>
+              </div>
               <label>
                 Natural-language intent
                 <textarea id="tellmeQuery" rows="8" placeholder="Turn off the lights in the conference room after 7 PM unless someone is still present."></textarea>
@@ -582,6 +587,6 @@
     </main>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="/static/app.js?v=tracefix-unified-ui-20260713-handoff-preview-v10" type="module"></script>
+    <script src="/static/app.js?v=tracefix-single-agent-procedure-v11" type="module"></script>
   </body>
 </html>
