@@ -1,9 +1,6 @@
 import json
-import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-import pytest
 
 from tracefix.runtime.web_data_harness import _select_smartroom_recording, run_web_data_apps
 
@@ -200,13 +197,11 @@ def _make_app(tmp_path, name, agent):
 
 def _make_manifest(tmp_path):
     writer_dir = _make_app(tmp_path, "tracefix-writer", "WRITER")
-    answer_dir = _make_app(tmp_path, "tracefix-answer", "ANSWER")
     monitor_dir = _make_app(tmp_path, "tracefix-monitor", "monitor")
     manifest = tmp_path / "demo-synthesis.json"
     manifest.write_text(json.dumps({
         "apps": [
             {"name": "tracefix-writer", "kind": "agent", "agent": "WRITER", "path": str(writer_dir)},
-            {"name": "tracefix-answer", "kind": "agent", "agent": "ANSWER", "path": str(answer_dir)},
             {"name": "tracefix-monitor", "kind": "monitor", "agent": None, "path": str(monitor_dir)},
         ],
     }), encoding="utf-8")
@@ -232,47 +227,19 @@ def test_web_data_harness_feeds_synthesized_apps_from_http_source(tmp_path):
     assert result["sourceKind"] == "http"
     assert result["payload"]["contentType"] == "application/json"
     assert result["payload"]["sizeBytes"] > 0
-    assert [run["phase"] for run in result["runs"]] == [
-        "monitor_start",
-        "retrieve",
-        "monitor_event_1",
-        "synthesize",
-        "monitor_event_2",
-        "monitor_complete",
-    ]
+    assert len(result["runs"]) == 2
 
     for run in result["runs"]:
         assert run["status"] == "completed"
-        assert run["handlerConfigured"] is True
+        assert run["handlerConfigured"] is False
         ready = json.loads(open(run["readyPath"], encoding="utf-8").read())
         assert ready["runtime_mode"] == "web_data"
-        assert ready["handler_configured"] is True
+        assert ready["handler_configured"] is False
         assert run["frameRecords"]
         record = json.loads(open(run["frameRecords"][0], encoding="utf-8").read())
-        assert record["stream"].startswith("web_data_")
+        assert record["stream"] == "web_data"
         assert record["input_exists"] is True
-        assert record["input_size_bytes"] > 0
-        assert run["handlerRecords"]
-        assert run["agentOutput"]["agent_id"]
-
-    assert result["agentPipeline"]["retrievalProducers"] == ["WRITER"]
-    assert result["agentPipeline"]["answerProducer"] == "ANSWER"
-    assert result["agentPipeline"]["monitorCount"] == 1
-    assert result["agentPipeline"]["monitorCheckpointCount"] == 4
-    assert result["answer"]["producer_agent"] == "ANSWER"
-    monitor_request = json.loads(
-        (tmp_path / "web-data-run" / "requests" / "monitor_event_2_tracefix-monitor.json").read_text(encoding="utf-8")
-    )
-    transcript = monitor_request["communication_transcript"]
-    assert [(item["from"], item["to"], item["label"]) for item in transcript] == [
-        ("WRITER", "ANSWER", "evidence_packet"),
-        ("ANSWER", "tellme", "answer_packet"),
-    ]
-    assert monitor_request["monitor_mode"] == "event"
-    assert monitor_request["current_event"]["label"] == "answer_packet"
-    assert "answer_packet" not in monitor_request
-    assert monitor_request["agent_provider"] == "deterministic"
-    assert "agent_api_key" not in monitor_request
+        assert record["input_size_bytes"] == result["payload"]["sizeBytes"]
 
 
 def test_web_data_harness_collects_smartroom_control_snapshot(tmp_path):
@@ -312,21 +279,15 @@ def test_web_data_harness_collects_smartroom_control_snapshot(tmp_path):
     assert result["answerPath"]
 
     snapshot = json.loads(open(result["payload"]["payloadPath"], encoding="utf-8").read())
-    evidence = snapshot["evidence_packets"][0]
-    assert evidence["producer_agent"] == "WRITER"
-    cam2 = evidence["selected"]["cameras"]["cam2"]
+    cam2 = snapshot["selected"]["cameras"]["cam2"]
     assert set(cam2["inference"].keys()) == {"action", "action-hmdb", "yolo26l", "yolo26n-pose"}
     assert cam2["inference"]["action-hmdb"]["data"]["detections"]["actions"] == ["pour"]
+    assert cam2["frame"]["localPath"].endswith(".jpg")
 
     for run in result["runs"]:
         assert run["status"] == "completed"
         assert run["frameRecords"]
-        assert run["handlerConfigured"] is True
-        assert run["handlerRecords"]
-
-    assert result["answer"]["producer_agent"] == "ANSWER"
-    assert result["answer"]["evidence_refs"]
-    assert result["answer"]["evidence_used_count"] == 1
+        assert run["answerPath"]
 
 
 
@@ -621,70 +582,3 @@ def test_web_data_harness_answers_combined_activity_question(tmp_path):
     assert combination["count"] == 2
     assert combination["byCamera"][0]["trackIds"] == ["1", "2"]
     assert "2 people were both standing up and talking" in result["answer"]["chatAnswer"]
-
-
-def test_web_data_harness_does_not_create_fallback_when_agent_handler_fails(tmp_path):
-    manifest = _make_manifest(tmp_path)
-    server, url = _start_server(_JsonHandler)
-    try:
-        result = run_web_data_apps(
-            manifest_path=manifest,
-            source_url=url,
-            source_mode="raw",
-            output_root=tmp_path / "failed-agent-run",
-            handler_command=[sys.executable, "-c", "print('{}')"],
-        )
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    assert result["ok"] is False
-    assert result["answer"] is None
-    assert result["answerPath"] is None
-    assert result["agentPipeline"]["answerProducer"] is None
-    assert result["runs"][0]["status"] == "failed"
-
-
-def test_runtime_agent_api_key_is_not_persisted(tmp_path):
-    manifest = _make_manifest(tmp_path)
-    server, url = _start_server(_JsonHandler)
-    secret = "runtime-agent-secret-value"
-    output_root = tmp_path / "secret-isolation-run"
-    try:
-        result = run_web_data_apps(
-            manifest_path=manifest,
-            source_url=url,
-            source_mode="raw",
-            output_root=output_root,
-            agent_provider="deterministic",
-            agent_api_key=secret,
-        )
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    assert result["ok"] is True
-    for path in output_root.rglob("*"):
-        if path.is_file():
-            assert secret not in path.read_text(encoding="utf-8", errors="replace")
-
-
-def test_web_data_harness_rejects_collapsed_retriever_answer_roles(tmp_path):
-    writer_dir = _make_app(tmp_path, "tracefix-writer", "WRITER")
-    monitor_dir = _make_app(tmp_path, "tracefix-monitor", "monitor")
-    manifest = tmp_path / "legacy-synthesis.json"
-    manifest.write_text(json.dumps({
-        "apps": [
-            {"name": "tracefix-writer", "kind": "agent", "agent": "WRITER", "path": str(writer_dir)},
-            {"name": "tracefix-monitor", "kind": "monitor", "agent": None, "path": str(monitor_dir)},
-        ],
-    }), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="distinct retrieval and answer agent apps"):
-        run_web_data_apps(
-            manifest_path=manifest,
-            source_url="http://127.0.0.1:1/",
-            source_mode="raw",
-            raw_data_json='{"occupied": true}',
-            output_root=tmp_path / "legacy-run",
-        )

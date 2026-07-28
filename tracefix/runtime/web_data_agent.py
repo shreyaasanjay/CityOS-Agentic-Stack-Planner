@@ -315,20 +315,117 @@ def _date_label(value: dict[str, int]) -> str:
     return f"{month} {value['day']}, {value['year']}"
 
 
-def _select_recording(recordings: list[dict[str, Any]], question: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+def _recording_option(recording: dict[str, Any]) -> dict[str, Any]:
+    day = str(recording.get("day") or "")
+    rec = str(recording.get("rec") or "")
+    return {
+        "recordingId": "/".join(part for part in (day, rec) if part),
+        "day": day,
+        "rec": rec,
+        "label": " / ".join(part for part in (day, rec) if part) or "recording",
+    }
+
+
+def _select_recording(
+    recordings: list[dict[str, Any]],
+    question: str,
+    recording_override: Any | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     requested = _requested_date(question)
+    dated = [
+        recording
+        for recording in recordings
+        if requested
+        and (date := _recording_date(recording)) is not None
+        and date["month"] == requested["month"]
+        and date["day"] == requested["day"]
+        and requested.get("year") in {None, date["year"]}
+    ]
+    if recording_override is not None:
+        candidates = dated or recordings
+        selected_override: dict[str, Any] | None = None
+        if isinstance(recording_override, dict):
+            identifier = str(recording_override.get("recordingId") or "").strip()
+            parts = [part for part in identifier.split("/") if part]
+            day = str(recording_override.get("day") or (parts[-2] if len(parts) >= 2 else "")).strip()
+            rec = str(recording_override.get("rec") or (parts[-1] if len(parts) >= 2 else "")).strip()
+            selected_override = next(
+                (
+                    recording for recording in recordings
+                    if (not day or str(recording.get("day") or "") == day)
+                    and (not rec or str(recording.get("rec") or "") == rec)
+                ),
+                None,
+            )
+        else:
+            text = str(recording_override or "").strip()
+            take_match = re.fullmatch(r"(?:take\s*)?(\d+)", text, flags=re.IGNORECASE)
+            if take_match:
+                take_index = int(take_match.group(1)) - 1
+                if 0 <= take_index < len(candidates):
+                    selected_override = candidates[take_index]
+                else:
+                    return None, {
+                        "mode": "needs_clarification",
+                        "requestedDate": requested,
+                        "requestedDateLabel": requested.get("label") if requested else None,
+                        "needsClarification": True,
+                        "clarificationPrompt": f"Take {take_index + 1} is not available. Choose one of the listed takes.",
+                        "candidates": [_recording_option(item) for item in candidates],
+                        "reason": "invalid recording selection",
+                    }
+            else:
+                lowered = text.casefold()
+                selected_override = next(
+                    (
+                        recording for recording in candidates
+                        if lowered in {
+                            str(recording.get("rec") or "").casefold(),
+                            _recording_option(recording)["recordingId"].casefold(),
+                            _recording_option(recording)["label"].casefold(),
+                        }
+                    ),
+                    None,
+                )
+        if selected_override is not None:
+            option = _recording_option(selected_override)
+            selected_date = _recording_date(selected_override)
+            return selected_override, {
+                "mode": "recording_override",
+                "requestedDate": selected_date,
+                "requestedDateLabel": _date_label(selected_date) if selected_date else None,
+                "recordingOverride": {"day": option["day"], "rec": option["rec"]},
+                "reason": f"selected requested recording {option['rec']}",
+            }
+        return None, {
+            "mode": "recording_override",
+            "requestedDate": requested,
+            "requestedDateLabel": requested.get("label") if requested else None,
+            "needsClarification": True,
+            "clarificationPrompt": "I could not find that exact recording. Choose one of the available recordings.",
+            "candidates": [_recording_option(item) for item in candidates],
+            "reason": "recording override did not match exactly",
+        }
     if requested:
-        for recording in recordings:
-            date = _recording_date(recording)
-            if not date:
-                continue
-            if date["month"] == requested["month"] and date["day"] == requested["day"] and requested.get("year") in {None, date["year"]}:
-                return recording, {
-                    "mode": "requested_date",
-                    "requestedDate": requested,
-                    "requestedDateLabel": requested["label"],
-                    "reason": f"matched requested date {requested['label']}",
-                }
+        if dated and re.search(r"\b(total|cumulative|all takes|all recordings)\b", question, re.IGNORECASE):
+            return None, {
+                "mode": "requested_date_total",
+                "requestedDate": requested,
+                "requestedDateLabel": requested["label"],
+                "aggregateRecordings": dated,
+                "reason": f"aggregate occupancy requested across {len(dated)} recordings for {requested['label']}",
+            }
+        if dated:
+            count = len(dated)
+            return None, {
+                "mode": "needs_clarification",
+                "requestedDate": requested,
+                "requestedDateLabel": requested["label"],
+                "needsClarification": True,
+                "clarificationPrompt": f"I found {count} smartroom {'recording' if count == 1 else 'recordings'} for {requested['label']}. Which take should I use?",
+                "candidates": [_recording_option(item) for item in dated],
+                "reason": f"recording selection required for requested date {requested['label']}",
+            }
         available = sorted({_date_label(date) for item in recordings if (date := _recording_date(item))}, reverse=True)
         return None, {
             "mode": "requested_date",
@@ -336,6 +433,14 @@ def _select_recording(recordings: list[dict[str, Any]], question: str) -> tuple[
             "requestedDateLabel": requested["label"],
             "availableDates": available,
             "reason": f"no recording matched requested date {requested['label']}",
+        }
+    if len(recordings) > 1:
+        return None, {
+            "mode": "needs_clarification",
+            "needsClarification": True,
+            "clarificationPrompt": "I found multiple smartroom recordings. Which date/take should I use?",
+            "candidates": [_recording_option(item) for item in recordings],
+            "reason": "the question did not identify a specific recording",
         }
     selected = recordings[0] if recordings else None
     return selected, {
@@ -410,9 +515,14 @@ def _retrieve_smartroom(request: dict[str, Any], agent_id: str) -> dict[str, Any
     base = _base_url(source_url)
     recordings_doc = _request_json(_api_url(base, "recordings"), timeout=timeout, max_bytes=max_bytes)
     recordings = [item for item in recordings_doc.get("recordings", []) if isinstance(item, dict)]
-    selected, selection = _select_recording(recordings, question)
+    selected, selection = _select_recording(
+        recordings,
+        question,
+        request.get("recording_override"),
+    )
     errors: list[dict[str, str]] = []
     selected_packet: dict[str, Any] | None = None
+    aggregate_packets: list[dict[str, Any]] = []
     if selected:
         selected_packet, errors = _fetch_recording_evidence(
             base=base,
@@ -420,6 +530,18 @@ def _retrieve_smartroom(request: dict[str, Any], agent_id: str) -> dict[str, Any
             timeout=timeout,
             max_bytes=max_bytes,
         )
+    for aggregate_recording in selection.get("aggregateRecordings") or []:
+        if not isinstance(aggregate_recording, dict):
+            continue
+        packet, packet_errors = _fetch_recording_evidence(
+            base=base,
+            selected=aggregate_recording,
+            timeout=timeout,
+            max_bytes=max_bytes,
+        )
+        aggregate_packets.append(packet)
+        errors.extend(packet_errors)
+    selection = {key: value for key, value in selection.items() if key != "aggregateRecordings"}
     return {
         "kind": "tracefix.agent.evidence.v1",
         "producer_agent": agent_id,
@@ -431,6 +553,7 @@ def _retrieve_smartroom(request: dict[str, Any], agent_id: str) -> dict[str, Any
         "recordings": recordings,
         "selection": selection,
         "selected": selected_packet,
+        "aggregate_selected": aggregate_packets,
         "errors": errors,
     }
 
@@ -477,6 +600,11 @@ def _agent_action(
 
 
 def _retrieve_smartroom_agent(request: dict[str, Any], agent_id: str, provider: str, model: str) -> dict[str, Any]:
+    # Recording choice is a deterministic product/UI contract. Resolve
+    # clarifications, explicit take selections, and cumulative-date requests
+    # before allowing the model to choose retrieval tools.
+    if request.get("recording_override") is not None:
+        return _retrieve_smartroom(request, agent_id)
     source_url = str(request.get("source_url") or "").strip()
     question = str(request.get("question") or "").strip()
     timeout = int(request.get("timeout_seconds") or 30)
@@ -758,7 +886,68 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
     selection = evidence.get("selection") if isinstance(evidence.get("selection"), dict) else {}
     selected = evidence.get("selected") if isinstance(evidence.get("selected"), dict) else None
     evidence_ref = f"{evidence.get('producer_agent')}:recording-index"
+    aggregate_selected = [
+        item for item in evidence.get("aggregate_selected") or [] if isinstance(item, dict)
+    ]
+    if selection.get("mode") == "requested_date_total" and aggregate_selected:
+        recording_peaks: list[int] = []
+        aggregate_cameras: list[dict[str, Any]] = []
+        for packet in aggregate_selected:
+            cameras_raw = packet.get("cameras") if isinstance(packet.get("cameras"), dict) else {}
+            camera_summaries = [
+                _camera_summary(name, value if isinstance(value, dict) else {})
+                for name, value in cameras_raw.items()
+            ]
+            peaks = [camera["peakPeople"] for camera in camera_summaries if camera.get("peakPeople") is not None]
+            recording_peaks.append(max(peaks, default=0))
+            aggregate_cameras.extend(camera_summaries)
+        total_peak = sum(recording_peaks)
+        requested = str(selection.get("requestedDateLabel") or "the requested date")
+        text = (
+            f"For {requested}, the summed per-take peak occupancy was "
+            f"{_count_label(total_peak)} across {len(aggregate_selected)} recordings."
+        )
+        return {
+            "answer": text,
+            "text": text,
+            "chatAnswer": text,
+            "chat_answer": text,
+            "producer_agent": agent_id,
+            "confidence": 1.0,
+            "evidence_refs": [evidence_ref],
+            "limitations": ["Per-take peaks are summed; this is not a unique-person count."],
+            "source_count": int(evidence.get("source_count") or 0),
+            "evidence_used_count": len(aggregate_selected),
+            "recording": None,
+            "recordingsAggregated": len(aggregate_selected),
+            "aggregatePeakPeople": total_peak,
+            "cameras": aggregate_cameras,
+            "selection": selection,
+            "errors": evidence.get("errors") or [],
+        }
     if selected is None:
+        if selection.get("needsClarification"):
+            prompt = str(selection.get("clarificationPrompt") or "Choose a recording to continue.")
+            candidates = selection.get("candidates") if isinstance(selection.get("candidates"), list) else []
+            return {
+                "answer": prompt,
+                "text": prompt,
+                "chatAnswer": prompt,
+                "chat_answer": prompt,
+                "producer_agent": agent_id,
+                "confidence": 1.0,
+                "evidence_refs": [evidence_ref],
+                "limitations": ["A recording must be selected before evidence retrieval can continue."],
+                "source_count": int(evidence.get("source_count") or 0),
+                "evidence_used_count": 1,
+                "recording": None,
+                "cameras": [],
+                "selection": selection,
+                "needsClarification": True,
+                "clarificationPrompt": prompt,
+                "clarificationCandidates": candidates,
+                "errors": evidence.get("errors") or [],
+            }
         requested = str(selection.get("requestedDateLabel") or "the requested date")
         available = [str(item) for item in selection.get("availableDates", [])]
         text = f"No smartroom recording matched {requested}."

@@ -575,6 +575,67 @@ textarea:focus {
   background: var(--red-soft);
 }
 
+.clarification-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(214, 163, 75, 0.45);
+  border-radius: 8px;
+  background: var(--amber-soft);
+  color: var(--ink);
+}
+
+.clarification-copy h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.clarification-copy p {
+  margin: 5px 0 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.clarification-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.recording-choice {
+  display: grid;
+  gap: 5px;
+  min-height: 74px;
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  text-align: left;
+}
+
+.recording-choice:hover,
+.recording-choice:focus-visible {
+  border-color: var(--amber);
+  outline: 0;
+}
+
+.recording-choice strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.recording-choice span,
+.clarification-empty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .tellme-detail-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

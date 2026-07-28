@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 
 import type { Agent, EvidenceItem, QueryResult } from '@/lib/api/types'
-import { getRequestApiKeyOriginPolicy } from '@/lib/security/api-key-origin'
 import {
   asArray,
   asNumber,
@@ -17,9 +16,6 @@ export const runtime = 'nodejs'
 interface AnswerRequest {
   query?: string
   mirrorApiUrl?: string
-  agentProvider?: 'openai' | 'anthropic' | 'openrouter' | 'local'
-  agentModel?: string
-  agentApiKey?: string
   model?: string
   timestamp?: string
   recordingOverride?: { recordingId?: string; day?: string; rec?: string }
@@ -48,13 +44,6 @@ function safeAnswerText(value: string) {
 }
 
 function aggregateAnswer(query: string, answer: JsonObject): string {
-  // TeLLMe presents the generated TraceFix agent's answer; it must not silently
-  // replace that answer with a second, UI-authored interpretation of the data.
-  const agentAnswer = safeAnswerText(
-    asString(answer.answer) || asString(answer.chat_answer) || asString(answer.chatAnswer),
-  )
-  if (agentAnswer) return agentAnswer
-
   const cameras = asArray(answer.cameras).map(asObject)
   if (/\b(how many people|occupancy|occupied)\b/i.test(query) && cameras.length) {
     const peaks = cameras.map((camera) => asNumber(camera.peakPeople)).filter((value): value is number => value !== null)
@@ -86,6 +75,11 @@ function aggregateAnswer(query: string, answer: JsonObject): string {
     const summary = entries.map(([label, count]) => `${label}: ${count}`).join('; ')
     return `The approved sensor summary found these activity records: ${summary}. These aggregate counts do not identify people or establish that separate activities involved the same person.`
   }
+
+  const backendAnswer = safeAnswerText(
+    asString(answer.chat_answer) || asString(answer.chatAnswer),
+  )
+  if (backendAnswer) return backendAnswer
 
   const backendText = cameras.length === 0 ? safeAnswerText(asString(answer.text)) : ''
   if (backendText) return backendText
@@ -127,10 +121,7 @@ function safeFinalResult(envelope: JsonObject, query: string, model: string): Qu
   const data = asObject(envelope.data)
   const answer = asObject(data.web_data_answer)
   const cameras = asArray(answer.cameras)
-  const reportedEvidenceCount = asNumber(answer.evidence_used_count)
-  const evidenceCount = reportedEvidenceCount === null
-    ? cameras.length
-    : Math.max(0, Math.floor(reportedEvidenceCount))
+  const evidenceCount = cameras.length
   const evidence: EvidenceItem[] = Array.from({ length: evidenceCount }, (_, index) => ({
     id: `private-evidence-${index + 1}`,
     kind: 'sensor',
@@ -150,9 +141,9 @@ function safeFinalResult(envelope: JsonObject, query: string, model: string): Qu
     },
     {
       id: 'cityos',
-      name: safeLabel(asString(answer.producer_agent)) || 'TraceFix answer agent',
-      type: 'Generated runtime agent',
-      role: 'Produced the final answer from approved evidence packets.',
+      name: 'Approved smart-room service',
+      type: 'Sensor service',
+      role: 'Returned an aggregate result without exposing raw captures.',
       status: 'Complete',
     },
   ]
@@ -186,15 +177,6 @@ export async function POST(request: Request) {
 
   const query = body.query?.trim() || ''
   if (!query) return NextResponse.json({ error: 'The original question is required.' }, { status: 400 })
-  const agentProvider = body.agentProvider || 'local'
-  const agentModel = body.agentModel?.trim() || 'gemma3:4b'
-  const agentApiKey = body.agentApiKey?.trim() || ''
-  if (agentProvider !== 'local' && !agentApiKey) {
-    return NextResponse.json({ error: 'Add the API key used by the generated CityOS answer agent.' }, { status: 400 })
-  }
-  if (agentApiKey && !getRequestApiKeyOriginPolicy(request).canUseApiKeys) {
-    return NextResponse.json({ error: getRequestApiKeyOriginPolicy(request).message }, { status: 403 })
-  }
 
   let sourceUrl: URL
   try {
@@ -222,9 +204,6 @@ export async function POST(request: Request) {
         sourceMode: 'auto',
         timeoutSeconds: 30,
         question: query,
-        agentProvider,
-        agentModel,
-        agentApiKey: agentApiKey || undefined,
         timestamp: body.timestamp?.trim() || undefined,
         recordingOverride: normalizedRecordingOverride(body.recordingOverride),
       }),
@@ -240,7 +219,7 @@ export async function POST(request: Request) {
     if (!currentTellme.response.ok || currentTellme.payload.ok !== true) {
       return NextResponse.json({ error: 'The final answer was not available.' }, { status: 502 })
     }
-    return NextResponse.json(safeFinalResult(currentTellme.payload, query, agentModel))
+    return NextResponse.json(safeFinalResult(currentTellme.payload, query, body.model?.trim() || ''))
   } catch {
     return NextResponse.json({ error: 'The smart-room answer service is unavailable.' }, { status: 502 })
   }

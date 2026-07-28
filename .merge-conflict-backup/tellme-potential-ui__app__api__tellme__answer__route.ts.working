@@ -17,9 +17,11 @@ export const runtime = 'nodejs'
 interface AnswerRequest {
   query?: string
   mirrorApiUrl?: string
+<<<<<<< HEAD
   agentProvider?: 'openai' | 'anthropic' | 'openrouter' | 'local'
   agentModel?: string
   agentApiKey?: string
+=======
   model?: string
   timestamp?: string
   recordingOverride?: { recordingId?: string; day?: string; rec?: string }
@@ -34,6 +36,7 @@ function normalizedRecordingOverride(value: AnswerRequest['recordingOverride']) 
     day: value.day?.trim() || (parts.length >= 2 ? parts.at(-2) : ''),
     rec: value.rec?.trim() || (parts.length >= 2 ? parts.at(-1) : ''),
   }
+>>>>>>> 0e636421a1b896510e26b99dfc9734510d115316
 }
 
 function safeLabel(value: string) {
@@ -222,11 +225,14 @@ export async function POST(request: Request) {
         sourceMode: 'auto',
         timeoutSeconds: 30,
         question: query,
+<<<<<<< HEAD
         agentProvider,
         agentModel,
         agentApiKey: agentApiKey || undefined,
+=======
         timestamp: body.timestamp?.trim() || undefined,
         recordingOverride: normalizedRecordingOverride(body.recordingOverride),
+>>>>>>> 0e636421a1b896510e26b99dfc9734510d115316
       }),
     }, 180_000)
     if (!webRun.response.ok || webRun.payload.ok === false) {

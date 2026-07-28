@@ -993,9 +993,17 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         or payload.get("task_text")
         or ""
     ).strip()
+    request_timestamp = str(payload.get("timestamp") or payload.get("requestTimestamp") or "").strip()
+    if request_timestamp:
+        question_context = f"{question_context} at {request_timestamp}".strip()
+    recording_override = payload.get("recordingOverride") or payload.get("recording") or payload.get("selectedRecording")
+    current = _tellme_bridge(root).current() or {}
+    tellme = current.get("tellme") if isinstance(current.get("tellme"), dict) else {}
+    if not request_timestamp:
+        request_timestamp = str(tellme.get("timestamp") or "").strip()
+        if request_timestamp and request_timestamp not in question_context:
+            question_context = f"{question_context} at {request_timestamp}".strip()
     if not question_context:
-        current = _tellme_bridge(root).current() or {}
-        tellme = current.get("tellme") if isinstance(current.get("tellme"), dict) else {}
         spec = tellme.get("tracefix_task_spec") if isinstance(tellme.get("tracefix_task_spec"), dict) else {}
         question_context = str(tellme.get("query") or spec.get("user_query") or "").strip()
     raw_data_json = str(
@@ -1015,6 +1023,7 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         max_bytes=max_bytes,
         question_context=question_context,
         raw_data_json=raw_data_json,
+        recording_override=recording_override,
         agent_provider=str(payload.get("agentProvider") or payload.get("agent_provider") or "deterministic"),
         agent_model=str(payload.get("agentModel") or payload.get("agent_model") or ""),
         agent_api_key=_clean_key(payload.get("agentApiKey") or payload.get("agent_api_key")),
