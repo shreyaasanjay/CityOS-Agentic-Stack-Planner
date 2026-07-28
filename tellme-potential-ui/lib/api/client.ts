@@ -85,6 +85,7 @@ const httpQueryApi: QueryApi = {
       query: req.query,
       mirrorApiUrl: req.mirrorApiUrl,
       model: req.tracefixModel,
+      language: req.language,
     }, options?.signal)
   },
 
@@ -96,6 +97,7 @@ const httpQueryApi: QueryApi = {
       model: req.tracefixModel,
       timestamp: req.timestamp,
       recordingOverride: { recordingId },
+      language: req.language,
     }, options?.signal)
   },
 

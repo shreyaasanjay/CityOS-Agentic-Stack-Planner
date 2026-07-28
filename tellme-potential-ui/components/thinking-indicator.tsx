@@ -1,24 +1,31 @@
 import { ArrowUpRight, Check, Circle, Loader2, Search, Server, Square } from 'lucide-react'
 
+import { ResponseTimer } from '@/components/response-timer'
+import { translate, type LanguageMode, type TranslationKey } from '@/lib/i18n'
 import type { QueryProgressStage } from '@/lib/api/types'
 
 const STEPS = [
-  { id: 'planning', label: 'Understanding request' },
-  { id: 'verifying', label: 'Verifying workflow' },
-  { id: 'synthesizing', label: 'Preparing data access' },
-  { id: 'answering', label: 'Generating answer' },
-] satisfies { id: QueryProgressStage; label: string }[]
+  { id: 'planning', label: 'thinking.planning' },
+  { id: 'verifying', label: 'thinking.verifying' },
+  { id: 'synthesizing', label: 'thinking.synthesizing' },
+  { id: 'answering', label: 'thinking.answering' },
+] satisfies { id: QueryProgressStage; label: TranslationKey }[]
 
 export function ThinkingIndicator({
   stage,
   backendRunId,
+  startedAt,
+  language,
   onStop,
 }: {
   stage: QueryProgressStage
   backendRunId?: string
+  startedAt: number
+  language: LanguageMode
   onStop?: () => void
 }) {
   const activeIndex = Math.max(0, STEPS.findIndex((step) => step.id === stage))
+  const t = (key: TranslationKey) => translate(language, key)
   const backendHref = backendRunId
     ? `/api/tellme/backend?run=${encodeURIComponent(backendRunId)}`
     : '/api/tellme/backend'
@@ -30,18 +37,19 @@ export function ThinkingIndicator({
           <span className="flex size-6 items-center justify-center rounded-md bg-accent text-accent-foreground">
             <Search className="size-3.5" aria-hidden="true" />
           </span>
-          <span className="font-medium">Preparing grounded answer</span>
+          <span className="font-medium">{t('thinking.title')}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <ResponseTimer startedAt={startedAt} label={t('thinking.elapsed')} />
           <a
             href={backendHref}
             target="_blank"
             rel="noreferrer"
-            title="Open TraceFix runner and intent decomposition"
+            title={t('result.tracefixTitle')}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
           >
             <Server className="size-3" aria-hidden="true" />
-            {backendRunId ? 'TraceFix run' : 'TraceFix'}
+            {backendRunId ? t('result.tracefixRun') : 'TraceFix'}
             <ArrowUpRight className="size-3" aria-hidden="true" />
           </a>
           {onStop && (
@@ -51,7 +59,7 @@ export function ThinkingIndicator({
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
             >
               <Square className="size-3" aria-hidden="true" />
-              Stop
+              {t('thinking.stop')}
             </button>
           )}
         </div>
@@ -80,7 +88,7 @@ export function ThinkingIndicator({
                 </span>
               )}
               <span className={complete || active ? 'text-foreground' : 'text-muted-foreground'}>
-                {step.label}
+                {t(step.label)}
               </span>
             </li>
           )

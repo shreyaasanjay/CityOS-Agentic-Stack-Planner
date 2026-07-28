@@ -17,6 +17,7 @@ import {
   Sun,
   Type,
 } from 'lucide-react'
+import { translate, type LanguageMode, type TranslationKey } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 export type ThemeMode = 'light' | 'dark'
@@ -25,8 +26,6 @@ export type DensityMode = 'standard' | 'compact'
 export type AnswerStyle = 'concise' | 'detailed'
 export type ThemeColor = 'green' | 'blue' | 'violet'
 export type CitationStyle = 'inline' | 'summary'
-export type LanguageMode = 'en' | 'es' | 'hi'
-
 export interface AppearanceSettings {
   theme: ThemeMode
   themeColor: ThemeColor
@@ -56,6 +55,7 @@ function updateSetting<K extends keyof AppearanceSettings>(
 export function SettingsMenu({ settings, onSettingsChange }: SettingsMenuProps) {
   const [open, setOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const t = (key: TranslationKey) => translate(settings.language, key)
 
   function setSetting<K extends keyof AppearanceSettings>(
     key: K,
@@ -70,7 +70,7 @@ export function SettingsMenu({ settings, onSettingsChange }: SettingsMenuProps) 
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        aria-label="Open settings"
+        aria-label={t('settings.open')}
         className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-sm transition-colors hover:bg-muted"
       >
         <Settings className="size-4.5" aria-hidden="true" />
@@ -83,38 +83,38 @@ export function SettingsMenu({ settings, onSettingsChange }: SettingsMenuProps) 
               <LogIn className="size-4" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">User access</p>
+              <p className="text-sm font-semibold">{t('settings.userAccess')}</p>
               <p className="text-[12px] leading-relaxed text-muted-foreground">
-                Sign in support can connect here when accounts are ready.
+                {t('settings.signInSupport')}
               </p>
             </div>
             <button
               type="button"
               className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
             >
-              Sign in
+              {t('settings.signIn')}
             </button>
           </div>
 
           <div className="mt-2 flex flex-col gap-1">
-            <MenuSectionLabel>Common</MenuSectionLabel>
+            <MenuSectionLabel>{t('settings.common')}</MenuSectionLabel>
             <SegmentedSetting
               icon={settings.theme === 'dark' ? Moon : Sun}
-              label="Dark mode"
+              label={t('settings.darkMode')}
               options={[
-                { label: 'Light', value: 'light' as const },
-                { label: 'Dark', value: 'dark' as const },
+                { label: t('settings.light'), value: 'light' as const },
+                { label: t('settings.dark'), value: 'dark' as const },
               ]}
               value={settings.theme}
               onChange={(value) => setSetting('theme', value)}
             />
             <SegmentedSetting
               icon={Palette}
-              label="Theme color"
+              label={t('settings.themeColor')}
               options={[
-                { label: 'Green', value: 'green' as const },
-                { label: 'Blue', value: 'blue' as const },
-                { label: 'Violet', value: 'violet' as const },
+                { label: t('settings.green'), value: 'green' as const },
+                { label: t('settings.blue'), value: 'blue' as const },
+                { label: t('settings.violet'), value: 'violet' as const },
               ]}
               value={settings.themeColor}
               onChange={(value) => setSetting('themeColor', value)}
@@ -122,18 +122,18 @@ export function SettingsMenu({ settings, onSettingsChange }: SettingsMenuProps) 
             />
             <SegmentedSetting
               icon={Type}
-              label="Font size"
+              label={t('settings.fontSize')}
               options={[
-                { label: 'Comfort', value: 'comfortable' as const },
-                { label: 'Large', value: 'large' as const },
+                { label: t('settings.comfortable'), value: 'comfortable' as const },
+                { label: t('settings.large'), value: 'large' as const },
               ]}
               value={settings.textScale}
               onChange={(value) => setSetting('textScale', value)}
             />
             <ToggleSetting
               icon={Sparkles}
-              label="Streaming"
-              description="Show answers as they are generated."
+              label={t('settings.streaming')}
+              description={t('settings.streamingDescription')}
               checked={settings.streamingEnabled}
               onChange={(checked) => setSetting('streamingEnabled', checked)}
             />
@@ -144,7 +144,7 @@ export function SettingsMenu({ settings, onSettingsChange }: SettingsMenuProps) 
             onClick={() => setAdvancedOpen((value) => !value)}
             className="mt-2 flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm font-medium transition-colors hover:bg-muted"
           >
-            Advanced settings
+            {t('settings.advanced')}
             <ChevronDown
               className={cn('size-4 transition-transform', advancedOpen && 'rotate-180')}
               aria-hidden="true"
@@ -155,11 +155,11 @@ export function SettingsMenu({ settings, onSettingsChange }: SettingsMenuProps) 
             <div className="flex flex-col gap-1 border-t border-border pt-2">
               <SegmentedSetting
                 icon={Globe2}
-                label="Language"
+                label={t('settings.language')}
                 options={[
-                  { label: 'English', value: 'en' as const },
-                  { label: 'Spanish', value: 'es' as const },
-                  { label: 'Hindi', value: 'hi' as const },
+                  { label: t('settings.english'), value: 'en' as const },
+                  { label: t('settings.spanish'), value: 'es' as const },
+                  { label: t('settings.hindi'), value: 'hi' as const },
                 ]}
                 value={settings.language}
                 onChange={(value) => setSetting('language', value)}
@@ -167,44 +167,44 @@ export function SettingsMenu({ settings, onSettingsChange }: SettingsMenuProps) 
               />
               <SegmentedSetting
                 icon={ShieldCheck}
-                label="Citation style"
+                label={t('settings.citationStyle')}
                 options={[
-                  { label: 'Inline', value: 'inline' as const },
-                  { label: 'Summary', value: 'summary' as const },
+                  { label: t('settings.inline'), value: 'inline' as const },
+                  { label: t('settings.summary'), value: 'summary' as const },
                 ]}
                 value={settings.citationStyle}
                 onChange={(value) => setSetting('citationStyle', value)}
               />
               <SegmentedSetting
                 icon={SlidersHorizontal}
-                label="Spacing"
+                label={t('settings.spacing')}
                 options={[
-                  { label: 'Standard', value: 'standard' as const },
-                  { label: 'Compact', value: 'compact' as const },
+                  { label: t('settings.standard'), value: 'standard' as const },
+                  { label: t('settings.compact'), value: 'compact' as const },
                 ]}
                 value={settings.density}
                 onChange={(value) => setSetting('density', value)}
               />
               <ToggleSetting
                 icon={Eye}
-                label="High contrast"
-                description="Increase visual separation for controls and panels."
+                label={t('settings.highContrast')}
+                description={t('settings.highContrastDescription')}
                 checked={settings.highContrast}
                 onChange={(checked) => setSetting('highContrast', checked)}
               />
               <ToggleSetting
                 icon={EyeOff}
-                label="Reduced motion"
-                description="Limit animations and smooth scrolling."
+                label={t('settings.reducedMotion')}
+                description={t('settings.reducedMotionDescription')}
                 checked={settings.reduceMotion}
                 onChange={(checked) => setSetting('reduceMotion', checked)}
               />
               <SegmentedSetting
                 icon={SlidersHorizontal}
-                label="Answer style"
+                label={t('settings.answerStyle')}
                 options={[
-                  { label: 'Concise', value: 'concise' as const },
-                  { label: 'Detailed', value: 'detailed' as const },
+                  { label: t('settings.concise'), value: 'concise' as const },
+                  { label: t('settings.detailed'), value: 'detailed' as const },
                 ]}
                 value={settings.answerStyle}
                 onChange={(value) => setSetting('answerStyle', value)}
@@ -212,9 +212,9 @@ export function SettingsMenu({ settings, onSettingsChange }: SettingsMenuProps) 
               <div className="flex items-start gap-3 rounded-lg bg-secondary/60 px-2.5 py-2">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
                 <div>
-                  <p className="text-sm font-medium">Evidence privacy locked</p>
+                  <p className="text-sm font-medium">{t('settings.privacyLocked')}</p>
                   <p className="text-[12px] leading-relaxed text-muted-foreground">
-                    Raw captures and precise source details stay hidden for every user.
+                    {t('settings.privacyDescription')}
                   </p>
                 </div>
               </div>
