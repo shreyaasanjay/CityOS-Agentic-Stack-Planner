@@ -64,6 +64,9 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   tracefixProvider: 'openrouter',
   tracefixModel: 'z-ai/glm-5.2',
   tracefixApiKey: '',
+  cityosAgentProvider: 'local',
+  cityosAgentModel: 'gemma3:4b',
+  cityosAgentApiKey: '',
 }
 
 const DEFAULT_SETTINGS: AppearanceSettings = {
@@ -204,6 +207,7 @@ export default function Page() {
           mode: 'llm',
           openaiApiKey: '',
           tracefixApiKey: '',
+          cityosAgentApiKey: '',
         })
       } catch {
         window.localStorage.removeItem(RUNTIME_CONFIG_STORAGE_KEY)
@@ -315,6 +319,9 @@ export default function Page() {
         tracefixProvider: runtimeConfig.tracefixProvider,
         tracefixModel: runtimeConfig.tracefixModel,
         tracefixApiKey: runtimeConfig.tracefixApiKey,
+        cityosAgentModel: runtimeConfig.cityosAgentModel,
+        cityosAgentProvider: runtimeConfig.cityosAgentProvider,
+        cityosAgentApiKey: runtimeConfig.cityosAgentApiKey,
         language: settings.language,
       }, {
         signal: controller.signal,
@@ -386,6 +393,9 @@ export default function Page() {
         tracefixProvider: runtimeConfig.tracefixProvider,
         tracefixModel: runtimeConfig.tracefixModel,
         tracefixApiKey: runtimeConfig.tracefixApiKey,
+        cityosAgentProvider: runtimeConfig.cityosAgentProvider,
+        cityosAgentModel: runtimeConfig.cityosAgentModel,
+        cityosAgentApiKey: runtimeConfig.cityosAgentApiKey,
         language: settings.language,
       }, candidate.recordingId, { signal: controller.signal })
       if (settings.streamingEnabled) beginStreaming(turn.id, result)

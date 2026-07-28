@@ -12,7 +12,7 @@ import json
 import logging
 import os
 import shlex
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -72,6 +72,7 @@ class CityOSHarnessConfig:
     handler_timeout: float
     verbose: bool
     task_id: str
+    handler_env: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_env(cls, *, default_kind: str, default_agent_id: str) -> "CityOSHarnessConfig":
@@ -89,6 +90,7 @@ class CityOSHarnessConfig:
             handler_timeout=_float_env("TRACEFIX_HANDLER_TIMEOUT", 60.0),
             verbose=_bool_env("TRACEFIX_VERBOSE"),
             task_id=os.environ.get("TRACEFIX_TASK_ID", "").strip(),
+            handler_env={},
         )
 
 
@@ -241,6 +243,7 @@ class CityOSAgentHarness:
                 "TRACEFIX_FRAME_PATH": str(frame_record["input_path"]),
                 "TRACEFIX_FRAME_TIMESTAMP": str(frame_record["timestamp"]),
                 "TRACEFIX_FRAME_RECORD": str(frame_record["record_path"]),
+                **self.config.handler_env,
             },
             timeout=self.config.handler_timeout,
         )

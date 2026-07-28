@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from tracefix.runtime.web_data_harness import _select_smartroom_recording, run_web_data_apps
+from tracefix.runtime.web_data_harness import run_web_data_apps
 
 
 class _JsonHandler(BaseHTTPRequestHandler):
@@ -127,54 +127,6 @@ class _SmartroomHandler(BaseHTTPRequestHandler):
         pass
 
 
-
-class _AmbiguousSmartroomHandler(_SmartroomHandler):
-    def do_GET(self):
-        if self.path == "/api/v1/recordings":
-            payload = {
-                "recordings": [
-                    {
-                        "day": "day_04_2026-06-18",
-                        "rec": "rec_20260618_001",
-                        "mtime": 1781740800000.0,
-                        "cameras": {
-                            "cam1": {
-                                "node": "smartroom1",
-                                "durationSec": 40,
-                                "models": {"yolo26l": "done", "action": "done", "yolo26n-pose": "done"},
-                            },
-                        },
-                    },
-                    {
-                        "day": "day_04_2026-06-18",
-                        "rec": "rec_20260618_002",
-                        "mtime": 1781744400000.0,
-                        "cameras": {
-                            "cam1": {
-                                "node": "smartroom1",
-                                "durationSec": 35,
-                                "models": {"yolo26l": "done"},
-                            },
-                        },
-                    },
-                ],
-            }
-            self._json(payload)
-            return
-        if self.path == "/api/v1/recordings/day_04_2026-06-18/rec_20260618_002/cam1/inference/yolo26l":
-            self._json({"detections": {"status": "done", "timeline": [{"t": 0.0, "count": 2}, {"t": 5.0, "count": 5}]}})
-            return
-        if self.path.startswith("/api/v1/recordings/day_04_2026-06-18/rec_20260618_002/cam1/frame?"):
-            body = b"fake-june-second-take-jpeg"
-            self.send_response(200)
-            self.send_header("Content-Type", "image/jpeg")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        super().do_GET()
-
-
 def _start_server(handler):
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -284,8 +236,6 @@ def test_web_data_harness_collects_smartroom_control_snapshot(tmp_path):
             source_url=f"{url}api/v1",
             source_mode="auto",
             output_root=tmp_path / "smartroom-run",
-            question_context="How many people are in the room on July 7?",
-            recording_override={"day": "day_08_2026-07-07", "rec": "rec_20260707_001"},
         )
     finally:
         server.shutdown()
@@ -329,203 +279,6 @@ def test_web_data_harness_collects_smartroom_control_snapshot(tmp_path):
     assert result["answer"]["evidence_used_count"] == 1
 
 
-
-def test_web_data_harness_selects_take_from_requested_timestamp():
-    recordings = [
-        {"day": "day_04_2026-06-18", "rec": "rec_20260618_090000", "cameras": {"cam1": {"durationSec": 1800}}},
-        {"day": "day_04_2026-06-18", "rec": "rec_20260618_143000", "cameras": {"cam1": {"durationSec": 1800}}},
-    ]
-    selected, selection = _select_smartroom_recording(
-        recordings,
-        "How many people were in the room on June 18, 2026 at 2:35 PM?",
-    )
-
-    assert selected is not None
-    assert selected["rec"] == "rec_20260618_143000"
-    assert selection["mode"] == "requested_timestamp"
-    assert selection["requestedTimeLabel"] == "2:35 PM"
-
-
-def test_web_data_harness_asks_for_recording_when_question_is_underspecified(tmp_path):
-    manifest = _make_manifest(tmp_path)
-    server, url = _start_server(_SmartroomHandler)
-    try:
-        result = run_web_data_apps(
-            manifest_path=manifest,
-            source_url=f"{url}api/v1",
-            source_mode="auto",
-            output_root=tmp_path / "smartroom-clarify-latest-run",
-        )
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    assert result["payload"]["snapshotSummary"]["selectionMode"] == "needs_clarification"
-    assert result["payload"]["snapshotSummary"]["selectedRecording"] is None
-    assert result["answer"]["needsClarification"] is True
-    assert "Which date/take" in result["answer"]["chatAnswer"]
-    assert [item["rec"] for item in result["answer"]["clarificationCandidates"]] == ["rec_20260707_001", "rec_20260618_001"]
-
-
-def test_web_data_harness_aggregates_take_peaks_for_date_total_question(tmp_path):
-    manifest = _make_manifest(tmp_path)
-    server, url = _start_server(_AmbiguousSmartroomHandler)
-    try:
-        result = run_web_data_apps(
-            manifest_path=manifest,
-            source_url=f"{url}api/v1",
-            source_mode="auto",
-            output_root=tmp_path / "smartroom-date-total-run",
-            question_context="On June 18th, how many people in total were in the room?",
-        )
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    assert result["payload"]["snapshotSummary"]["selectionMode"] == "requested_date_total"
-    assert result["answer"].get("needsClarification") is not True
-    assert result["answer"]["aggregatePeakPeople"] == 9
-    assert result["answer"]["recordingsAggregated"] == 2
-    assert "summed per-take peak occupancy was 9 people" in result["answer"]["chatAnswer"]
-
-
-def test_web_data_harness_asks_for_recording_when_date_has_multiple_takes(tmp_path):
-    manifest = _make_manifest(tmp_path)
-    server, url = _start_server(_AmbiguousSmartroomHandler)
-    try:
-        result = run_web_data_apps(
-            manifest_path=manifest,
-            source_url=f"{url}api/v1",
-            source_mode="auto",
-            output_root=tmp_path / "smartroom-clarify-date-run",
-            question_context="How many people are in the room on June 18th?",
-        )
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    summary = result["payload"]["snapshotSummary"]
-    assert summary["selectionMode"] == "needs_clarification"
-    assert summary["requestedDateLabel"] == "June 18"
-    assert summary["selectedRecording"] is None
-    assert result["answer"]["needsClarification"] is True
-    assert "Which take" in result["answer"]["chatAnswer"]
-    assert [item["rec"] for item in summary["clarificationCandidates"]] == ["rec_20260618_001", "rec_20260618_002"]
-
-
-def test_web_data_harness_uses_recording_override_after_clarification(tmp_path):
-    manifest = _make_manifest(tmp_path)
-    server, url = _start_server(_AmbiguousSmartroomHandler)
-    try:
-        result = run_web_data_apps(
-            manifest_path=manifest,
-            source_url=f"{url}api/v1",
-            source_mode="auto",
-            output_root=tmp_path / "smartroom-override-run",
-            question_context="How many people are in the room on June 18th?",
-            recording_override={"day": "day_04_2026-06-18", "rec": "rec_20260618_002"},
-        )
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    summary = result["payload"]["snapshotSummary"]
-    assert summary["selectionMode"] == "recording_override"
-    assert summary["selectedRecording"] == "rec_20260618_002"
-    assert result["answer"]["recording"]["rec"] == "rec_20260618_002"
-    assert "peak occupancy was 5 people overall" in result["answer"]["chatAnswer"]
-
-
-
-def test_web_data_harness_resolves_numeric_and_take_text_selection(tmp_path):
-    manifest = _make_manifest(tmp_path)
-    server, url = _start_server(_AmbiguousSmartroomHandler)
-    try:
-        numeric = run_web_data_apps(
-            manifest_path=manifest,
-            source_url=f"{url}api/v1",
-            source_mode="auto",
-            output_root=tmp_path / "smartroom-numeric-take-run",
-            question_context="How many people are in the room on June 18th?",
-            recording_override="2",
-        )
-        text = run_web_data_apps(
-            manifest_path=manifest,
-            source_url=f"{url}api/v1",
-            source_mode="auto",
-            output_root=tmp_path / "smartroom-text-take-run",
-            question_context="How many people are in the room on June 18th?",
-            recording_override="Take 2",
-        )
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    for result in (numeric, text):
-        summary = result["payload"]["snapshotSummary"]
-        assert summary["selectionMode"] == "recording_override"
-        assert summary["selectedRecording"] == "rec_20260618_002"
-        assert result["recordingOverride"] == {"day": "day_04_2026-06-18", "rec": "rec_20260618_002"}
-        assert summary["question"] == "How many people are in the room on June 18th?"
-        assert result["answer"].get("needsClarification") is not True
-
-
-def test_web_data_harness_rejects_invalid_take_selection(tmp_path):
-    manifest = _make_manifest(tmp_path)
-    server, url = _start_server(_AmbiguousSmartroomHandler)
-    try:
-        result = run_web_data_apps(
-            manifest_path=manifest,
-            source_url=f"{url}api/v1",
-            source_mode="auto",
-            output_root=tmp_path / "smartroom-invalid-take-run",
-            question_context="How many people are in the room on June 18th?",
-            recording_override="Take 9",
-        )
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    assert result["answer"]["needsClarification"] is True
-    assert "Take 9 is not available" in result["answer"]["clarificationPrompt"]
-    assert [item["rec"] for item in result["answer"]["clarificationCandidates"]] == ["rec_20260618_001", "rec_20260618_002"]
-
-
-def test_web_data_harness_lists_takes_when_date_has_single_recording(tmp_path):
-    manifest = _make_manifest(tmp_path)
-    server, url = _start_server(_SmartroomHandler)
-    try:
-        result = run_web_data_apps(
-            manifest_path=manifest,
-            source_url=f"{url}api/v1",
-            source_mode="auto",
-            output_root=tmp_path / "smartroom-clarify-single-date-run",
-            question_context="How many people are in the room on July 7?",
-        )
-        selected = run_web_data_apps(
-            manifest_path=manifest,
-            source_url=f"{url}api/v1",
-            source_mode="auto",
-            output_root=tmp_path / "smartroom-selected-single-date-run",
-            question_context="How many people are in the room on July 7?",
-            recording_override="Take 1",
-        )
-    finally:
-        server.shutdown()
-        server.server_close()
-
-    summary = result["payload"]["snapshotSummary"]
-    assert summary["selectionMode"] == "needs_clarification"
-    assert summary["requestedDateLabel"] == "July 7"
-    assert summary["selectedRecording"] is None
-    assert result["answer"]["needsClarification"] is True
-    assert "I found 1 smartroom recording for July 7" in result["answer"]["chatAnswer"]
-    assert [item["rec"] for item in summary["clarificationCandidates"]] == ["rec_20260707_001"]
-    assert selected["payload"]["snapshotSummary"]["selectionMode"] == "recording_override"
-    assert selected["payload"]["snapshotSummary"]["selectedRecording"] == "rec_20260707_001"
-    assert selected["answer"].get("needsClarification") is not True
-
-
 def test_web_data_harness_uses_question_date_for_smartroom_selection(tmp_path):
     manifest = _make_manifest(tmp_path)
     server, url = _start_server(_SmartroomHandler)
@@ -536,7 +289,6 @@ def test_web_data_harness_uses_question_date_for_smartroom_selection(tmp_path):
             source_mode="auto",
             output_root=tmp_path / "smartroom-june-run",
             question_context="How many people are in the room in June 18th?",
-            recording_override={"day": "day_04_2026-06-18", "rec": "rec_20260618_001"},
         )
     finally:
         server.shutdown()
@@ -544,8 +296,8 @@ def test_web_data_harness_uses_question_date_for_smartroom_selection(tmp_path):
 
     assert result["ok"] is True
     assert result["question"] == "How many people are in the room in June 18th?"
-    assert result["payload"]["snapshotSummary"]["selectionMode"] == "recording_override"
-    assert result["payload"]["snapshotSummary"]["requestedDateLabel"] == "June 18, 2026"
+    assert result["payload"]["snapshotSummary"]["selectionMode"] == "requested_date"
+    assert result["payload"]["snapshotSummary"]["requestedDateLabel"] == "June 18"
     assert result["payload"]["snapshotSummary"]["selectedRecording"] == "rec_20260618_001"
     assert result["payload"]["snapshotSummary"]["cameras"] == ["cam1"]
     assert result["answer"]["recording"]["rec"] == "rec_20260618_001"
@@ -583,7 +335,6 @@ def test_web_data_harness_answers_requested_activity_count_question(tmp_path):
             source_mode="auto",
             output_root=tmp_path / "smartroom-activity-run",
             question_context="How many people are standing up and talking on June 18th?",
-            recording_override={"day": "day_04_2026-06-18", "rec": "rec_20260618_001"},
         )
     finally:
         server.shutdown()
@@ -609,7 +360,6 @@ def test_web_data_harness_answers_combined_activity_question(tmp_path):
             source_mode="auto",
             output_root=tmp_path / "smartroom-combined-activity-run",
             question_context="How many people are both standing up and talking on June 18th?",
-            recording_override={"day": "day_04_2026-06-18", "rec": "rec_20260618_001"},
         )
     finally:
         server.shutdown()

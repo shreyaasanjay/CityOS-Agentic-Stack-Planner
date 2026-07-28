@@ -116,6 +116,9 @@ export interface QueryRequest {
   tracefixProvider: 'openai' | 'anthropic' | 'openrouter' | 'local'
   tracefixModel: string
   tracefixApiKey?: string
+  cityosAgentProvider: 'openai' | 'anthropic' | 'openrouter' | 'local'
+  cityosAgentModel: string
+  cityosAgentApiKey?: string
   language: LanguageMode
 }
 

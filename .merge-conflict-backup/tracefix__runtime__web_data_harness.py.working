@@ -1947,7 +1947,6 @@ def fetch_source_payload(
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
     raw_data_json: str | None = None,
-    recording_override: Any | None = None,
 ) -> dict[str, Any]:
     mode = str(source_mode or "auto").strip().lower()
     raw_text = str(raw_data_json or "").strip()
@@ -2252,7 +2251,6 @@ async def _run_agent_pipeline(
     max_bytes: int,
     question: str,
     raw_data_json: str,
-    recording_override: Any | None,
     agent_provider: str,
     agent_model: str,
     agent_api_key: str,
@@ -2277,7 +2275,6 @@ async def _run_agent_pipeline(
         "max_bytes": max_bytes,
         "question": question,
         "raw_data_json": raw_data_json,
-        "recording_override": recording_override,
         "agent_provider": agent_provider,
         "agent_model": agent_model,
     }
@@ -2427,11 +2424,6 @@ def _agent_payload_metadata(output_root: Path, evidence_packets: list[dict[str, 
         "selectionReason": selection.get("reason"),
         "requestedDate": selection.get("requestedDate"),
         "requestedDateLabel": selection.get("requestedDateLabel"),
-        "question": primary.get("question"),
-        "recordingOverride": selection.get("recordingOverride"),
-        "needsClarification": bool(selection.get("needsClarification")),
-        "clarificationPrompt": selection.get("clarificationPrompt"),
-        "clarificationCandidates": selection.get("candidates") or [],
         "errors": len(primary.get("errors") or []),
     }
     return {
@@ -2461,7 +2453,6 @@ def run_web_data_apps(
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
     raw_data_json: str | None = None,
-    recording_override: Any | None = None,
     agent_provider: str = "deterministic",
     agent_model: str = "",
     agent_api_key: str = "",
@@ -2493,7 +2484,6 @@ def run_web_data_apps(
         max_bytes=max_bytes,
         question=question,
         raw_data_json=str(raw_data_json or ""),
-        recording_override=recording_override,
         agent_provider=str(agent_provider or "deterministic").strip().lower(),
         agent_model=str(agent_model or "").strip(),
         agent_api_key=str(agent_api_key or "").strip(),
@@ -2519,12 +2509,16 @@ def run_web_data_apps(
         "sourceUrl": payload_metadata.get("url") or source_url,
         "sourceKind": payload_metadata.get("sourceKind") or "unknown",
         "sourceMode": source_mode,
+<<<<<<< HEAD
         "question": question,
+=======
+        "question": _question_text(question_context),
         "recordingOverride": (
-            (payload_metadata.get("snapshotSummary") or {}).get("recordingOverride")
-            if isinstance(payload_metadata.get("snapshotSummary"), dict)
+            (payload.get("snapshotSummary") or {}).get("recordingOverride")
+            if isinstance(payload.get("snapshotSummary"), dict)
             else _normalize_recording_override(recording_override)
         ),
+>>>>>>> 0e636421a1b896510e26b99dfc9734510d115316
         "manifestPath": str(manifest_path),
         "outputRoot": str(output_root),
         "startedAt": started_at,
