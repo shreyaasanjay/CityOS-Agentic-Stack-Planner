@@ -2,9 +2,9 @@
 
 This keeps the CityOS synthesis path intact while letting the same generated
 app bundles consume data from a normal HTTP server when CityOS is not the
-runtime environment. When the source is the smartroom-control LAN API, the
-runner collects a structured snapshot from the API rather than just fetching
-one raw URL.
+runtime environment. The host runner only transports request/result envelopes:
+generated retrieval agents access the source, a generated answer agent creates
+the response, and generated monitors validate the response contract.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import json
 import mimetypes
 import re
 import shlex
+import sys
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,7 +24,7 @@ from urllib.parse import quote, urlencode, urlparse, urlunparse
 from tracefix.runtime.cityos_agent_harness import CityOSAgentHarness, CityOSHarnessConfig
 from tracefix.runtime.cityos_docker_harness import CityOSDockerApp, load_manifest, manifest_apps
 
-_DEFAULT_SOURCE_URL = "http://172.16.60.239:3000/api"
+_DEFAULT_SOURCE_URL = "https://smartroom-mirror.vercel.app/api/v1"
 _DEFAULT_MAX_BYTES = 50 * 1024 * 1024
 _SMARTROOM_MODELS = ("action-hmdb", "action", "yolo26l", "yolo26n-pose")
 _ACTIVITY_LABEL_KEYS = {
@@ -925,7 +926,12 @@ def _smartroom_base_url(source_url: str) -> str:
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
         raise ValueError(f"Invalid smartroom API URL: {source_url}")
-    path = parsed.path.rstrip("/") or "/api"
+    path = parsed.path.rstrip("/")
+    marker = "/api/v1"
+    if marker in path:
+        path = path[:path.index(marker) + len(marker)]
+    else:
+        path = marker
     return urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
 
 
@@ -1671,26 +1677,54 @@ def _resolve_app_path(app: CityOSDockerApp, manifest_path: Path) -> Path:
 
 
 def _handler_command(command: str | list[str] | None) -> list[str]:
-    if command is None:
-        return []
+    """Resolve the executable handler packaged with every synthesized app."""
+    if command is None or command == "" or command == []:
+        return [sys.executable, str(Path(__file__).with_name("web_data_agent.py"))]
     if isinstance(command, list):
         return [str(item) for item in command if str(item).strip()]
     raw = str(command).strip()
     return shlex.split(raw) if raw else []
 
 
-async def _run_app_against_payload(
+def _write_agent_request(output_root: Path, app: CityOSDockerApp, phase: str, payload: dict[str, Any]) -> Path:
+    request_dir = output_root / "requests"
+    request_dir.mkdir(parents=True, exist_ok=True)
+    request_path = request_dir / f"{phase}_{_safe_name(app.name)}.json"
+    request_path.write_text(json.dumps({"phase": phase, **payload}, indent=2) + "\n", encoding="utf-8")
+    return request_path
+
+
+def _read_handler_output(handler_record: Path) -> dict[str, Any]:
+    record = json.loads(handler_record.read_text(encoding="utf-8"))
+    handler = record.get("handler") if isinstance(record, dict) else None
+    if not isinstance(handler, dict) or handler.get("status") != "completed":
+        raise RuntimeError(f"generated app handler failed: {handler or record}")
+    raw_output = str(handler.get("output") or "").strip()
+    if not raw_output:
+        raise RuntimeError("generated app handler returned no structured output")
+    try:
+        output = json.loads(raw_output)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("generated app handler returned invalid JSON") from exc
+    if not isinstance(output, dict) or output.get("ok") is not True:
+        raise RuntimeError(f"generated app reported failure: {output}")
+    return output
+
+
+async def _run_app_phase(
     *,
     app: CityOSDockerApp,
     manifest_path: Path,
-    payload_path: Path,
+    request_path: Path,
+    phase: str,
     output_root: Path,
     handler_command: str | list[str] | None,
     handler_timeout_seconds: int,
+    handler_environment: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     app_path = _resolve_app_path(app, manifest_path)
     bundle_dir = app_path / "tracefix_bundle"
-    output_dir = output_root / "apps" / app.name
+    output_dir = output_root / "apps" / app.name / phase
     frames_dir = output_dir / "frames"
     try:
         if not bundle_dir.is_dir():
@@ -1708,13 +1742,14 @@ async def _run_app_against_payload(
             handler_timeout=float(handler_timeout_seconds),
             verbose=False,
             task_id="",
+            handler_env=dict(handler_environment or {}),
         )
         harness = CityOSAgentHarness(config)
         existing_records = set()
         if frames_dir.exists():
             existing_records = {path.resolve() for path in frames_dir.glob("*.json")}
         ready_path = await harness.write_readiness()
-        await harness.receive_frame("web_data", payload_path, _utc_now())
+        await harness.receive_frame(f"web_data_{phase}", request_path, _utc_now())
         frame_records = [
             str(path)
             for path in sorted(frames_dir.glob("*.json"))
@@ -1725,6 +1760,9 @@ async def _run_app_against_payload(
             for path in sorted(frames_dir.glob("*_handler.json"))
             if path.resolve() not in existing_records
         ]
+        if not handler_records:
+            raise RuntimeError("generated app did not produce a handler result")
+        agent_output = _read_handler_output(Path(handler_records[-1]))
         return {
             "app": {
                 "name": app.name,
@@ -1733,12 +1771,14 @@ async def _run_app_against_payload(
                 "path": str(app_path),
             },
             "status": "completed",
+            "phase": phase,
             "outputDir": str(output_dir),
             "readyPath": str(ready_path),
             "framesDir": str(frames_dir),
             "frameRecords": frame_records,
             "handlerRecords": handler_records,
             "handlerConfigured": bool(config.handler_cmd),
+            "agentOutput": agent_output,
         }
     except Exception as exc:  # noqa: BLE001 - result JSON should report each app failure
         return {
@@ -1749,32 +1789,323 @@ async def _run_app_against_payload(
                 "path": str(app_path),
             },
             "status": "failed",
+            "phase": phase,
             "outputDir": str(output_dir),
             "framesDir": str(frames_dir),
             "error": f"{type(exc).__name__}: {exc}",
         }
 
 
-async def _run_apps(
+def _is_answer_agent(app: CityOSDockerApp) -> bool:
+    label = f"{app.name} {app.agent or ''}".lower()
+    return "answer" in label or "synth" in label
+
+
+def _retrieval_communication_events(
+    retrieval_runs: list[dict[str, Any]],
+    evidence_packets: list[dict[str, Any]],
+    answer_agent: CityOSDockerApp,
+) -> list[dict[str, Any]]:
+    """Describe evidence messages before they are delivered to the answer agent."""
+    events: list[dict[str, Any]] = []
+    answer_name = str(answer_agent.agent or answer_agent.name)
+    for sequence, (run, evidence) in enumerate(zip(retrieval_runs, evidence_packets), start=1):
+        app = run.get("app") if isinstance(run.get("app"), dict) else {}
+        events.append({
+            "sequence": sequence,
+            "from": str(app.get("agent") or app.get("name") or evidence.get("producer_agent") or "unknown"),
+            "to": answer_name,
+            "label": "evidence_packet",
+            "phase": "retrieve",
+            "status": str(run.get("status") or "unknown"),
+            "message": {
+                "kind": evidence.get("kind"),
+                "producer_agent": evidence.get("producer_agent"),
+                "source_kind": evidence.get("source_kind"),
+                "source_count": evidence.get("source_count"),
+                "selected": bool(evidence.get("selected")),
+                "error_count": len(evidence.get("errors") or []),
+                "generation_mode": evidence.get("generation_mode"),
+                "tool_trace": evidence.get("tool_trace") or [],
+            },
+        })
+    return events
+
+
+def _answer_communication_event(
     *,
-    apps: list[CityOSDockerApp],
+    sequence: int,
+    synthesis_run: dict[str, Any],
+    answer: dict[str, Any],
+    answer_agent: CityOSDockerApp,
+) -> dict[str, Any]:
+    """Describe answer delivery metadata without exposing or judging its content."""
+    answer_name = str(answer_agent.agent or answer_agent.name)
+    return {
+        "sequence": sequence,
+        "from": answer_name,
+        "to": "tellme",
+        "label": "answer_packet",
+        "phase": "synthesize",
+        "status": str(synthesis_run.get("status") or "unknown"),
+        "message": {
+            "producer_agent": answer.get("producer_agent"),
+            "kind": "answer_packet",
+            "generation_mode": answer.get("generation_mode"),
+        },
+    }
+
+
+async def _run_monitor_checkpoint(
+    *,
+    monitor_apps: list[CityOSDockerApp],
     manifest_path: Path,
-    payload_path: Path,
     output_root: Path,
     handler_command: str | list[str] | None,
     handler_timeout_seconds: int,
+    agent_provider: str,
+    agent_model: str,
+    agent_api_key: str,
+    mode: str,
+    transcript: list[dict[str, Any]],
+    current_event: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    """Run active monitor apps at one protocol lifecycle checkpoint."""
+    checkpoint_name = f"monitor_{mode}"
+    if mode == "event" and isinstance(current_event, dict):
+        checkpoint_name += f"_{int(current_event.get('sequence') or len(transcript))}"
+    requests = [
+        _write_agent_request(
+            output_root,
+            app,
+            checkpoint_name,
+            {
+                "phase": f"monitor_{mode}",
+                "monitor_mode": mode,
+                "communication_transcript": transcript,
+                "current_event": current_event,
+                "agent_provider": agent_provider,
+                "agent_model": agent_model,
+            },
+        )
+        for app in monitor_apps
+    ]
     return await asyncio.gather(*[
-        _run_app_against_payload(
+        _run_app_phase(
             app=app,
             manifest_path=manifest_path,
-            payload_path=payload_path,
+            request_path=request_path,
+            phase=checkpoint_name,
             output_root=output_root,
             handler_command=handler_command,
             handler_timeout_seconds=handler_timeout_seconds,
+            handler_environment={"TRACEFIX_RUNTIME_AGENT_API_KEY": agent_api_key} if agent_api_key else {},
         )
-        for app in apps
+        for app, request_path in zip(monitor_apps, requests)
     ])
+
+
+async def _run_agent_pipeline(
+    *,
+    apps: list[CityOSDockerApp],
+    manifest_path: Path,
+    output_root: Path,
+    handler_command: str | list[str] | None,
+    handler_timeout_seconds: int,
+    source_url: str,
+    source_mode: str,
+    timeout_seconds: int,
+    max_bytes: int,
+    question: str,
+    raw_data_json: str,
+    agent_provider: str,
+    agent_model: str,
+    agent_api_key: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None]:
+    agent_apps = [app for app in apps if app.kind != "monitor"]
+    monitor_apps = [app for app in apps if app.kind == "monitor"]
+    if not monitor_apps:
+        raise ValueError("Synthesis manifest must contain at least one runtime monitor app")
+    if len({app.name for app in agent_apps}) < 2:
+        raise ValueError(
+            "Synthesis manifest must contain distinct retrieval and answer agent apps; "
+            "regenerate the CityOS apps with the current TraceFix synthesizer"
+        )
+    if any(monitor.name in {app.name for app in agent_apps} for monitor in monitor_apps):
+        raise ValueError("Runtime monitor app must be distinct from retrieval and answer agent apps")
+    synthesizer = next((app for app in agent_apps if _is_answer_agent(app)), agent_apps[-1])
+    retrievers = [app for app in agent_apps if app is not synthesizer]
+    common_request = {
+        "source_url": source_url,
+        "source_mode": source_mode,
+        "timeout_seconds": timeout_seconds,
+        "max_bytes": max_bytes,
+        "question": question,
+        "raw_data_json": raw_data_json,
+        "agent_provider": agent_provider,
+        "agent_model": agent_model,
+    }
+    runs: list[dict[str, Any]] = []
+    communication_transcript: list[dict[str, Any]] = []
+    monitor_start_runs = await _run_monitor_checkpoint(
+        monitor_apps=monitor_apps,
+        manifest_path=manifest_path,
+        output_root=output_root,
+        handler_command=handler_command,
+        handler_timeout_seconds=handler_timeout_seconds,
+        agent_provider=agent_provider,
+        agent_model=agent_model,
+        agent_api_key=agent_api_key,
+        mode="start",
+        transcript=communication_transcript,
+    )
+    runs.extend(monitor_start_runs)
+    if any(run.get("status") != "completed" for run in monitor_start_runs):
+        return runs, [], None
+    retrieval_requests = [
+        _write_agent_request(output_root, app, "retrieve", common_request)
+        for app in retrievers
+    ]
+    retrieval_runs = await asyncio.gather(*[
+        _run_app_phase(
+            app=app,
+            manifest_path=manifest_path,
+            request_path=request_path,
+            phase="retrieve",
+            output_root=output_root,
+            handler_command=handler_command,
+            handler_timeout_seconds=handler_timeout_seconds,
+            handler_environment={"TRACEFIX_RUNTIME_AGENT_API_KEY": agent_api_key} if agent_api_key else {},
+        )
+        for app, request_path in zip(retrievers, retrieval_requests)
+    ])
+    runs.extend(retrieval_runs)
+    evidence_packets = [
+        run.get("agentOutput", {}).get("evidence_packet")
+        for run in retrieval_runs
+        if run.get("status") == "completed"
+        and isinstance(run.get("agentOutput", {}).get("evidence_packet"), dict)
+    ]
+    if len(evidence_packets) != len(retrievers):
+        return runs, evidence_packets, None
+
+    for event in _retrieval_communication_events(retrieval_runs, evidence_packets, synthesizer):
+        communication_transcript.append(event)
+        monitor_event_runs = await _run_monitor_checkpoint(
+            monitor_apps=monitor_apps,
+            manifest_path=manifest_path,
+            output_root=output_root,
+            handler_command=handler_command,
+            handler_timeout_seconds=handler_timeout_seconds,
+            agent_provider=agent_provider,
+            agent_model=agent_model,
+            agent_api_key=agent_api_key,
+            mode="event",
+            transcript=communication_transcript,
+            current_event=event,
+        )
+        runs.extend(monitor_event_runs)
+        if any(run.get("status") != "completed" for run in monitor_event_runs):
+            return runs, evidence_packets, None
+
+    synthesis_request = _write_agent_request(
+        output_root,
+        synthesizer,
+        "synthesize",
+        {
+            "question": question,
+            "evidence_packets": evidence_packets,
+            "agent_provider": agent_provider,
+            "agent_model": agent_model,
+        },
+    )
+    synthesis_run = await _run_app_phase(
+        app=synthesizer,
+        manifest_path=manifest_path,
+        request_path=synthesis_request,
+        phase="synthesize",
+        output_root=output_root,
+        handler_command=handler_command,
+        handler_timeout_seconds=handler_timeout_seconds,
+        handler_environment={"TRACEFIX_RUNTIME_AGENT_API_KEY": agent_api_key} if agent_api_key else {},
+    )
+    runs.append(synthesis_run)
+    answer = synthesis_run.get("agentOutput", {}).get("answer_packet")
+    if synthesis_run.get("status") != "completed" or not isinstance(answer, dict):
+        return runs, evidence_packets, None
+
+    answer_event = _answer_communication_event(
+        sequence=len(communication_transcript) + 1,
+        synthesis_run=synthesis_run,
+        answer=answer,
+        answer_agent=synthesizer,
+    )
+    communication_transcript.append(answer_event)
+    answer_event_runs = await _run_monitor_checkpoint(
+        monitor_apps=monitor_apps,
+        manifest_path=manifest_path,
+        output_root=output_root,
+        handler_command=handler_command,
+        handler_timeout_seconds=handler_timeout_seconds,
+        agent_provider=agent_provider,
+        agent_model=agent_model,
+        agent_api_key=agent_api_key,
+        mode="event",
+        transcript=communication_transcript,
+        current_event=answer_event,
+    )
+    runs.extend(answer_event_runs)
+    if any(run.get("status") != "completed" for run in answer_event_runs):
+        return runs, evidence_packets, None
+    monitor_complete_runs = await _run_monitor_checkpoint(
+        monitor_apps=monitor_apps,
+        manifest_path=manifest_path,
+        output_root=output_root,
+        handler_command=handler_command,
+        handler_timeout_seconds=handler_timeout_seconds,
+        agent_provider=agent_provider,
+        agent_model=agent_model,
+        agent_api_key=agent_api_key,
+        mode="complete",
+        transcript=communication_transcript,
+    )
+    runs.extend(monitor_complete_runs)
+    if any(run.get("status") != "completed" for run in monitor_complete_runs):
+        return runs, evidence_packets, None
+    return runs, evidence_packets, answer
+
+
+def _agent_payload_metadata(output_root: Path, evidence_packets: list[dict[str, Any]]) -> dict[str, Any]:
+    evidence_path = output_root / "agent-evidence.json"
+    body = json.dumps({"evidence_packets": evidence_packets}, indent=2) + "\n"
+    evidence_path.write_text(body, encoding="utf-8")
+    primary = evidence_packets[0] if evidence_packets else {}
+    selected = primary.get("selected") if isinstance(primary.get("selected"), dict) else None
+    selection = primary.get("selection") if isinstance(primary.get("selection"), dict) else {}
+    snapshot_summary = {
+        "recordingCount": primary.get("source_count", 0),
+        "selectedDay": selected.get("day") if selected else None,
+        "selectedRecording": selected.get("rec") if selected else None,
+        "cameras": list((selected.get("cameras") or {}).keys()) if selected else [],
+        "selectionMode": selection.get("mode"),
+        "selectionReason": selection.get("reason"),
+        "requestedDate": selection.get("requestedDate"),
+        "requestedDateLabel": selection.get("requestedDateLabel"),
+        "errors": len(primary.get("errors") or []),
+    }
+    return {
+        "url": primary.get("source_url"),
+        "status": 200 if evidence_packets else None,
+        "reason": "agent_retrieval_completed" if evidence_packets else "agent_retrieval_failed",
+        "contentType": "application/json",
+        "sourceKind": primary.get("source_kind") or "unknown",
+        "snapshotSummary": snapshot_summary,
+        "payloadPath": str(evidence_path),
+        "sizeBytes": len(body.encode("utf-8")),
+        "fetchedAt": primary.get("fetched_at"),
+        "writtenAt": _utc_now().isoformat(),
+        "producerAgent": primary.get("producer_agent"),
+    }
 
 
 def run_web_data_apps(
@@ -1789,6 +2120,9 @@ def run_web_data_apps(
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
     raw_data_json: str | None = None,
+    agent_provider: str = "deterministic",
+    agent_model: str = "",
+    agent_api_key: str = "",
 ) -> dict[str, Any]:
     manifest_path = manifest_path.expanduser().resolve()
     if not manifest_path.exists():
@@ -1804,34 +2138,45 @@ def run_web_data_apps(
     output_root.mkdir(parents=True, exist_ok=True)
 
     started_at = _utc_now().isoformat()
-    payload = fetch_source_payload(
-        source_url,
-        output_root=output_root,
-        source_mode=source_mode,
-        timeout_seconds=timeout_seconds,
-        max_bytes=max_bytes,
-        question_context=question_context,
-        raw_data_json=raw_data_json,
-    )
-    payload_metadata = write_web_payload(payload, output_root)
-    payload_path = Path(str(payload_metadata["payloadPath"]))
-    runs = asyncio.run(_run_apps(
+    question = _question_text(question_context)
+    runs, evidence_packets, answer = asyncio.run(_run_agent_pipeline(
         apps=apps,
         manifest_path=manifest_path,
-        payload_path=payload_path,
         output_root=output_root,
         handler_command=handler_command,
         handler_timeout_seconds=handler_timeout_seconds,
+        source_url=source_url,
+        source_mode=source_mode,
+        timeout_seconds=timeout_seconds,
+        max_bytes=max_bytes,
+        question=question,
+        raw_data_json=str(raw_data_json or ""),
+        agent_provider=str(agent_provider or "deterministic").strip().lower(),
+        agent_model=str(agent_model or "").strip(),
+        agent_api_key=str(agent_api_key or "").strip(),
     ))
-    answer = _answer_from_payload(payload)
-    answer_path = _write_answer_artifacts(output_root, runs, answer)
+    payload_metadata = _agent_payload_metadata(output_root, evidence_packets)
+    answer_path = None
+    if answer is not None:
+        answer_file = output_root / "smartroom-answer.json"
+        answer_file.write_text(json.dumps(answer, indent=2) + "\n", encoding="utf-8")
+        answer_path = str(answer_file)
     finished_at = _utc_now().isoformat()
+    monitor_runs = [run for run in runs if str(run.get("phase") or "").startswith("monitor_")]
+    completed_monitor_runs = [run for run in monitor_runs if run.get("phase") == "monitor_complete"]
+    monitors_valid = all(
+        run.get("status") == "completed"
+        and run.get("agentOutput", {}).get("monitor", {}).get("valid") is True
+        for run in monitor_runs
+    )
     result = {
-        "ok": bool(runs) and all(run.get("status") == "completed" for run in runs),
-        "sourceUrl": payload.get("url") or source_url,
-        "sourceKind": payload.get("sourceKind") or "http",
+        "ok": bool(runs) and answer is not None
+        and all(run.get("status") == "completed" for run in runs)
+        and monitors_valid,
+        "sourceUrl": payload_metadata.get("url") or source_url,
+        "sourceKind": payload_metadata.get("sourceKind") or "unknown",
         "sourceMode": source_mode,
-        "question": _question_text(question_context),
+        "question": question,
         "manifestPath": str(manifest_path),
         "outputRoot": str(output_root),
         "startedAt": started_at,
@@ -1840,6 +2185,14 @@ def run_web_data_apps(
         "answer": answer,
         "answerPath": answer_path,
         "runs": runs,
+        "agentPipeline": {
+            "retrievalProducers": [packet.get("producer_agent") for packet in evidence_packets],
+            "answerProducer": answer.get("producer_agent") if answer else None,
+            "monitorCount": len(completed_monitor_runs),
+            "monitorCheckpointCount": len(monitor_runs),
+            "provider": answer.get("runtime_provider") if answer else None,
+            "model": answer.get("runtime_model") if answer else None,
+        },
     }
     result_path = output_root / "web-data-run.json"
     result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

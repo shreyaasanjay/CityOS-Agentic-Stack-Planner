@@ -3,7 +3,13 @@ import json
 from datetime import datetime, timezone
 
 from tracefix.runtime.cityos_agent_harness import CityOSAgentHarness, CityOSHarnessConfig
-from tracefix.runtime.cityos_synthesizer import _agent_toml, _app_py, _dockerfile, _requirements_txt
+from tracefix.runtime.cityos_synthesizer import (
+    _agent_toml,
+    _app_py,
+    _dockerfile,
+    _execution_agents,
+    _requirements_txt,
+)
 
 
 def _config(tmp_path, bundle):
@@ -76,7 +82,7 @@ def test_generated_cityos_app_delegates_to_shared_data_harness():
     assert "tracefix.runtime.cli" not in app_source
     assert "tracefix.runtime.opencode_adapter" not in app_source
     assert "TRACEFIX_RUNTIME_MODE=cityos_data" in toml
-    assert "TRACEFIX_HANDLER_CMD=" in toml
+    assert "TRACEFIX_HANDLER_CMD=python3 -m tracefix.runtime.web_data_agent" in toml
     assert "TRACEFIX_HANDLER_TIMEOUT=60" in toml
     assert "TRACEFIX_OUTPUT_DIR=/app/demo-app/tracefix_output" in toml
     assert "TRACEFIX_OPENCODE_BIN" not in toml
@@ -84,3 +90,14 @@ def test_generated_cityos_app_delegates_to_shared_data_harness():
     assert "opencode-ai" not in dockerfile
     assert "nodejs npm" not in dockerfile
     assert _requirements_txt() == ""
+
+
+def test_execution_agents_add_distinct_retriever_and_answer_roles():
+    empty_roles = _execution_agents({"agents": []})
+    assert [agent["name"] for agent in empty_roles] == ["TRACEFIX_RETRIEVER", "TRACEFIX_ANSWER"]
+
+    single_roles = _execution_agents({"agents": [{"name": "OBSERVER"}]})
+    assert [agent["name"] for agent in single_roles] == ["OBSERVER", "TRACEFIX_ANSWER"]
+
+    answer_only_roles = _execution_agents({"agents": [{"name": "ANSWER"}]})
+    assert [agent["name"] for agent in answer_only_roles] == ["TRACEFIX_RETRIEVER", "ANSWER"]

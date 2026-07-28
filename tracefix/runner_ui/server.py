@@ -1015,6 +1015,9 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         max_bytes=max_bytes,
         question_context=question_context,
         raw_data_json=raw_data_json,
+        agent_provider=str(payload.get("agentProvider") or payload.get("agent_provider") or "deterministic"),
+        agent_model=str(payload.get("agentModel") or payload.get("agent_model") or ""),
+        agent_api_key=_clean_key(payload.get("agentApiKey") or payload.get("agent_api_key")),
     )
 def _open_local_path(path: Path) -> None:
     if not path.exists():

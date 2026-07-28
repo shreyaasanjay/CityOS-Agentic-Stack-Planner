@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import {
   Box,
   Check,
@@ -16,6 +17,11 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
+import { ApiKeyInput } from '@/components/api-key-input'
+import {
+  getApiKeyOriginPolicy,
+  type ApiKeyOriginPolicy,
+} from '@/lib/security/api-key-origin'
 import { cn } from '@/lib/utils'
 
 export interface ConversationSummary {
@@ -37,6 +43,9 @@ export interface RuntimeConfig {
   tracefixProvider: 'openai' | 'anthropic' | 'openrouter' | 'local'
   tracefixModel: string
   tracefixApiKey: string
+  cityosAgentProvider: 'openai' | 'anthropic' | 'openrouter' | 'local'
+  cityosAgentModel: string
+  cityosAgentApiKey: string
 }
 
 interface ConversationSidebarProps {
@@ -155,6 +164,18 @@ function ConnectionSetup({
 }) {
   const hasOpenAiKey = config.openaiApiKey.trim().length > 0
   const hasTracefixKey = config.tracefixApiKey.trim().length > 0
+  const hasCityosAgentKey = config.cityosAgentApiKey.trim().length > 0
+  const [originPolicy, setOriginPolicy] = useState<ApiKeyOriginPolicy>({
+    canUseApiKeys: false,
+    hostname: '',
+    protocol: '',
+    label: 'Checking origin',
+    message: 'Checking whether this origin can safely accept API keys.',
+  })
+
+  useEffect(() => {
+    setOriginPolicy(getApiKeyOriginPolicy(window.location))
+  }, [])
 
   function update<K extends keyof RuntimeConfig>(key: K, value: RuntimeConfig[K]) {
     onChange({ ...config, [key]: value })
@@ -169,8 +190,16 @@ function ConnectionSetup({
           </p>
           <p className="mt-1 text-sm font-semibold text-foreground">Smart-room request</p>
         </div>
-        <span className="rounded-full border border-border bg-secondary px-2 py-1 text-[10px] font-medium text-muted-foreground">
-          Local only
+        <span
+          className={cn(
+            'rounded-full border px-2 py-1 text-[10px] font-medium',
+            originPolicy.canUseApiKeys
+              ? 'border-primary/30 bg-accent text-accent-foreground'
+              : 'border-destructive/30 bg-destructive/10 text-destructive',
+          )}
+          title={`${originPolicy.protocol}//${originPolicy.hostname}`}
+        >
+          {originPolicy.label}
         </span>
       </div>
 
@@ -199,12 +228,12 @@ function ConnectionSetup({
       </div>
 
       <Field label="OpenAI API key" icon={KeyRound} status={hasOpenAiKey ? 'Detected' : 'Missing'}>
-        <input
-          type="password"
+        <ApiKeyInput
+          name="openai-api-key"
           value={config.openaiApiKey}
-          onChange={(event) => update('openaiApiKey', event.target.value)}
+          onValueChange={(value) => update('openaiApiKey', value)}
           placeholder="Paste provider key"
-          className="form-field"
+          policy={originPolicy}
         />
       </Field>
 
@@ -272,19 +301,59 @@ function ConnectionSetup({
             </Field>
           </div>
           <Field label="TraceFix API key" icon={KeyRound} status={hasTracefixKey ? 'Detected' : 'Missing'}>
-            <input
-              type="password"
+            <ApiKeyInput
+              name="tracefix-api-key"
               value={config.tracefixApiKey}
-              onChange={(event) => update('tracefixApiKey', event.target.value)}
+              onValueChange={(value) => update('tracefixApiKey', value)}
               placeholder="Paste TraceFix provider key"
-              className="form-field"
+              policy={originPolicy}
             />
           </Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="CityOS agent provider">
+              <select
+                value={config.cityosAgentProvider}
+                onChange={(event) => update('cityosAgentProvider', event.target.value as RuntimeConfig['cityosAgentProvider'])}
+                className="form-field"
+              >
+                <option value="local">Local / Ollama</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </Field>
+            <Field label="CityOS agent model" icon={Cpu}>
+              <input
+                value={config.cityosAgentModel}
+                onChange={(event) => update('cityosAgentModel', event.target.value)}
+                placeholder="gemma3:4b"
+                className="form-field"
+              />
+            </Field>
+          </div>
+          <Field
+            label="CityOS agent API key"
+            icon={KeyRound}
+            status={config.cityosAgentProvider === 'local' ? 'Not required' : hasCityosAgentKey ? 'Detected' : 'Missing'}
+          >
+            <ApiKeyInput
+              name="cityos-agent-api-key"
+              value={config.cityosAgentApiKey}
+              onValueChange={(value) => update('cityosAgentApiKey', value)}
+              placeholder="Paste CityOS agent provider key"
+              policy={originPolicy}
+              disabled={config.cityosAgentProvider === 'local'}
+            />
+          </Field>
+          <p className="text-[10px] leading-relaxed text-muted-foreground">
+            Generated CityOS retrieval, answer, and monitor agents use this provider and model independently from TraceFix.
+          </p>
         </div>
       </details>
 
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        API keys stay in memory for this session only. Non-secret endpoint settings
+        {originPolicy.message} API keys stay in memory for this session only. Each
+        browser origin requires its own entry. Non-secret endpoint settings
         can persist locally. Internal planning, task payloads, and decomposition
         details remain hidden from the user UI.
       </p>

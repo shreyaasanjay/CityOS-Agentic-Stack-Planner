@@ -5,6 +5,7 @@ import type {
   QueryResult,
   QuerySubmitOptions,
 } from './types'
+import { getApiKeyOriginPolicy } from '@/lib/security/api-key-origin'
 
 interface VerificationStart {
   runId: string
@@ -51,16 +52,37 @@ function report(options: QuerySubmitOptions | undefined, stage: QueryProgressSta
 /** Browser client for the privacy-filtering Next.js proxy workflow. */
 const httpQueryApi: QueryApi = {
   async submitQuery(req: QueryRequest, options?: QuerySubmitOptions): Promise<QueryResult> {
+    const originPolicy = getApiKeyOriginPolicy(window.location)
+    if (!originPolicy.canUseApiKeys && (
+      req.openaiApiKey?.trim()
+      || req.tracefixApiKey?.trim()
+      || req.cityosAgentApiKey?.trim()
+    )) {
+      throw new Error(originPolicy.message)
+    }
+    if (req.mode === 'llm' && !req.openaiApiKey?.trim()) {
+      throw new Error('Add an OpenAI API key in Connection setup before submitting an LLM request.')
+    }
+
     report(options, 'planning')
     const plan = await postJson<QueryResult>('/api/tellme/query', req, options?.signal)
     if (!plan.workflow?.requiresVerification) return plan
+
+    const verificationKey = req.tracefixApiKey?.trim()
+      || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : '')
+    if (req.tracefixProvider !== 'local' && !verificationKey) {
+      throw new Error('Add a TraceFix API key in Connection setup before running verification.')
+    }
+    const cityosAgentKey = req.cityosAgentApiKey?.trim() || ''
+    if (req.cityosAgentProvider !== 'local' && !cityosAgentKey) {
+      throw new Error('Add a CityOS agent API key in TraceFix setup before running the generated agents.')
+    }
 
     report(options, 'verifying')
     const verification = await postJson<VerificationStart>('/api/tellme/verify', {
       provider: req.tracefixProvider,
       model: req.tracefixModel,
-      apiKey: req.tracefixApiKey?.trim()
-        || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : ''),
+      apiKey: verificationKey,
     }, options?.signal)
     report(options, 'verifying', verification.runId)
 
@@ -84,7 +106,9 @@ const httpQueryApi: QueryApi = {
     return postJson<QueryResult>('/api/tellme/answer', {
       query: req.query,
       mirrorApiUrl: req.mirrorApiUrl,
-      model: req.tracefixModel,
+      agentProvider: req.cityosAgentProvider,
+      agentModel: req.cityosAgentModel,
+      agentApiKey: cityosAgentKey,
     }, options?.signal)
   },
 
