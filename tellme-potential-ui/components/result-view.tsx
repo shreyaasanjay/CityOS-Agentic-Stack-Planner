@@ -22,7 +22,7 @@ import {
   Timer,
   Database,
 } from 'lucide-react'
-import type { Agent, QueryResult } from '@/lib/api/types'
+import type { Agent, QueryResult, RecordingCandidate } from '@/lib/api/types'
 import { EvidenceCard } from '@/components/evidence-card'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { cn } from '@/lib/utils'
@@ -61,6 +61,7 @@ export function ResultView({
   onFeedback,
   onRegenerate,
   onEditPrompt,
+  onSelectRecording,
 }: {
   result: QueryResult
   visibleAnswer?: string
@@ -78,6 +79,7 @@ export function ResultView({
   onFeedback?: (feedback: Feedback) => void
   onRegenerate?: () => void
   onEditPrompt?: () => void
+  onSelectRecording?: (candidate: RecordingCandidate) => void
 }) {
   const [tab, setTab] = useState<ResultTab>('answer')
   const pct = result.confidence === null ? null : Math.round(result.confidence * 100)
@@ -165,6 +167,28 @@ export function ResultView({
               content={answer}
               className="text-lg text-foreground sm:text-xl"
             />
+
+            {result.recordingSelection && !isStreaming && (
+              <div className="flex flex-col gap-3 border-t border-border pt-4">
+                <p className="text-sm text-muted-foreground">{result.recordingSelection.prompt}</p>
+                <div className="grid gap-2">
+                  {result.recordingSelection.candidates.map((candidate, index) => (
+                    <button
+                      key={candidate.recordingId}
+                      type="button"
+                      onClick={() => onSelectRecording?.(candidate)}
+                      disabled={!onSelectRecording}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5 text-left text-sm transition-colors hover:border-primary/50 hover:bg-secondary disabled:cursor-not-allowed"
+                    >
+                      <span className="font-medium">Take {index + 1}</span>
+                      <span className="text-right text-xs text-muted-foreground">
+                        {[candidate.dateLabel, candidate.timeLabel, candidate.detail].filter(Boolean).join(' ? ') || candidate.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {result.keyPoints.length > 0 && !isStreaming && (
               <ul className="flex flex-col gap-2 border-t border-border pt-4">

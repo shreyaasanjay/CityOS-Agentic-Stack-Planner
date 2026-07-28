@@ -17,6 +17,19 @@ interface AnswerRequest {
   query?: string
   mirrorApiUrl?: string
   model?: string
+  timestamp?: string
+  recordingOverride?: { recordingId?: string; day?: string; rec?: string }
+}
+
+function normalizedRecordingOverride(value: AnswerRequest['recordingOverride']) {
+  if (!value) return undefined
+  const recordingId = value.recordingId?.trim() || ''
+  const parts = recordingId.split('/').map((part) => part.trim()).filter(Boolean)
+  return {
+    recordingId,
+    day: value.day?.trim() || (parts.length >= 2 ? parts.at(-2) : ''),
+    rec: value.rec?.trim() || (parts.length >= 2 ? parts.at(-1) : ''),
+  }
 }
 
 function safeLabel(value: string) {
@@ -72,6 +85,36 @@ function aggregateAnswer(query: string, answer: JsonObject): string {
   if (backendText) return backendText
 
   return 'The smart-room data was processed, but no privacy-safe aggregate answer was available for this request.'
+}
+
+function selectionResult(webRun: JsonObject, query: string, model: string): QueryResult {
+  const answer = asObject(webRun.answer)
+  const candidates = asArray(answer.clarificationCandidates)
+    .map(asObject)
+    .map((candidate) => ({
+      recordingId: asString(candidate.recordingId) || [asString(candidate.day), asString(candidate.rec)].filter(Boolean).join('/'),
+      label: asString(candidate.label) || 'Available recording',
+      detail: asString(candidate.detail),
+      dateLabel: asString(candidate.dateLabel),
+      timeLabel: asString(candidate.timeLabel),
+    }))
+    .filter((candidate) => Boolean(candidate.recordingId))
+  return {
+    id: `tellme_selection_${Date.now()}`,
+    answer: asString(answer.clarificationPrompt) || 'Choose the recording that best matches your request.',
+    keyPoints: ['Choose one recording to continue with the original question.'],
+    confidence: null,
+    agents: [],
+    evidence: [],
+    guidelines: [],
+    model: model || undefined,
+    workflow: { requiresVerification: false },
+    recordingSelection: {
+      prompt: asString(answer.clarificationPrompt) || 'Choose the recording that best matches your request.',
+      candidates,
+    },
+    createdAt: new Date().toISOString(),
+  }
 }
 
 function safeFinalResult(envelope: JsonObject, query: string, model: string): QueryResult {
@@ -161,10 +204,15 @@ export async function POST(request: Request) {
         sourceMode: 'auto',
         timeoutSeconds: 30,
         question: query,
+        timestamp: body.timestamp?.trim() || undefined,
+        recordingOverride: normalizedRecordingOverride(body.recordingOverride),
       }),
     }, 180_000)
     if (!webRun.response.ok || webRun.payload.ok === false) {
       return NextResponse.json({ error: 'The smart-room service could not produce an answer.' }, { status: 502 })
+    }
+    if (asObject(webRun.payload.answer).needsClarification === true) {
+      return NextResponse.json(selectionResult(webRun.payload, query, body.model?.trim() || ''))
     }
 
     const currentTellme = await runnerJson('/api/tellme/current')

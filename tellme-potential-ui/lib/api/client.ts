@@ -88,6 +88,17 @@ const httpQueryApi: QueryApi = {
     }, options?.signal)
   },
 
+  async selectRecording(req: QueryRequest, recordingId: string, options?: QuerySubmitOptions): Promise<QueryResult> {
+    report(options, 'answering')
+    return postJson<QueryResult>('/api/tellme/answer', {
+      query: req.query,
+      mirrorApiUrl: req.mirrorApiUrl,
+      model: req.tracefixModel,
+      timestamp: req.timestamp,
+      recordingOverride: { recordingId },
+    }, options?.signal)
+  },
+
   async stopQuery(runId: string): Promise<void> {
     const response = await fetch(`/api/tellme/verify/${runId}`, { method: 'DELETE' })
     await readJson<{ ok: true }>(response)
