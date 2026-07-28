@@ -2,17 +2,20 @@
 
 import { useRef, useState } from 'react'
 import { ArrowUp, FileUp, Paperclip, Plus } from 'lucide-react'
+import { translate, type LanguageMode } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 interface QueryConsoleProps {
   onSubmit: (query: string) => void
   disabled?: boolean
+  language: LanguageMode
 }
 
-export function QueryConsole({ onSubmit, disabled }: QueryConsoleProps) {
+export function QueryConsole({ onSubmit, disabled, language }: QueryConsoleProps) {
   const [value, setValue] = useState('')
   const [showAttachments, setShowAttachments] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const t = (key: Parameters<typeof translate>[1]) => translate(language, key)
 
   function submit() {
     const trimmed = value.trim()
@@ -50,9 +53,9 @@ export function QueryConsole({ onSubmit, disabled }: QueryConsoleProps) {
               <FileUp className="size-4.5" aria-hidden="true" />
             </span>
             <div>
-              <p className="font-medium text-foreground">Upload document</p>
+              <p className="font-medium text-foreground">{t('query.uploadDocument')}</p>
               <p className="text-[12px] text-muted-foreground">
-                Drag files here when attachments are enabled.
+                {t('query.attachmentsPending')}
               </p>
             </div>
             <div className="flex flex-wrap justify-center gap-1.5 text-[10px] text-muted-foreground">
@@ -72,14 +75,14 @@ export function QueryConsole({ onSubmit, disabled }: QueryConsoleProps) {
         onChange={autoGrow}
         onKeyDown={handleKeyDown}
         rows={1}
-        placeholder="Ask TeLLMe what happened, where, or when... e.g. I lost my keys on Maple St this afternoon"
-        aria-label="Query"
+        placeholder={t('query.placeholder')}
+        aria-label={t('query.label')}
         className="max-h-[200px] w-full resize-none bg-transparent px-3 py-2 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
       />
       <div className="flex items-center justify-between px-1 pt-1">
         <button
           type="button"
-          aria-label="Attach context"
+          aria-label={t('query.attachContext')}
           onClick={() => setShowAttachments((value) => !value)}
           className={cn(
             'inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
@@ -88,17 +91,17 @@ export function QueryConsole({ onSubmit, disabled }: QueryConsoleProps) {
         >
           <Plus className="size-3.5" aria-hidden="true" />
           <Paperclip className="size-4" aria-hidden="true" />
-          <span className="hidden sm:inline">Upload document</span>
+          <span className="hidden sm:inline">{t('query.uploadDocument')}</span>
         </button>
         <div className="flex items-center gap-2">
           <span className="hidden text-[11px] text-muted-foreground sm:inline">
-            Enter to send - Shift + Enter for new line
+            {t('query.keyboardHint')}
           </span>
           <button
             type="button"
             onClick={submit}
             disabled={disabled || !value.trim()}
-            aria-label="Send query"
+            aria-label={t('query.send')}
             className={cn(
               'inline-flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40',
             )}

@@ -6,6 +6,7 @@ import {
   SettingsMenu,
   type AppearanceSettings,
 } from '@/components/settings-menu'
+import { translate } from '@/lib/i18n'
 
 export type WorkspaceTab = 'conversation' | 'guidelines'
 
@@ -24,6 +25,8 @@ export function AppHeader({
   settings,
   onSettingsChange,
 }: AppHeaderProps) {
+  const t = (key: Parameters<typeof translate>[1]) => translate(settings.language, key)
+
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
@@ -38,18 +41,18 @@ export function AppHeader({
                 <p className="truncate text-sm font-semibold tracking-tight">TeLLMe</p>
                 <span className="hidden items-center gap-1 rounded-full border border-primary/25 bg-accent px-1.5 py-0.5 text-[9px] font-semibold text-accent-foreground sm:inline-flex">
                   <Wifi className="size-2.5" aria-hidden="true" />
-                  Smart room connected
+                  {t('header.connected')}
                 </span>
               </div>
               <p className="hidden text-[11px] text-muted-foreground sm:block">
-                Grounded answers from city sensors
+                {t('header.subtitle')}
               </p>
             </div>
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <BackendLink />
+          <BackendLink title={t('result.tracefixTitle')} />
           <nav
             aria-label="Workspace views"
             className="flex items-center gap-1 rounded-full border border-border bg-card p-1"
@@ -59,14 +62,14 @@ export function AppHeader({
               onClick={() => onTabChange('conversation')}
             >
               <MessageSquareText className="size-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">Conversation</span>
+              <span className="hidden sm:inline">{t('header.conversation')}</span>
             </TabButton>
             <TabButton
               active={activeTab === 'guidelines'}
               onClick={() => onTabChange('guidelines')}
             >
               <ListChecks className="size-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">Guidelines</span>
+              <span className="hidden sm:inline">{t('header.guidelines')}</span>
               {guidelineCount > 0 && (
                 <span
                   className={cn(
@@ -87,13 +90,13 @@ export function AppHeader({
   )
 }
 
-function BackendLink() {
+function BackendLink({ title }: { title: string }) {
   return (
     <a
       href="/api/tellme/backend"
       target="_blank"
       rel="noreferrer"
-      title="Open the local TraceFix runner and intent decomposition view"
+      title={title}
       className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:px-3"
     >
       <Server className="size-3.5" aria-hidden="true" />
