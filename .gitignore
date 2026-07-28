@@ -29,5 +29,6 @@ tracefix.pipeline/
 # TraceFix local UI runtime output
 .tracefix-ui/logs/
 .tracefix-ui/web-data-runs/
+.tracefix-ui/ocsort-labels/
 .tracefix-ui/smoke-*/
 .runs/tellme/tellme_*/

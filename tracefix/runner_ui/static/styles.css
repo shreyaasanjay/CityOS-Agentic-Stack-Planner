@@ -254,6 +254,36 @@ button {
   background: var(--red-soft);
 }
 
+.raw-data-status {
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 9px;
+  color: var(--muted);
+  background: #15181b;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.raw-data-clear {
+  height: 34px;
+}
+
+input[type="file"] {
+  color: var(--muted);
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 5px 9px;
+  color: #d8e2de;
+  background: #20262a;
+  font-weight: 800;
+}
+
 .sidebar-section {
   display: block;
   padding: 12px;
@@ -1269,6 +1299,16 @@ textarea:focus {
 :root[data-theme="light"] .secondary-button {
   color: var(--ink);
   background: #fbf6ec;
+}
+
+:root[data-theme="light"] .raw-data-status {
+  color: #66594b;
+  background: #fbf6ec;
+}
+
+:root[data-theme="light"] input[type="file"]::file-selector-button {
+  color: var(--ink);
+  background: #eee2cf;
 }
 
 :root[data-theme="light"] .run-panel {

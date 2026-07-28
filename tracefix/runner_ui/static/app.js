@@ -60,6 +60,10 @@ const els = {
   tellmeQuery: document.querySelector("#tellmeQuery"),
   tellmeSpaceId: document.querySelector("#tellmeSpaceId"),
   tellmeWebDataUrl: document.querySelector("#tellmeWebDataUrl"),
+  tellmeRawDataJson: document.querySelector("#tellmeRawDataJson"),
+  tellmeRawDataFile: document.querySelector("#tellmeRawDataFile"),
+  tellmeRawDataStatus: document.querySelector("#tellmeRawDataStatus"),
+  tellmeClearRawData: document.querySelector("#tellmeClearRawData"),
   tellmeTimestamp: document.querySelector("#tellmeTimestamp"),
   tellmeProcess: document.querySelector("#tellmeProcess"),
   tellmeRunAll: document.querySelector("#tellmeRunAll"),
@@ -165,6 +169,10 @@ const els = {
   synthWorkspacePath: document.querySelector("#synthWorkspacePath"),
   synthCityOSRoot: document.querySelector("#synthCityOSRoot"),
   synthWebDataUrl: document.querySelector("#synthWebDataUrl"),
+  synthRawDataJson: document.querySelector("#synthRawDataJson"),
+  synthRawDataFile: document.querySelector("#synthRawDataFile"),
+  synthRawDataStatus: document.querySelector("#synthRawDataStatus"),
+  synthClearRawData: document.querySelector("#synthClearRawData"),
   synthOutputDir: document.querySelector("#synthOutputDir"),
   synthPackageName: document.querySelector("#synthPackageName"),
   synthOverwrite: document.querySelector("#synthOverwrite"),
@@ -293,6 +301,77 @@ function toggleTheme() {
   applyTheme(next);
 }
 
+function formatRawDataSize(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  const precision = unitIndex === 0 || size >= 10 ? 0 : 1;
+  return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function rawDataStatusText(fileNames, fileSize, hasData) {
+  if (!hasData) return "No JSON files selected";
+  const names = Array.isArray(fileNames) ? fileNames.filter(Boolean) : [fileNames].filter(Boolean);
+  const sizeText = formatRawDataSize(fileSize || 0);
+  if (names.length <= 1) return `Loaded ${names[0] || "JSON file"} (${sizeText})`;
+  const preview = names.slice(0, 3).join(", ");
+  const suffix = names.length > 3 ? `, +${names.length - 3} more` : "";
+  return `Loaded ${names.length} JSON files (${sizeText}): ${preview}${suffix}`;
+}
+
+function setRawDataPayload(raw, fileNames = [], fileSize = 0) {
+  const value = String(raw || "");
+  const hasData = value.trim().length > 0;
+  [els.tellmeRawDataJson, els.synthRawDataJson].forEach((field) => {
+    if (field) field.value = value;
+  });
+  const statusText = rawDataStatusText(fileNames, fileSize || value.length, hasData);
+  [els.tellmeRawDataStatus, els.synthRawDataStatus].forEach((status) => {
+    if (status) status.textContent = statusText;
+  });
+  [els.tellmeClearRawData, els.synthClearRawData].forEach((button) => {
+    if (button) button.disabled = !hasData;
+  });
+}
+
+function clearRawDataUpload() {
+  [els.tellmeRawDataFile, els.synthRawDataFile].forEach((input) => {
+    if (input) input.value = "";
+  });
+  setRawDataPayload("");
+}
+
+async function loadRawDataFile(input) {
+  const files = Array.from(input?.files || []);
+  if (!files.length) return;
+  try {
+    const loaded = [];
+    for (const file of files) {
+      const raw = await file.text();
+      loaded.push({ name: file.name, size: file.size, raw, data: JSON.parse(raw) });
+    }
+    const rawPayload = loaded.length === 1
+      ? loaded[0].raw
+      : JSON.stringify({
+          kind: "tracefix.raw-json-bundle.v1",
+          fileCount: loaded.length,
+          files: loaded.map(({ name, size, data }) => ({ name, size, data })),
+        }, null, 2);
+    const names = loaded.map((item) => item.name);
+    const totalSize = loaded.reduce((sum, item) => sum + item.size, 0);
+    setRawDataPayload(rawPayload, names, totalSize);
+    showToast(loaded.length === 1 ? `Loaded ${loaded[0].name}` : `Loaded ${loaded.length} JSON files`);
+  } catch (error) {
+    input.value = "";
+    showToast(`JSON files could not be loaded: ${error.message}`);
+  }
+}
 function bindEvents() {
   els.themeToggle?.addEventListener("click", toggleTheme);
   document.querySelectorAll("[data-workflow]").forEach((button) => {
@@ -335,6 +414,16 @@ function bindEvents() {
     state.synth.webDataUrl = els.tellmeWebDataUrl.value.trim() || state.synth.webDataUrl;
   });
 
+  els.tellmeRawDataFile?.addEventListener("change", async () => {
+    await loadRawDataFile(els.tellmeRawDataFile);
+  });
+
+  els.synthRawDataFile?.addEventListener("change", async () => {
+    await loadRawDataFile(els.synthRawDataFile);
+  });
+
+  els.tellmeClearRawData?.addEventListener("click", clearRawDataUpload);
+  els.synthClearRawData?.addEventListener("click", clearRawDataUpload);
   els.tellmeRunAll.addEventListener("click", async () => {
     await processTellMeFullPipeline();
   });
@@ -906,6 +995,12 @@ function pipelineWebDataUrl() {
   return url;
 }
 
+function pipelineRawDataJson() {
+  const raw = (els.tellmeRawDataJson?.value || els.synthRawDataJson?.value || "").trim();
+  if (els.tellmeRawDataJson && els.tellmeRawDataJson.value.trim() !== raw) els.tellmeRawDataJson.value = raw;
+  if (els.synthRawDataJson && els.synthRawDataJson.value.trim() !== raw) els.synthRawDataJson.value = raw;
+  return raw;
+}
 async function refreshTellMeCurrentFromServer() {
   const response = await getJson("/api/tellme/current");
   if (response.ok && response.data) {
@@ -1007,11 +1102,13 @@ async function processTellMeFullPipeline() {
     if (cityosResult.summary) renderSynthSummary(cityosResult.summary);
     renderSynthArtifacts(cityosResult);
 
-    appendTellMeMessage("info", "Smartroom web-data apps are fetching the API data and producing the final answer...");
+    appendTellMeMessage("info", "Smartroom web-data apps are loading the selected data and producing the final answer...");
+    const rawDataJson = pipelineRawDataJson();
     const webResult = await postJson("/api/synth/run-web-data", {
       manifestPath: cityosResult.manifestPath,
       sourceUrl: pipelineWebDataUrl(),
-      sourceMode: "auto",
+      sourceMode: rawDataJson ? "raw-json" : "auto",
+      rawDataJson,
       timeoutSeconds: 30,
       question: state.tellme.current?.query || els.tellmeQuery.value.trim(),
     });
@@ -1133,7 +1230,7 @@ function renderTellMeChatAnswer(data) {
   if (!data) return "No answer yet. Run the full pipeline to generate a data-backed response.";
   const answer = data.web_data_answer || data.answer_packet?.answer || null;
   const fallback = data.chat_answer || answer?.chatAnswer || answer?.chat_answer || "";
-  if (!answer) return fallback || "No smartroom camera result is available yet. Run the web data apps after synthesis to generate the answer.";
+  if (!answer) return fallback || "No data-backed result is available yet. Run the web data apps after synthesis to generate the answer.";
 
   const question = data.query || answer.question || "";
   const requestedActivityText = conciseRequestedActivityAnswer(answer);
@@ -1149,7 +1246,7 @@ function renderTellMeChatAnswer(data) {
 
   const cleanedFallback = stripTechnicalAnswerDetails(fallback, { keepActivities: questionAsksForActivity(question) });
   if (cleanedFallback) return cleanedFallback;
-  return "I found the smartroom recording, but there was not enough relevant data to answer the question yet.";
+  return "I loaded the selected data, but there was not enough relevant information to answer the question yet.";
 }
 function renderTellMeAnswerSummary(data) {
   if (!data) return "No answer summary yet.";
@@ -1165,7 +1262,7 @@ function renderTellMeAnswerSummary(data) {
     const goal = spec.application_goal || {};
     lines.push("Answer Summary");
     lines.push(route.requires_tracefix === true || data.status === "needs_tracefix"
-      ? "Ready for TraceFix verification. Run the generated apps against the smartroom API to produce the final data-backed answer."
+      ? "Ready for TraceFix verification. Run the generated apps against the selected web or uploaded JSON data to produce the final data-backed answer."
       : "TeLLMe produced a privacy-bounded answer plan.");
     if (data.query) lines.push(`Request: ${data.query}`);
     if (goal.goal_type || goal.user_intent) {
@@ -1176,7 +1273,7 @@ function renderTellMeAnswerSummary(data) {
   if (data.web_data_snapshot_summary) {
     const snapshot = data.web_data_snapshot_summary;
     lines.push("");
-    lines.push("Smartroom Snapshot");
+    lines.push("Data Snapshot");
     if (snapshot.selectedRecording || snapshot.selectedDay) {
       lines.push(`Recording: ${[snapshot.selectedDay, snapshot.selectedRecording].filter(Boolean).join(" / ")}`);
     }
@@ -1186,7 +1283,7 @@ function renderTellMeAnswerSummary(data) {
       lines.push(`Cameras: ${snapshot.cameras.join(", ")}`);
     }
     if (snapshot.recordingCount !== undefined) lines.push(`Recordings available: ${snapshot.recordingCount}`);
-    if (snapshot.errors) lines.push(`API errors: ${snapshot.errors}`);
+    if (snapshot.errors) lines.push(`Data errors: ${snapshot.errors}`);
   }
 
   if (answer?.requestedActivityAnswer) {
@@ -1560,15 +1657,17 @@ async function runWebDataApps() {
     return;
   }
   const sourceUrl = els.synthWebDataUrl?.value?.trim() || state.synth.webDataUrl || "https://smartroom-mirror.vercel.app/api/v1";
+  const rawDataJson = pipelineRawDataJson();
   els.synthRunWebData.disabled = true;
   els.synthOutputStatus.textContent = "Running web data apps...";
   const prior = els.synthOutput.textContent || "";
-  els.synthOutput.textContent = `${prior}${prior ? "\n\n" : ""}Fetching web data and feeding generated apps...\n`;
+  els.synthOutput.textContent = `${prior}${prior ? "\n\n" : ""}Loading web data and feeding generated apps...\n`;
   try {
     const result = await postJson("/api/synth/run-web-data", {
       manifestPath,
       sourceUrl,
-      sourceMode: "auto",
+      sourceMode: rawDataJson ? "raw-json" : "auto",
+      rawDataJson,
       timeoutSeconds: 30,
       question: state.tellme.current?.query || els.tellmeQuery.value.trim(),
     });

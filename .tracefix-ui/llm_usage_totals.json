@@ -1,27 +1,17 @@
 {
-  "total_runs": 106,
-  "total_tokens": 0,
-  "total_cost_usd": 0.0,
+  "total_runs": 9,
+  "total_tokens": 1424454,
+  "total_cost_usd": 2.959233,
   "by_model": {
-    "glm-5.2": {
-      "runs": 87,
-      "tokens": 0,
-      "cost_usd": 0.0
-    },
-    "gpt-4.1-mini": {
-      "runs": 1,
-      "tokens": 0,
-      "cost_usd": 0.0
-    },
     "gpt-5-mini": {
-      "runs": 17,
+      "runs": 2,
       "tokens": 0,
       "cost_usd": 0.0
     },
-    "deepseek-chat": {
-      "runs": 1,
-      "tokens": 0,
-      "cost_usd": 0.0
+    "glm-5.2": {
+      "runs": 7,
+      "tokens": 1424454,
+      "cost_usd": 2.959233
     }
   }
 }

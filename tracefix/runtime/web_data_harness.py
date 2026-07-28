@@ -502,6 +502,409 @@ def fetch_web_payload(
     return payload
 
 
+
+def _looks_like_smartroom_snapshot(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    kind = str(value.get("kind") or "").strip().lower()
+    if kind == "smartroom-control.snapshot.v1":
+        return True
+    if isinstance(value.get("selected"), dict) and (
+        "recordingCount" in value or isinstance(value.get("recordings"), list)
+    ):
+        return True
+    return False
+
+
+def _snapshot_summary_from_smartroom_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    selection = snapshot.get("selection") if isinstance(snapshot.get("selection"), dict) else {}
+    selected = snapshot.get("selected") if isinstance(snapshot.get("selected"), dict) else None
+    recordings = snapshot.get("recordings") if isinstance(snapshot.get("recordings"), list) else []
+    errors = snapshot.get("errors") if isinstance(snapshot.get("errors"), list) else []
+    cameras = []
+    if selected is not None and isinstance(selected.get("cameras"), dict):
+        cameras = list(selected.get("cameras", {}).keys())
+    return {
+        "recordingCount": snapshot.get("recordingCount", len(recordings)),
+        "selectedDay": selected.get("day") if isinstance(selected, dict) else None,
+        "selectedRecording": selected.get("rec") if isinstance(selected, dict) else None,
+        "cameras": cameras,
+        "selectionMode": selection.get("mode"),
+        "selectionReason": selection.get("reason"),
+        "requestedDate": selection.get("requestedDate"),
+        "requestedDateLabel": selection.get("requestedDateLabel"),
+        "question": snapshot.get("question"),
+        "errors": len(errors),
+    }
+
+
+
+
+def _generic_count_targets(question: str) -> list[str]:
+    text = question.lower()
+    targets: list[str] = []
+    if any(term in text for term in ("pedestrian", "pedestrians", "walker", "walkers", "people", "person")):
+        targets.extend(["pedestrian", "walker", "person"])
+    if any(term in text for term in ("vehicle", "vehicles", "car", "cars", "automobile", "automobiles")):
+        targets.extend(["vehicle", "car"])
+    if any(term in text for term in ("emergency vehicle", "emergency vehicles", "ambulance", "firetruck", "police")):
+        targets.extend(["emergency vehicle", "ambulance", "firetruck", "police"])
+    deduped: list[str] = []
+    for target in targets:
+        if target not in deduped:
+            deduped.append(target)
+    return deduped
+
+
+def _generic_entity_matches(entity: dict[str, Any], targets: list[str]) -> bool:
+    values = [entity.get("type"), entity.get("name"), entity.get("class"), entity.get("label"), entity.get("category")]
+    text = " ".join(str(value).lower() for value in values if value is not None)
+    if not text:
+        return False
+    if "pedestrian" in targets or "walker" in targets or "person" in targets:
+        if "pedestrian" in text or "walker" in text or re.search(r"\bperson\b", text):
+            return True
+    if "vehicle" in targets or "car" in targets:
+        if any(term in text for term in ("vehicle", "car", "truck", "bus", "motorcycle", "bike", "bicycle")):
+            return True
+    if "emergency vehicle" in targets:
+        if any(term in text for term in ("ambulance", "firetruck", "fire truck", "police", "emergency")):
+            return True
+    return any(target in text for target in targets)
+
+
+def _claim_subject_id(value: Any) -> str:
+    return str(value).strip() if value is not None else ""
+
+
+def _generic_presence_claim_matches(claim: dict[str, Any], targets: list[str], entity_ids: set[str]) -> bool:
+    polarity = str(claim.get("polarity") or "positive").lower()
+    modality = str(claim.get("modality") or "asserted").lower()
+    if polarity not in {"positive", "true", "asserted"} or modality in {"negated", "hypothetical"}:
+        return False
+    claim_type = str(claim.get("claim_type") or claim.get("type") or "").lower()
+    predicate = str(claim.get("predicate") or "").lower()
+    natural = str(claim.get("natural_language") or claim.get("text") or "").lower()
+    subject = _claim_subject_id(claim.get("subject"))
+    if claim_type == "object_presence" or predicate == "present":
+        if subject and subject in entity_ids:
+            return True
+        if "present" in natural and any(target in natural for target in targets):
+            return True
+    return False
+
+
+def _count_generic_targets(data: Any, question: str) -> dict[str, Any] | None:
+    if not isinstance(data, dict):
+        return None
+    targets = _generic_count_targets(question)
+    if not targets:
+        return None
+    entities = data.get("entities") if isinstance(data.get("entities"), list) else []
+    matched_entities = [entity for entity in entities if isinstance(entity, dict) and _generic_entity_matches(entity, targets)]
+    entity_ids = {
+        str(entity.get("local_id") or entity.get("id") or entity.get("track_id") or entity.get("trackId") or "").strip()
+        for entity in matched_entities
+    }
+    entity_ids.discard("")
+    claims = data.get("claims") if isinstance(data.get("claims"), list) else []
+    presence_subjects = {
+        _claim_subject_id(claim.get("subject"))
+        for claim in claims
+        if isinstance(claim, dict) and _generic_presence_claim_matches(claim, targets, entity_ids)
+    }
+    presence_subjects.discard("")
+    count = len(presence_subjects) if presence_subjects else len(matched_entities)
+    if count <= 0:
+        return None
+    label = "pedestrians" if any(target in targets for target in ("pedestrian", "walker", "person")) else targets[0] + "s"
+    source = str(data.get("source") or "uploaded JSON")
+    scene_id = str(data.get("scene_id") or data.get("scenario_id") or data.get("id") or "").strip()
+    if scene_id:
+        text = f"There are {count} {label} in scene {scene_id}."
+    else:
+        text = f"There are {count} {label} in the uploaded data."
+    method = "positive object-presence claims" if presence_subjects else "matching entities"
+    return {
+        "question": question or "How many matching objects are present?",
+        "text": text,
+        "chatAnswer": text,
+        "chat_answer": text,
+        "answer": text,
+        "sourceKind": "raw-json",
+        "source": source,
+        "sceneId": scene_id or None,
+        "count": count,
+        "target": label,
+        "method": method,
+        "entities": [
+            {
+                "id": entity.get("local_id") or entity.get("id") or entity.get("track_id") or entity.get("trackId"),
+                "type": entity.get("type"),
+                "name": entity.get("name"),
+            }
+            for entity in matched_entities
+        ],
+        "claimSubjects": sorted(presence_subjects),
+    }
+
+
+def _build_generic_raw_json_answer(data: Any, question: str) -> dict[str, Any] | None:
+    count_answer = _count_generic_targets(data, question)
+    if count_answer is not None:
+        return count_answer
+    return None
+
+def _build_generic_bundle_answer(
+    generic_entries: list[dict[str, Any]],
+    *,
+    file_count: int,
+    question: str,
+) -> dict[str, Any] | None:
+    if not generic_entries:
+        return None
+    counts = [entry.get("answer", {}).get("count") for entry in generic_entries if isinstance(entry.get("answer"), dict)]
+    numeric_counts = [int(count) for count in counts if isinstance(count, int) or (isinstance(count, str) and count.isdigit())]
+    target = "items"
+    for entry in generic_entries:
+        answer = entry.get("answer") if isinstance(entry.get("answer"), dict) else {}
+        if answer.get("target"):
+            target = str(answer.get("target"))
+            break
+    per_file = []
+    for entry in generic_entries:
+        name = str(entry.get("name") or "JSON file")
+        answer = entry.get("answer") if isinstance(entry.get("answer"), dict) else {}
+        if answer.get("count") is not None:
+            per_file.append(f"{name}: {answer.get('count')} {answer.get('target') or target}")
+        elif answer.get("text"):
+            per_file.append(f"{name}: {answer.get('text')}")
+    if numeric_counts:
+        total = sum(numeric_counts)
+        text = f"Across {len(generic_entries)} relevant JSON file(s) out of {file_count} selected file(s), I found {total} {target} total."
+        if per_file:
+            text += " Per file: " + "; ".join(per_file) + "."
+    else:
+        text = f"I found relevant data in {len(generic_entries)} JSON file(s) out of {file_count} selected file(s)."
+        if per_file:
+            text += " " + " ".join(per_file)
+    return {
+        "question": question or "What does the uploaded data show?",
+        "text": text,
+        "chatAnswer": text,
+        "chat_answer": text,
+        "answer": text,
+        "sourceKind": "raw-json-bundle",
+        "count": sum(numeric_counts) if numeric_counts else None,
+        "target": target,
+        "files": [
+            {
+                "name": entry.get("name"),
+                "answer": entry.get("answer"),
+            }
+            for entry in generic_entries
+        ],
+    }
+def _looks_like_raw_json_bundle(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    kind = str(value.get("kind") or "").strip().lower()
+    return kind in {"tracefix.raw-json-bundle.v1", "tracefix.raw_json_bundle.v1"} and isinstance(value.get("files"), list)
+
+
+def _raw_json_bundle_entries(bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    files = bundle.get("files") if isinstance(bundle.get("files"), list) else []
+    entries: list[dict[str, Any]] = []
+    for index, item in enumerate(files):
+        if isinstance(item, dict) and "data" in item:
+            data = item.get("data")
+            name = str(item.get("name") or f"file_{index + 1}.json")
+            size = item.get("size")
+        else:
+            data = item
+            name = f"file_{index + 1}.json"
+            size = None
+        entries.append({"name": name, "size": size, "data": data})
+    return entries
+
+
+def _snapshot_summary_from_raw_json_bundle(
+    entries: list[dict[str, Any]],
+    smartroom_entries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    smartroom_names = {str(item.get("name") or "") for item in smartroom_entries}
+    files = []
+    for entry in entries:
+        name = str(entry.get("name") or "")
+        data = entry.get("data")
+        summary = _snapshot_summary_from_smartroom_snapshot(data) if isinstance(data, dict) and name in smartroom_names else None
+        files.append({
+            "name": name,
+            "size": entry.get("size"),
+            "sourceKind": "smartroom-control" if name in smartroom_names else "json",
+            "snapshotSummary": summary,
+        })
+    return {
+        "fileCount": len(entries),
+        "smartroomSnapshotCount": len(smartroom_entries),
+        "files": files,
+    }
+
+
+def _build_smartroom_bundle_answer(
+    smartroom_entries: list[dict[str, Any]],
+    *,
+    file_count: int,
+    question: str,
+) -> dict[str, Any] | None:
+    if not smartroom_entries:
+        return None
+    answer_parts = []
+    cameras: list[dict[str, Any]] = []
+    recordings: list[dict[str, Any]] = []
+    errors: list[Any] = []
+    for entry in smartroom_entries:
+        name = str(entry.get("name") or "JSON file")
+        answer = entry.get("answer") if isinstance(entry.get("answer"), dict) else {}
+        snapshot = entry.get("data") if isinstance(entry.get("data"), dict) else {}
+        text = str(answer.get("chatAnswer") or answer.get("chat_answer") or answer.get("text") or "").strip()
+        if text:
+            answer_parts.append(f"{name}: {text}")
+        selected = snapshot.get("selected") if isinstance(snapshot.get("selected"), dict) else None
+        recordings.append({
+            "file": name,
+            "recording": answer.get("recording"),
+            "selectedDay": selected.get("day") if isinstance(selected, dict) else None,
+            "selectedRecording": selected.get("rec") if isinstance(selected, dict) else None,
+        })
+        for camera in answer.get("cameras") or []:
+            if isinstance(camera, dict):
+                enriched = dict(camera)
+                enriched["sourceFile"] = name
+                cameras.append(enriched)
+        for error in answer.get("errors") or []:
+            errors.append({"file": name, "error": error})
+    if answer_parts:
+        text = f"I loaded {len(smartroom_entries)} smartroom JSON file(s) out of {file_count} selected file(s). " + " ".join(answer_parts)
+    else:
+        text = f"I loaded {len(smartroom_entries)} smartroom JSON file(s) out of {file_count} selected file(s), but none included enough data to summarize."
+    return {
+        "question": question or "What does the uploaded smartroom data show?",
+        "text": text,
+        "chatAnswer": text,
+        "chat_answer": text,
+        "recording": None,
+        "recordings": recordings,
+        "cameras": cameras,
+        "selection": {"bundle": True, "fileCount": file_count, "smartroomSnapshotCount": len(smartroom_entries)},
+        "errors": errors,
+    }
+
+def fetch_raw_json_payload(
+    raw_data_json: str,
+    *,
+    max_bytes: int = _DEFAULT_MAX_BYTES,
+    question_context: Any | None = None,
+) -> dict[str, Any]:
+    raw = str(raw_data_json or "").strip()
+    if not raw:
+        raise ValueError("Raw data JSON is empty.")
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Raw data must be valid JSON: {exc}") from exc
+
+    source_kind = "raw-json"
+    answer = parsed.get("answer") if isinstance(parsed, dict) and isinstance(parsed.get("answer"), dict) else None
+    snapshot_summary = None
+    body_value: Any = parsed
+    question = _question_text(question_context)
+
+    if isinstance(parsed, dict) and _looks_like_raw_json_bundle(parsed):
+        entries = _raw_json_bundle_entries(parsed)
+        processed_files: list[dict[str, Any]] = []
+        smartroom_entries: list[dict[str, Any]] = []
+        generic_entries: list[dict[str, Any]] = []
+        for entry in entries:
+            processed_entry = dict(entry)
+            data = processed_entry.get("data")
+            if isinstance(data, dict) and _looks_like_smartroom_snapshot(data):
+                snapshot = dict(data)
+                if question and not snapshot.get("question"):
+                    snapshot["question"] = question
+                entry_answer = snapshot.get("answer") if isinstance(snapshot.get("answer"), dict) else None
+                if entry_answer is None:
+                    entry_answer = build_smartroom_answer(snapshot)
+                    snapshot["answer"] = entry_answer
+                processed_entry["data"] = snapshot
+                processed_entry["answer"] = entry_answer
+                smartroom_entries.append(processed_entry)
+            elif isinstance(data, dict):
+                entry_answer = _build_generic_raw_json_answer(data, question)
+                if entry_answer is not None:
+                    processed_entry["answer"] = entry_answer
+                    generic_entries.append(processed_entry)
+            processed_files.append(processed_entry)
+        body_value = dict(parsed)
+        body_value["kind"] = "tracefix.raw-json-bundle.v1"
+        body_value["fileCount"] = len(processed_files)
+        body_value["files"] = processed_files
+        if answer is None:
+            answer = _build_smartroom_bundle_answer(
+                smartroom_entries,
+                file_count=len(processed_files),
+                question=question,
+            )
+        if answer is None:
+            answer = _build_generic_bundle_answer(
+                generic_entries,
+                file_count=len(processed_files),
+                question=question,
+            )
+        source_kind = "smartroom-control-bundle" if smartroom_entries else "raw-json-bundle"
+        snapshot_summary = _snapshot_summary_from_raw_json_bundle(processed_files, smartroom_entries)
+
+    elif isinstance(parsed, dict) and _looks_like_smartroom_snapshot(parsed):
+        snapshot = dict(parsed)
+        if question and not snapshot.get("question"):
+            snapshot["question"] = question
+        answer = snapshot.get("answer") if isinstance(snapshot.get("answer"), dict) else None
+        if answer is None:
+            answer = build_smartroom_answer(snapshot)
+            snapshot["answer"] = answer
+        source_kind = "smartroom-control"
+        snapshot_summary = _snapshot_summary_from_smartroom_snapshot(snapshot)
+        body_value = snapshot
+
+    elif isinstance(parsed, dict):
+        answer = answer or _build_generic_raw_json_answer(parsed, question)
+        if answer is not None:
+            snapshot_summary = {
+                "sourceKind": "raw-json",
+                "answerKind": "generic-count" if answer.get("count") is not None else "generic",
+                "sceneId": answer.get("sceneId"),
+                "target": answer.get("target"),
+                "count": answer.get("count"),
+            }
+
+    body = json.dumps(body_value, indent=2, ensure_ascii=False, default=str).encode("utf-8")
+    if len(body) > max_bytes:
+        raise ValueError(f"Raw data JSON exceeded {max_bytes} bytes.")
+    fetched_at = _utc_now().isoformat()
+    payload_url = "raw-json://bundle" if "bundle" in source_kind else "raw-json://uploaded"
+    return {
+        "url": payload_url,
+        "status": 200,
+        "reason": "OK",
+        "contentType": "application/json",
+        "headers": {},
+        "body": body,
+        "fetchedAt": fetched_at,
+        "sourceKind": source_kind,
+        "answer": answer,
+        "snapshotSummary": snapshot_summary,
+    }
+
 def _looks_like_smartroom_url(source_url: str) -> bool:
     parsed = urlparse(str(source_url or ""))
     if "/api/v1" in parsed.path:
@@ -1168,6 +1571,9 @@ def _format_smartroom_camera_label(value: Any) -> str:
 
 
 def _answer_from_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    payload_answer = payload.get("answer") if isinstance(payload.get("answer"), dict) else None
+    if payload_answer is not None:
+        return payload_answer
     if payload.get("sourceKind") != "smartroom-control":
         return None
     body = payload.get("body") or b""
@@ -1198,6 +1604,7 @@ def _write_answer_artifacts(output_root: Path, runs: list[dict[str, Any]], answe
         }, indent=2) + "\n", encoding="utf-8")
         run["answerPath"] = str(app_answer_path)
     return str(answer_path)
+
 def fetch_source_payload(
     source_url: str,
     *,
@@ -1206,8 +1613,16 @@ def fetch_source_payload(
     timeout_seconds: int = 30,
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
+    raw_data_json: str | None = None,
 ) -> dict[str, Any]:
     mode = str(source_mode or "auto").strip().lower()
+    raw_text = str(raw_data_json or "").strip()
+    if raw_text or mode in {"raw-json", "raw_json", "pasted-json", "pasted_json", "json"}:
+        return fetch_raw_json_payload(
+            raw_text,
+            max_bytes=max_bytes,
+            question_context=question_context,
+        )
     if mode in {"smartroom", "smartroom-control", "smartroom_control"} or (
         mode == "auto" and _looks_like_smartroom_url(source_url)
     ):
@@ -1378,6 +1793,7 @@ def run_web_data_apps(
     handler_timeout_seconds: int = 60,
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
+    raw_data_json: str | None = None,
 ) -> dict[str, Any]:
     manifest_path = manifest_path.expanduser().resolve()
     if not manifest_path.exists():
@@ -1400,6 +1816,7 @@ def run_web_data_apps(
         timeout_seconds=timeout_seconds,
         max_bytes=max_bytes,
         question_context=question_context,
+        raw_data_json=raw_data_json,
     )
     payload_metadata = write_web_payload(payload, output_root)
     payload_path = Path(str(payload_metadata["payloadPath"]))
@@ -1416,7 +1833,7 @@ def run_web_data_apps(
     finished_at = _utc_now().isoformat()
     result = {
         "ok": bool(runs) and all(run.get("status") == "completed" for run in runs),
-        "sourceUrl": source_url,
+        "sourceUrl": payload.get("url") or source_url,
         "sourceKind": payload.get("sourceKind") or "http",
         "sourceMode": source_mode,
         "question": _question_text(question_context),

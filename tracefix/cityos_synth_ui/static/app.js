@@ -15,6 +15,10 @@ const els = {
   packageName: document.querySelector("#packageName"),
   overwrite: document.querySelector("#overwrite"),
   webDataUrl: document.querySelector("#webDataUrl"),
+  rawDataJson: document.querySelector("#rawDataJson"),
+  rawDataFile: document.querySelector("#rawDataFile"),
+  rawDataStatus: document.querySelector("#rawDataStatus"),
+  clearRawData: document.querySelector("#clearRawData"),
   sourceMode: document.querySelector("#sourceMode"),
   webTimeout: document.querySelector("#webTimeout"),
   autoRunWebData: document.querySelector("#autoRunWebData"),
@@ -59,6 +63,70 @@ function showToast(text) {
   showToast.timer = window.setTimeout(() => els.toast.classList.remove("visible"), 1900);
 }
 
+function formatRawDataSize(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  const precision = unitIndex === 0 || size >= 10 ? 0 : 1;
+  return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function rawDataStatusText(fileNames, fileSize, hasData) {
+  if (!hasData) return "No JSON files selected";
+  const names = Array.isArray(fileNames) ? fileNames.filter(Boolean) : [fileNames].filter(Boolean);
+  const sizeText = formatRawDataSize(fileSize || 0);
+  if (names.length <= 1) return `Loaded ${names[0] || "JSON file"} (${sizeText})`;
+  const preview = names.slice(0, 3).join(", ");
+  const suffix = names.length > 3 ? `, +${names.length - 3} more` : "";
+  return `Loaded ${names.length} JSON files (${sizeText}): ${preview}${suffix}`;
+}
+
+function setRawDataPayload(raw, fileNames = [], fileSize = 0) {
+  const value = String(raw || "");
+  const hasData = value.trim().length > 0;
+  if (els.rawDataJson) els.rawDataJson.value = value;
+  if (els.rawDataStatus) {
+    els.rawDataStatus.textContent = rawDataStatusText(fileNames, fileSize || value.length, hasData);
+  }
+  if (els.clearRawData) els.clearRawData.disabled = !hasData;
+}
+
+function clearRawDataUpload() {
+  if (els.rawDataFile) els.rawDataFile.value = "";
+  setRawDataPayload("");
+}
+
+async function loadRawDataFile() {
+  const files = Array.from(els.rawDataFile?.files || []);
+  if (!files.length) return;
+  try {
+    const loaded = [];
+    for (const file of files) {
+      const raw = await file.text();
+      loaded.push({ name: file.name, size: file.size, raw, data: JSON.parse(raw) });
+    }
+    const rawPayload = loaded.length === 1
+      ? loaded[0].raw
+      : JSON.stringify({
+          kind: "tracefix.raw-json-bundle.v1",
+          fileCount: loaded.length,
+          files: loaded.map(({ name, size, data }) => ({ name, size, data })),
+        }, null, 2);
+    const names = loaded.map((item) => item.name);
+    const totalSize = loaded.reduce((sum, item) => sum + item.size, 0);
+    setRawDataPayload(rawPayload, names, totalSize);
+    showToast(loaded.length === 1 ? `Loaded ${loaded[0].name}` : `Loaded ${loaded.length} JSON files`);
+  } catch (error) {
+    if (els.rawDataFile) els.rawDataFile.value = "";
+    showToast(`JSON files could not be loaded: ${error.message}`);
+  }
+}
 function setStatus(status, label = status) {
   els.statusText.textContent = label;
   els.statusBadge.textContent = status;
@@ -132,6 +200,9 @@ function bindEvents() {
     }
   });
 
+  els.rawDataFile?.addEventListener("change", loadRawDataFile);
+  els.clearRawData?.addEventListener("click", clearRawDataUpload);
+
   els.runWebData.addEventListener("click", async () => {
     await runWebData();
   });
@@ -190,13 +261,15 @@ async function runWebData() {
   renderResult();
   renderWebRun();
   setStatus("Running", "Smartroom agents running");
-  log(`Smartroom API: ${els.webDataUrl.value}`);
+  const rawDataJson = (els.rawDataJson?.value || "").trim();
+  log(rawDataJson ? "Uploaded JSON data" : `Web data source: ${els.webDataUrl.value}`);
   log(`Manifest for data run: ${manifestPath}`);
   try {
     const result = await postJson("/api/run-web-data", {
       manifestPath,
       sourceUrl: els.webDataUrl.value,
-      sourceMode: els.sourceMode.value,
+      sourceMode: rawDataJson ? "raw-json" : els.sourceMode.value,
+      rawDataJson,
       timeoutSeconds: Number(els.webTimeout.value || 30),
     });
     state.webRun = result;

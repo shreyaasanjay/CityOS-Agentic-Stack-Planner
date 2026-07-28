@@ -998,6 +998,12 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         tellme = current.get("tellme") if isinstance(current.get("tellme"), dict) else {}
         spec = tellme.get("tracefix_task_spec") if isinstance(tellme.get("tracefix_task_spec"), dict) else {}
         question_context = str(tellme.get("query") or spec.get("user_query") or "").strip()
+    raw_data_json = str(
+        payload.get("rawDataJson")
+        or payload.get("raw_data_json")
+        or payload.get("rawJson")
+        or ""
+    )
     return run_web_data_apps(
         manifest_path=manifest_path,
         source_url=source_url,
@@ -1008,6 +1014,7 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         handler_timeout_seconds=handler_timeout,
         max_bytes=max_bytes,
         question_context=question_context,
+        raw_data_json=raw_data_json,
     )
 def _open_local_path(path: Path) -> None:
     if not path.exists():

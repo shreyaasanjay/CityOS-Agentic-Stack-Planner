@@ -143,6 +143,42 @@ select:focus {
   border-color: var(--green);
 }
 
+.raw-data-status {
+  min-height: 28px;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 9px;
+  color: var(--muted);
+  background: #111417;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.raw-data-clear {
+  min-height: 34px;
+  margin-top: 8px;
+}
+
+input[type="file"] {
+  color: var(--muted);
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 5px 9px;
+  color: #d8e2de;
+  background: #20262a;
+  font-weight: 800;
+}
+
+.hidden {
+  display: none !important;
+}
+
 .check-row {
   flex-direction: row;
   align-items: center;

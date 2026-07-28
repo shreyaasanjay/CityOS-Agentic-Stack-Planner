@@ -1,4 +1,4 @@
-﻿"""``tracefix design`` — drive an UNMODIFIED headless opencode through the
+"""``tracefix design`` — drive an UNMODIFIED headless opencode through the
 /tla-verify-pluscal skill to turn a natural-language requirement into a
 verified workspace (spec/ + prompts/runtime_b/ + spec/cityos_module_plan.json).
 
@@ -456,6 +456,213 @@ def _load_ir(ws: Path) -> dict | None:
         return None
 
 
+def _agents_from_harnesses(harnesses: list[object]) -> list[dict[str, str]]:
+    agents: list[dict[str, str]] = []
+    for harness in harnesses:
+        value = str(harness or "").strip()
+        if not value:
+            continue
+        agent_id = re.sub(r"_harness$", "", value).strip("_") or "task_agent"
+        if agent_id == "answer_synthesis":
+            agent_id = "answer_synthesizer"
+        agents.append({"id": agent_id, "role": agent_id.replace("_", " ")})
+    return agents
+
+
+def _extract_two_agent_roles(
+    agents: list[dict],
+    _task_text: str,
+    first_index: int,
+    second_index: int,
+) -> tuple[str, str, str, str]:
+    defaults = (
+        {"id": "evidence_collector", "role": "collect evidence"},
+        {"id": "answer_synthesizer", "role": "synthesize an answer"},
+    )
+    selected = list(agents[:2])
+    while len(selected) < 2:
+        selected.append(defaults[len(selected)])
+    first = selected[first_index]
+    second = selected[second_index]
+    return (
+        str(first.get("id") or defaults[0]["id"]),
+        str(first.get("role") or defaults[0]["role"]),
+        str(second.get("id") or defaults[1]["id"]),
+        str(second.get("role") or defaults[1]["role"]),
+    )
+
+
+def _guard_task_agent_ir(ws: Path, task: str, diagnostics: list[str]) -> None:
+    """Repair a single-TASK_AGENT IR when the TeLLMe route was multi_agent.
+
+    If OpenCode produced a stub with only one agent named TASK_AGENT (and no
+    channels), replace it with a verifier_approver 2-agent IR derived from the
+    TeLLMe spec.  This prevents the TASK_AGENT placeholder from propagating
+    through TLC verification.
+
+    The repair is best-effort: if anything goes wrong we log and leave the IR
+    untouched so the normal validation path reports the problem.
+    """
+    try:
+        spec = _extract_structured_task(task)
+        if not spec:
+            return
+        route = str(spec.get("route") or "").strip().lower()
+        if route != "multi_agent":
+            return
+
+        ir = _load_ir(ws)
+        if not isinstance(ir, dict):
+            return
+        existing_agents = [
+            a for a in (ir.get("agents") or [])
+            if isinstance(a, dict)
+        ]
+        existing_channels = ir.get("channels") or []
+        # Only repair when OpenCode produced a degenerate single-TASK_AGENT stub
+        if len(existing_agents) != 1:
+            return
+        agent_id = str(existing_agents[0].get("id") or "").upper()
+        if agent_id != "TASK_AGENT":
+            return
+        if existing_channels:
+            return  # Has channels — may be a real single-agent design; don't touch
+
+        diagnostics.append(
+            "TASK_AGENT guard: multi_agent route produced TASK_AGENT stub — "
+            "repairing with synthetic verifier_approver IR"
+        )
+
+        # Derive agent IDs from harnesses if available
+        harness_agents = _agents_from_harnesses(spec.get("candidate_harnesses") or [])
+        a_id, a_role, b_id, b_role = _extract_two_agent_roles(
+            harness_agents, (spec.get("user_query") or "").lower(), 0, 1
+        )
+
+        repaired_ir = {
+            "agents": [
+                {"id": a_id, "role": a_role},
+                {"id": b_id, "role": b_role},
+            ],
+            "resources": [
+                {"id": f"{a_id}_resource", "type": "Lock"},
+                {"id": f"{b_id}_resource", "type": "Lock"},
+            ],
+            "channels": [
+                {
+                    "id": f"{a_id}_to_{b_id}",
+                    "from": a_id,
+                    "to": b_id,
+                    "labels": ["submit"],
+                },
+            ],
+        }
+        from tracefix.pipeline.pipeline.validator import normalize_ir
+
+        repaired_ir = normalize_ir(repaired_ir)
+        (_spec_dir(ws) / "ir.json").write_text(
+            json.dumps(repaired_ir, indent=2) + "\n", encoding="utf-8"
+        )
+        diagnostics.append(
+            f"TASK_AGENT guard: IR repaired → agents=[{a_id}, {b_id}] "
+            f"channels=[{a_id}_to_{b_id}]"
+        )
+    except Exception as exc:  # noqa: BLE001
+        diagnostics.append(f"TASK_AGENT guard: repair failed (non-fatal): {exc}")
+
+
+def _guard_init_stub_ir(ws: Path, task: str, diagnostics: list[str]) -> None:
+    """Repair the AGENT_A/AGENT_B init stub for TeLLMe multi-agent tasks.
+
+    OpenCode/provider startup failures can leave the initialized placeholder IR
+    untouched. When the structured TeLLMe spec has already committed to a
+    multi-agent route, replace that exact placeholder with a minimal, task-bound
+    handoff topology so validation and PlusCal scaffolding can continue.
+    """
+    try:
+        spec = _extract_structured_task(task)
+        if not spec:
+            return
+        route = str(spec.get("route") or "").strip().lower()
+        if route != "multi_agent":
+            return
+
+        ir = _load_ir(ws)
+        if not _looks_like_init_stub(ir):
+            return
+
+        task_text = "\n".join(
+            str(part or "")
+            for part in (
+                spec.get("user_query"),
+                spec.get("task"),
+                spec.get("description"),
+                task,
+            )
+        ).lower()
+        structured_agents = [
+            agent
+            for agent in (spec.get("agents") or [])
+            if isinstance(agent, dict)
+        ]
+        harness_agents = _agents_from_harnesses(spec.get("candidate_harnesses") or [])
+        agents = structured_agents or harness_agents
+        is_smartroom_task = any(
+            token in task_text
+            for token in ("smart-room", "smart room", "camera", "recording", "occupancy")
+        )
+        if len(agents) == 1 and is_smartroom_task:
+            agents = [
+                agents[0],
+                {
+                    "id": "answer_synthesizer",
+                    "role": "synthesize a grounded answer from collected observations",
+                },
+            ]
+        elif len(agents) < 2 and is_smartroom_task:
+            agents = [
+                {
+                    "id": "evidence_collector",
+                    "role": "collect smart-room camera evidence and produce bounded observations",
+                },
+                {
+                    "id": "answer_synthesizer",
+                    "role": "synthesize a grounded answer from collected observations",
+                },
+            ]
+
+        a_id, a_role, b_id, b_role = _extract_two_agent_roles(agents, task_text, 0, 1)
+        if a_id == b_id:
+            b_id = f"{b_id}_synthesizer"
+        channel_id = f"{a_id}_to_{b_id}"
+        repaired_ir = {
+            "agents": [
+                {"id": a_id, "role": a_role},
+                {"id": b_id, "role": b_role},
+            ],
+            "resources": [],
+            "channels": [
+                {
+                    "id": channel_id,
+                    "from": a_id,
+                    "to": b_id,
+                    "labels": ["evidence_ready", "answer_ready"],
+                },
+            ],
+        }
+        from tracefix.pipeline.pipeline.validator import normalize_ir
+
+        repaired_ir = normalize_ir(repaired_ir)
+        (_spec_dir(ws) / "ir.json").write_text(
+            json.dumps(repaired_ir, indent=2) + "\n", encoding="utf-8"
+        )
+        diagnostics.append(
+            "Init stub guard: multi_agent route produced AGENT_A/AGENT_B stub; "
+            f"repaired with channel {channel_id}"
+        )
+    except Exception as exc:  # noqa: BLE001
+        diagnostics.append(f"Init stub guard: repair failed (non-fatal): {exc}")
+
 def _channel_key(channel: dict) -> str:
     return str(channel.get("id") or f"{channel.get('from')}->{channel.get('to')}")
 
@@ -570,6 +777,8 @@ def _opencode_provider_diagnostics(ws: Path, disposition: dict) -> list[str]:
         "model not found",
         "unsupported model",
         "model is not supported",
+        "no endpoints found that support tool use",
+        "does not support tool use",
     ]
     if any(marker in lowered for marker in auth_markers):
         return [
@@ -1598,6 +1807,7 @@ async def run_design(
     template_ranking_failed = False
     attribute_extraction_failed = False
     attributes = None
+    attribute_attempt_audits: list[dict] = []
     if not fast_path_used:
         attr_started_at = datetime.now(timezone.utc).isoformat()
         attr_started_ms = time.monotonic() * 1000.0
@@ -1612,11 +1822,27 @@ async def run_design(
             print("[TRACEFIX EXTRACTOR INPUT START]", flush=True)
             print(extractor_input, flush=True)
             print("[TRACEFIX EXTRACTOR INPUT END]", flush=True)
+            def audited_extractor(*args, **kwargs):
+                attempt_audit: dict = {}
+                try:
+                    try:
+                        return extract_coordination_attributes(*args, **kwargs, audit=attempt_audit)
+                    except TypeError as exc:
+                        if "unexpected keyword argument 'audit'" not in str(exc):
+                            raise
+                        return extract_coordination_attributes(*args, **kwargs)
+                finally:
+                    attribute_attempt_audits.append(attempt_audit)
+
             extraction_result = extract_with_taskspec_reevaluation(
                 task_spec=task_spec_payload,
                 original_request=task,
-                extractor=extract_coordination_attributes,
+                extractor=audited_extractor,
                 model=_attribute_extractor_model(model),
+            )
+            write_audit_json(
+                _spec_dir(ws) / "attribute_extraction_attempts.json",
+                {"attempts": attribute_attempt_audits},
             )
             validation_report_path = _spec_dir(ws) / "attribute_validation_report.json"
             write_audit_json(validation_report_path, {
@@ -1854,10 +2080,55 @@ async def run_design(
         except Exception as exc:  # noqa: BLE001 - extraction failures should be explicit
             attr_error = str(exc)
             attribute_extraction_failed = True
+            if attribute_attempt_audits:
+                write_audit_json(
+                    _spec_dir(ws) / "attribute_extraction_attempts.json",
+                    {"attempts": attribute_attempt_audits},
+                )
             attribute_extraction_diagnostics.append(
                 f"Coordination attribute extraction failed: {attr_error}"
             )
         attr_duration_ms = time.monotonic() * 1000.0 - attr_started_ms
+        for attempt_index, attempt_audit in enumerate(attribute_attempt_audits, start=1):
+            usage = attempt_audit.get("usage") if isinstance(attempt_audit.get("usage"), dict) else {}
+            record_id = f"llm_attribute_extraction:{attempt_index}"
+            usage_kwargs = {
+                "stage": "llm_attribute_extraction",
+                "agent": "attribute_extractor",
+                "provider": str(attempt_audit.get("provider") or ""),
+                "model": str(attempt_audit.get("model") or ""),
+                "started_at": attempt_audit.get("request_start"),
+                "ended_at": attempt_audit.get("request_end"),
+                "duration_ms": float(attempt_audit.get("duration_ms") or 0.0),
+                "record_id": record_id,
+            }
+            if int(usage.get("total_tokens") or 0) > 0:
+                timing.usage.record(
+                    **usage_kwargs,
+                    prompt_tokens=int(usage.get("prompt_tokens") or 0),
+                    completion_tokens=int(usage.get("completion_tokens") or 0),
+                    total_tokens=int(usage.get("total_tokens") or 0),
+                    cached_tokens=int(usage.get("cached_tokens") or 0),
+                    reasoning_tokens=int(usage.get("reasoning_tokens") or 0),
+                    exact_cost_usd=usage.get("cost_usd"),
+                )
+            else:
+                timing.usage.record_unavailable(**usage_kwargs)
+            timing.api_calls.append({
+                "stage": "llm_attribute_extraction",
+                "provider": attempt_audit.get("provider"),
+                "model": attempt_audit.get("model"),
+                "request_start": attempt_audit.get("request_start"),
+                "request_end": attempt_audit.get("request_end"),
+                "total_duration_ms": attempt_audit.get("duration_ms"),
+                "retry_count": attempt_audit.get("retry_count", 0),
+                "failed": bool(attempt_audit.get("failed")),
+                "http_status": attempt_audit.get("http_status"),
+                "observation_scope": "direct_provider_request",
+                "usage_available": int(usage.get("total_tokens") or 0) > 0,
+                "usage": usage,
+            })
+        last_attribute_attempt = attribute_attempt_audits[-1] if attribute_attempt_audits else {}
         timing.stage(
             "llm_attribute_extraction",
             started_at=attr_started_at,
@@ -1865,6 +2136,9 @@ async def run_design(
             duration_ms=attr_duration_ms,
             success=attr_error is None,
             error=attr_error,
+            model=last_attribute_attempt.get("model") or _attribute_extractor_model(model),
+            provider=last_attribute_attempt.get("provider"),
+            retry_count=max(0, len(attribute_attempt_audits) - 1),
             extracted_coordination_attributes=(attributes.as_dict() if attributes is not None else {}),
             template_mapping_status=(
                 f"deterministic_{procedure_decision_selected}_selected"
@@ -2015,6 +2289,11 @@ async def run_design(
         or attribute_extraction_failed
     ):
         run_diagnostics.extend(_opencode_provider_diagnostics(ws, disposition))
+        # Guard: if TeLLMe route is multi_agent but OpenCode produced a single
+        # TASK_AGENT stub, repair the IR with a synthetic 2-agent structure so
+        # downstream validation has something meaningful to work with.
+        _guard_task_agent_ir(ws, task, run_diagnostics)
+        _guard_init_stub_ir(ws, task, run_diagnostics)
     validation_started_at = datetime.now(timezone.utc).isoformat()
     validation_started_ms = time.monotonic() * 1000.0
     sanitization_report: dict = {}
@@ -2408,7 +2687,8 @@ async def run_design(
     if (
         result.success
         and attributes is not None
-        and procedure_decision_selected != "exact_reuse"
+        and procedure_decision_selected
+        in {"parameterized_reuse", "partial_recomposition", "full_generation"}
     ):
         promotion_started_at = datetime.now(timezone.utc).isoformat()
         promotion_started_ms = time.monotonic() * 1000.0

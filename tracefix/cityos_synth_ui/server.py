@@ -232,6 +232,12 @@ class SynthHandler(BaseHTTPRequestHandler):
             output_root = output_root.resolve()
         if output_root is None or not _path_is_within(output_root, self.root):
             output_root = default_web_data_output_root(manifest_path, repo_root=self.root)
+        raw_data_json = str(
+            payload.get("rawDataJson")
+            or payload.get("raw_data_json")
+            or payload.get("rawJson")
+            or ""
+        )
         result = run_web_data_apps(
             manifest_path=manifest_path,
             source_url=source_url,
@@ -241,6 +247,7 @@ class SynthHandler(BaseHTTPRequestHandler):
             handler_command=payload.get("handlerCommand") or None,
             handler_timeout_seconds=handler_timeout_seconds,
             max_bytes=max_bytes,
+            raw_data_json=raw_data_json,
         )
         self._send_json(result)
 

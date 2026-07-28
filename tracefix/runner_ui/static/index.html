@@ -90,6 +90,13 @@
                 <input id="tellmeWebDataUrl" value="https://smartroom-mirror.vercel.app/api/v1" autocomplete="off" />
               </label>
               <label>
+                Raw data JSON files <span class="optional-label">optional</span>
+                <input id="tellmeRawDataFile" type="file" accept=".json,application/json" multiple />
+              </label>
+              <div id="tellmeRawDataStatus" class="raw-data-status">No JSON files selected</div>
+              <button id="tellmeClearRawData" class="secondary-button raw-data-clear" type="button" disabled>Clear JSON Files</button>
+              <textarea id="tellmeRawDataJson" class="hidden" spellcheck="false"></textarea>
+              <label>
                 Timestamp <span class="optional-label">optional</span>
                 <input id="tellmeTimestamp" autocomplete="off" placeholder="2026-06-30T19:00:00Z" />
               </label>
@@ -308,6 +315,13 @@
                 Smartroom mirror URL
                 <input id="synthWebDataUrl" autocomplete="off" value="https://smartroom-mirror.vercel.app/api/v1" />
               </label>
+              <label>
+                Raw data JSON files <span class="optional-label">optional</span>
+                <input id="synthRawDataFile" type="file" accept=".json,application/json" multiple />
+              </label>
+              <div id="synthRawDataStatus" class="raw-data-status">No JSON files selected</div>
+              <button id="synthClearRawData" class="secondary-button raw-data-clear" type="button" disabled>Clear JSON Files</button>
+              <textarea id="synthRawDataJson" class="hidden" spellcheck="false"></textarea>
               <label>
                 Output directory
                 <input id="synthOutputDir" autocomplete="off" readonly placeholder="<cityos>/apps" />

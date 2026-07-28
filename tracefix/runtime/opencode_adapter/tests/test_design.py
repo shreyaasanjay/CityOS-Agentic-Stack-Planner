@@ -15,6 +15,7 @@ import tracefix.runtime.opencode_adapter.design as design_module
 from tracefix.runtime.opencode_adapter.config_gen import build_design_config
 from tracefix.runtime.opencode_adapter.design import (
     _channel_diagnostics,
+    _guard_init_stub_ir,
     _ensure_plan_before_prompts,
     _normalize_legacy_endeither_syntax,
     _runtime_prompts_current,
@@ -491,6 +492,47 @@ Structured task specification:
     assert decision.structured_input is True
     assert decision.task_text == "How many people are in the room right now?"
 
+
+
+def test_init_stub_guard_repairs_tellme_multi_agent_stub(tmp_path):
+    from tracefix.pipeline.pipeline.validator import validate_ir
+
+    ws = tmp_path / "ws"
+    spec_dir = ws / "spec"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "ir.json").write_text(json.dumps({
+        "agents": [{"id": "AGENT_A"}, {"id": "AGENT_B"}],
+        "resources": [],
+        "channels": [],
+    }))
+    structured = {
+        "user_query": "Design a system for events captured by two smart-room cameras.",
+        "route": "multi_agent",
+        "candidate_harnesses": [
+            "camera_event_harness",
+            "answer_synthesis_harness",
+        ],
+    }
+    task = "TeLLMe structured smart-room application requirements.\nStructured task specification:\n" + json.dumps(structured)
+    diagnostics = []
+
+    _guard_init_stub_ir(ws, task, diagnostics)
+
+    repaired = json.loads((spec_dir / "ir.json").read_text())
+    result = validate_ir(repaired)
+    assert result.valid, result.errors
+    assert repaired["agents"] == [
+        {"id": "camera_event"},
+        {"id": "answer_synthesizer"},
+    ]
+    assert repaired["resources"] == []
+    assert repaired["channels"] == [{
+        "id": "camera_event_to_answer_synthesizer",
+        "from": "camera_event",
+        "to": "answer_synthesizer",
+        "labels": ["evidence_ready", "answer_ready"],
+    }]
+    assert any("Init stub guard" in item for item in diagnostics)
 
 def test_fast_path_runtime_prompt_requires_verified_plan():
     import pytest

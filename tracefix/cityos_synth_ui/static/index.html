@@ -58,6 +58,13 @@
               <input id="webDataUrl" autocomplete="off" placeholder="https://smartroom-mirror.vercel.app/api/v1" />
             </label>
             <label>
+              Raw data JSON files <span class="muted">optional</span>
+              <input id="rawDataFile" type="file" accept=".json,application/json" multiple />
+            </label>
+            <div id="rawDataStatus" class="raw-data-status">No JSON files selected</div>
+            <button id="clearRawData" class="secondary raw-data-clear" type="button" disabled>Clear JSON Files</button>
+            <textarea id="rawDataJson" class="hidden" spellcheck="false"></textarea>
+            <label>
               Source mode
               <select id="sourceMode">
                 <option value="auto">Auto-detect</option>
