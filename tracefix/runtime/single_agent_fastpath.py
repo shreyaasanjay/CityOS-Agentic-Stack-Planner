@@ -145,6 +145,34 @@ def generate_single_agent_ir(decision: FastPathDecision) -> dict[str, Any]:
     }
 
 
+def build_single_agent_generation_input(
+    task: str,
+    task_spec: dict[str, Any] | None = None,
+) -> FastPathDecision:
+    """Build deterministic generation input after canonical routing selected one agent."""
+
+    spec = task_spec if isinstance(task_spec, dict) else {}
+    task_text = str(
+        spec.get("user_query")
+        or spec.get("task")
+        or spec.get("description")
+        or task
+        or ""
+    ).strip()
+    if not task_text:
+        raise ValueError("single-agent generation requires non-empty task text")
+    goal = spec.get("application_goal")
+    goal_type = str(goal.get("goal_type") or "") if isinstance(goal, dict) else ""
+    return FastPathDecision(
+        considered=True,
+        eligible=True,
+        reason="canonical attribute routing selected single_agent_generation",
+        task_text=task_text,
+        agent_id=_agent_id(task_text, goal_type),
+        structured_input=bool(spec),
+    )
+
+
 def render_verified_runtime_prompt(
     decision: FastPathDecision,
     cityos_plan: dict[str, Any],

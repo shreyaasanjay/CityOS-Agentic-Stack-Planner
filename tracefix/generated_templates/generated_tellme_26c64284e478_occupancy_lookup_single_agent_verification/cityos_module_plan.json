@@ -1,0 +1,53 @@
+{
+  "module_id": "tellme_26c64284e478_occupancy_lookup",
+  "task_id": "task_26c64284e478",
+  "query_id": "tellme_26c64284e478",
+  "space_id": "smart_room_1",
+  "intent": "occupancy_lookup",
+  "route": "single_agent",
+  "verified": true,
+  "coordination_pattern": "Verification",
+  "topology": {
+    "agents": [
+      {"id": "occupancy_answer_agent", "roles": ["occupancy_context", "answer_synthesis"]}
+    ],
+    "resources": [],
+    "channels": []
+  },
+  "output_contract": {
+    "name": "direct_answer_v1",
+    "answer_type": "direct_answer",
+    "fallback_answer_type": "insufficient_evidence",
+    "required_fields": ["answer", "confidence", "evidence_refs", "caveats", "privacy_scope", "limitations"]
+  },
+  "privacy_constraints": {
+    "scope": "cityos_structured_context_only",
+    "raw_media": "disallowed",
+    "identity_inference": "disallowed",
+    "transcript_and_speaker_identity": "disallowed",
+    "forbidden_claim_types": [
+      "raw_sensor_access", "face_identity", "personal_identity", "speaker_identification",
+      "unrestricted_transcription", "medical_diagnosis", "confirmed_injury",
+      "emotional_state_inference", "unsupported_behavioral_inference"
+    ]
+  },
+  "claim_limits": {
+    "allowed": ["bounded_count", "presence_state", "timestamped_event_summary"],
+    "forbidden": ["raw_sensor_access", "face_identity", "personal_identity", "medical_diagnosis", "unsupported_behavioral_inference"]
+  },
+  "evidence_requirements": {
+    "primary": ["occupancy_context_packet"],
+    "minimum_sufficient": ["occupancy_context_packet"],
+    "require_evidence_refs": true
+  },
+  "coverage_gaps": ["No available sensor supports 'room_state' context for this space."],
+  "sensors": [
+    {"sensor_id": "camera_door_01", "modality": "video"},
+    {"sensor_id": "camera_room_01", "modality": "video"},
+    {"sensor_id": "microphone_array_01", "modality": "audio"}
+  ],
+  "candidate_harnesses": ["occupancy_context_harness", "answer_synthesis_harness"],
+  "state_machine_file": "states.json",
+  "ir_file": "ir.json",
+  "generated_template_file": "generated_template.json"
+}

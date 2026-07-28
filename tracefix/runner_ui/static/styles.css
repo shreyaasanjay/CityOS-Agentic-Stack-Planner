@@ -225,6 +225,35 @@ button {
   line-height: 1.45;
 }
 
+.json-context-upload {
+  display: grid;
+  gap: 8px;
+}
+
+.context-status {
+  min-height: 28px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--panel-soft);
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.context-status.loaded {
+  color: #b5efd0;
+  border-color: rgba(95, 175, 136, 0.45);
+  background: var(--green-soft);
+}
+
+.context-status.error {
+  color: #ffdada;
+  border-color: rgba(196, 92, 92, 0.45);
+  background: var(--red-soft);
+}
+
 .sidebar-section {
   display: block;
   padding: 12px;
@@ -1301,6 +1330,16 @@ textarea:focus {
 :root[data-theme="light"] .secondary-button {
   color: var(--ink);
   background: #fbf6ec;
+}
+
+:root[data-theme="light"] .raw-data-status {
+  color: #66594b;
+  background: #fbf6ec;
+}
+
+:root[data-theme="light"] input[type="file"]::file-selector-button {
+  color: var(--ink);
+  background: #eee2cf;
 }
 
 :root[data-theme="light"] .run-panel {

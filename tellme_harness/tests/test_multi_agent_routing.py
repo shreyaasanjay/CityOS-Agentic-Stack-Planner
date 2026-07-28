@@ -224,6 +224,27 @@ def test_simple_occupancy_still_single_agent_expanded():
         )
 
 
+def test_robot_corridor_coordination_routes_multi_agent():
+    q = _make_query(
+        "Create a CityOS coordination application for exactly three "
+        "medication-delivery robot agents sharing one narrow hospital corridor. "
+        "The robots coordinate corridor access among themselves using a verified "
+        "mutual-exclusion protocol. Only one robot may occupy the corridor at a time. "
+        "One robot has emergency priority, but ordinary robots must not starve. "
+        "Each robot must request access, wait until access is granted by the protocol, "
+        "cross the corridor, and release access so the next waiting robot may enter. "
+        "Do not create a separate scheduler, controller, detector, pedestrian, or "
+        "traffic-signal agent."
+    )
+    analysis = analyze_query(q)
+    decision = decide_route(q, analysis)
+    assert analysis.requires_explicit_multi_agent is True
+    assert any("coordination_participant" in term for term in analysis.trigger_terms_found)
+    assert any("shared_resource_term" in term for term in analysis.trigger_terms_found)
+    assert decision.route == "multi_agent"
+    assert decision.requires_tracefix is True
+
+
 def test_person_doing_on_date_routes_activity_lookup_single_agent():
     q = _make_query("What was the person doing in the room on June 24th?")
     analysis = analyze_query(q)

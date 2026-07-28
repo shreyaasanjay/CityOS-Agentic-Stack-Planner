@@ -1,0 +1,40 @@
+{
+  "template_id": "generated_tellme_26c64284e478_occupancy_lookup_single_agent_verification",
+  "name_of_template": "Smart-Room Occupancy Lookup with Self-Verification (single_agent)",
+  "coordination_patterns": [
+    "Verification"
+  ],
+  "number_of_agents": 1,
+  "agent_roles": [
+    "occupancy_context",
+    "answer_synthesis"
+  ],
+  "communication_flow": [],
+  "limitations": [
+    "Privacy scope is cityos_structured_context_only",
+    "Raw media is disallowed",
+    "Identity inference is disallowed",
+    "Transcript and speaker identity is disallowed",
+    "Forbidden claim types: raw_sensor_access, face_identity, personal_identity, speaker_identification, unrestricted_transcription, medical_diagnosis, confirmed_injury, emotional_state_inference, unsupported_behavioral_inference",
+    "Evidence refs are required",
+    "Return required fields only",
+    "Preserve privacy limits and caveats",
+    "Return insufficient_evidence or escalate when structured context is inadequate",
+    "No available sensor supports room_state context for this space"
+  ],
+  "number_of_resources": 0,
+  "number_of_channels": 0,
+  "parameterizable_fields": [
+    "number_of_agents",
+    "number_of_resources",
+    "number_of_channels"
+  ],
+  "adaptable_fields": [
+    "agent_roles",
+    "communication_flow",
+    "limitations"
+  ],
+  "fatal_mismatch_fields": [
+    "coordination_patterns"
+  ]
+}

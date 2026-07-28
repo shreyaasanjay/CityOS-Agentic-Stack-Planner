@@ -125,6 +125,62 @@ _MEETING_AUTH_TOKENS = frozenset((
 ))
 
 _EXPLICIT_AGENT_PATTERN = re.compile(r"\bagent\s+[a-c]\b")
+_COORDINATION_PARTICIPANT_TOKENS = frozenset((
+    "agent",
+    "agents",
+    "robot",
+    "robots",
+    "drone",
+    "drones",
+    "vehicle",
+    "vehicles",
+    "worker",
+    "workers",
+))
+_SHARED_RESOURCE_TOKENS = frozenset((
+    "corridor",
+    "resource",
+    "lock",
+    "runway",
+    "bridge",
+    "intersection",
+    "lane",
+    "scheduler",
+))
+_PROTOCOL_COORDINATION_TOKENS = frozenset((
+    "coordinate",
+    "coordinates",
+    "coordination",
+    "share",
+    "shared",
+    "sharing",
+    "request",
+    "release",
+    "grant",
+    "priority",
+    "starve",
+    "starvation",
+    "exclusive",
+    "mutual",
+))
+_PROTOCOL_COORDINATION_PHRASES = (
+    "mutual exclusion",
+    "only one",
+    "at a time",
+    "request access",
+    "release access",
+    "grant access",
+    "shared corridor",
+    "narrow corridor",
+    "shared resource",
+    "coordinate corridor access",
+    "emergency priority",
+    "must not starve",
+)
+_COORDINATION_COUNT_PATTERN = re.compile(
+    r"\b(?:exactly\s+)?(?:\d+|two|three|four|five|six|seven|eight)\b"
+    r".{0,80}\b(?:agent|agents|robot|robots|drone|drones|vehicle|vehicles|worker|workers)\b"
+)
 
 
 def analyze_query(query: TellMeQuery) -> QueryAnalysis:
@@ -412,6 +468,27 @@ def _detect_explicit_multi_agent_coordination(lowered: str) -> tuple[bool, list[
                 for t in auth_matches:
                     found.append(f"meeting_auth_term: {t}")
             break
+
+    # Rule 5: explicit protocol-style shared-resource coordination.
+    # This catches non-meeting coordination prompts such as robot/corridor,
+    # drone/runway, vehicle/intersection, and worker/shared-resource requests.
+    participant_matches = sorted(_COORDINATION_PARTICIPANT_TOKENS & words)
+    resource_matches = sorted(_SHARED_RESOURCE_TOKENS & words)
+    protocol_token_matches = sorted(_PROTOCOL_COORDINATION_TOKENS & words)
+    phrase_matches = [phrase for phrase in _PROTOCOL_COORDINATION_PHRASES if phrase in lowered]
+    has_counted_participants = bool(_COORDINATION_COUNT_PATTERN.search(lowered))
+    has_protocol_cue = bool(protocol_token_matches or phrase_matches)
+    if participant_matches and (resource_matches or phrase_matches) and (has_protocol_cue or has_counted_participants):
+        for t in participant_matches[:3]:
+            found.append(f"coordination_participant: {t}")
+        for t in resource_matches[:3]:
+            found.append(f"shared_resource_term: {t}")
+        for t in protocol_token_matches[:4]:
+            found.append(f"protocol_coordination_term: {t}")
+        for phrase in phrase_matches[:4]:
+            found.append(f"protocol_coordination_phrase: {phrase}")
+        if has_counted_participants:
+            found.append("counted_coordination_participants")
 
     return bool(found), found
 

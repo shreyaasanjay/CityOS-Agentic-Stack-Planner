@@ -1,0 +1,76 @@
+{
+  "candidate_id": "cand_04c89379fd22207c_20260714_145019",
+  "source_workspace": "C:\\Users\\razer\\Downloads\\TraceFIX\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260714_105017",
+  "source_task_text": "TeLLMe structured smart-room application requirements.\nTreat this as compile-time input to TraceFix planning and verification.\nGenerate a complete multi-agent topology with explicit communication channels.\nDo not execute production agents or bypass PlusCal/TLC verification.\n\nStructured task specification:\n{\n  \"task_id\": \"task_024c70294b2c\",\n  \"query_id\": \"tellme_024c70294b2c\",\n  \"user_query\": \"Create a CityOS coordination application for three medication-delivery robots that share one narrow hos",
+  "created_at": "2026-07-14T14:50:19.138218+00:00",
+  "last_seen_at": "2026-07-14T15:19:54.795867+00:00",
+  "agents_count": 7,
+  "channels_count": 11,
+  "resources_count": 3,
+  "normalized_topology_hash": "04c89379fd22207c",
+  "tlc_passed": true,
+  "pluscal_passed": true,
+  "used_opencode_fallback": false,
+  "matched_existing_template": true,
+  "suggested_pattern_name": "star_7",
+  "promotion_status": "candidate",
+  "trust_level": "verified_candidate",
+  "capabilities": {
+    "template_id": "04c89379fd22207c",
+    "coordination_pattern": "star",
+    "topology": {
+      "type": "star",
+      "controller_required": true
+    },
+    "participants": {
+      "parameterized": false,
+      "minimum": 7,
+      "maximum": 7,
+      "supported_roles": [
+        "participant"
+      ],
+      "priority_support": false
+    },
+    "resources": {
+      "count": 3,
+      "exclusive": true,
+      "capacity": 1,
+      "parameterized_count": false
+    },
+    "flow": {
+      "ordered_stages": []
+    },
+    "guarantees": {
+      "safety_properties": [
+        "tlc_checked"
+      ],
+      "liveness_properties": []
+    },
+    "allowed_parameterized_changes": [
+      "rename_agents",
+      "rename_channels",
+      "rename_resources"
+    ],
+    "allowed_partial_changes": [],
+    "forbidden_changes": [
+      "remove_required_agents",
+      "remove_required_channels",
+      "remove_required_resources",
+      "weaken_safety_invariants"
+    ],
+    "verification": {
+      "verified": true,
+      "tlc_passed": true,
+      "provenance": "harvested_candidate"
+    }
+  },
+  "usage_count": 2,
+  "observed_workspaces": [
+    "C:\\Users\\razer\\Downloads\\TraceFIX\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260714_105017",
+    "C:\\Users\\razer\\Downloads\\TraceFIX\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260714_111952"
+  ],
+  "observed_tasks": [
+    "TeLLMe structured smart-room application requirements.\nTreat this as compile-time input to TraceFix planning and verification.\nGenerate a complete multi-agent topology with explicit communication channels.\nDo not execute production agents or bypass PlusCal/TLC verification.\n\nStructured task specific"
+  ],
+  "notes": ""
+}

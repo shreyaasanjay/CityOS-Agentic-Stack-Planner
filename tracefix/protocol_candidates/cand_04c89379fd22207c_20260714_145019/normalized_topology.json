@@ -1,0 +1,67 @@
+{
+  "agents": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G"
+  ],
+  "edges": [
+    {
+      "from": "D",
+      "to": "A"
+    },
+    {
+      "from": "C",
+      "to": "A"
+    },
+    {
+      "from": "F",
+      "to": "A"
+    },
+    {
+      "from": "G",
+      "to": "A"
+    },
+    {
+      "from": "A",
+      "to": "D"
+    },
+    {
+      "from": "A",
+      "to": "C"
+    },
+    {
+      "from": "A",
+      "to": "F"
+    },
+    {
+      "from": "A",
+      "to": "G"
+    },
+    {
+      "from": "B",
+      "to": "A"
+    },
+    {
+      "from": "E",
+      "to": "A"
+    },
+    {
+      "from": "A",
+      "to": "E"
+    }
+  ],
+  "resources": [
+    "R1",
+    "R2",
+    "R3"
+  ],
+  "shape": "star",
+  "agent_count": 7,
+  "channel_count": 11,
+  "resource_count": 3,
+  "topology_hash": "04c89379fd22207c"
+}

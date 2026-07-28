@@ -20,11 +20,13 @@ import os
 import shutil
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
 from tracefix.runtime.opencode_adapter.config_gen import agent_key, to_env
+from tracefix.runtime.usage_tracker import CostLimitExceeded, UsageTracker
 
 #: Kickoff message; the ordered protocol lives in the agent's system prompt.
 KICKOFF = ("Begin your task now. Follow your protocol steps in the exact order "
@@ -96,11 +98,48 @@ class AgentRunState:
         self.premature_done: bool = False
         self.correction_limit: bool = False
         self.out_of_order: int = 0
+        self.usage_steps: list[dict] = []
+        self._last_tokens = {
+            "input": 0,
+            "output": 0,
+            "cached": 0,
+            "reasoning": 0,
+        }
 
-    def feed(self, ev: dict) -> None:
+    def feed(self, ev: dict) -> dict | None:
         self.events += 1
+        if ev.get("type") == "step_finish":
+            part = ev.get("part") or {}
+            tokens = part.get("tokens") or {}
+            cache = tokens.get("cache") or {}
+            current = {
+                "input": _token_value(tokens, "input", "prompt", "prompt_tokens"),
+                "output": _token_value(tokens, "output", "completion", "completion_tokens"),
+                "cached": (
+                    _token_value(tokens, "cached", "cached_tokens")
+                    or _token_value(cache, "read", "write")
+                ),
+                "reasoning": _token_value(tokens, "reasoning", "reasoning_tokens"),
+            }
+            delta = {
+                key: value - self._last_tokens[key]
+                if value >= self._last_tokens[key]
+                else value
+                for key, value in current.items()
+            }
+            self._last_tokens = current
+            step = {
+                "prompt_tokens": max(0, delta["input"]),
+                "completion_tokens": max(0, delta["output"]),
+                "total_tokens": max(0, delta["input"]) + max(0, delta["output"]),
+                "cached_tokens": max(0, delta["cached"]),
+                "reasoning_tokens": max(0, delta["reasoning"]),
+                "cost_usd": _optional_cost(part.get("cost")),
+            }
+            self.usage_steps.append(step)
+            return step
         if ev.get("type") != "tool_use":
-            return
+            return None
         part = ev.get("part") or {}
         name = part.get("tool") or ""
         st = part.get("state") or {}
@@ -113,7 +152,7 @@ class AgentRunState:
         self.tool_calls.append(tc)
 
         if not isinstance(result, dict):
-            return
+            return None
         err = result.get("error")
         # signal_done is namespaced by opencode as <server>_signal_done; also
         # accept any tool whose result status is "done" (the coord contract).
@@ -125,6 +164,24 @@ class AgentRunState:
             self.correction_limit = True
         if err == "out_of_order":
             self.out_of_order += 1
+        return None
+
+
+def _token_value(data: dict, *names: str) -> int:
+    for name in names:
+        value = data.get(name)
+        if isinstance(value, (int, float)):
+            return max(0, int(value))
+    return 0
+
+
+def _optional_cost(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        return max(0.0, float(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def classify(state: AgentRunState, returncode: int | None, timed_out: bool) -> str:
@@ -192,6 +249,10 @@ async def run_opencode_agent(
     timeout: float = 600.0,
     on_event: Callable[[str, dict], None] | None = None,
     env_overrides: dict | None = None,
+    usage_tracker: UsageTracker | None = None,
+    usage_stage: str = "opencode",
+    procedure: str | None = None,
+    template_id: str | None = None,
 ) -> dict:
     """Run one agent via OpenCode; return its disposition.
 
@@ -203,7 +264,12 @@ async def run_opencode_agent(
         kickoff: the message that starts the run (protocol is in the system prompt).
         timeout: wall-clock cap; on expiry the process is SIGTERM'd then SIGKILL'd.
         on_event: optional ``(agent_id, event_dict)`` callback for live visualization.
+        procedure: deterministic procedure associated with this call, for audit logging.
+        template_id: selected template associated with this call, if any.
     """
+    if procedure in {"exact_reuse", "parameterized_reuse"}:
+        raise RuntimeError(f"OpenCode execution is forbidden for {procedure}.")
+
     key = agent_key(agent_id)
     env = {**os.environ, **to_env(config), **(env_overrides or {})}
     cmd = [*_spawnable_command(opencode_cmd), "run", kickoff, "--agent", key,
@@ -214,8 +280,12 @@ async def run_opencode_agent(
 
     started_at = datetime.now(timezone.utc).isoformat()
     started_ms = time.monotonic() * 1000.0
+    call_id = uuid.uuid4().hex
+    if usage_tracker is not None:
+        usage_tracker.ensure_can_call(usage_stage)
     print(
-        f"[TRACEFIX LLM START] agent={agent_id} model={model or '(opencode default)'} "
+        f"[TRACEFIX LLM START] agent={agent_id} procedure={procedure or 'none'} "
+        f"template={template_id or 'none'} model={model or '(opencode default)'} "
         f"started_at={started_at}",
         file=sys.stderr,
         flush=True,
@@ -230,9 +300,13 @@ async def run_opencode_agent(
     first_event_ms: float | None = None
     retry_count = 0
     rate_limit_events = 0
+    budget_exceeded = False
+    step_started_at = started_at
+    step_started_ms = started_ms
 
     def _on_stdout(line: str) -> None:
-        nonlocal first_event_at, first_event_ms
+        nonlocal first_event_at, first_event_ms, budget_exceeded
+        nonlocal step_started_at, step_started_ms
         if not line:
             return
         try:
@@ -250,7 +324,53 @@ async def run_opencode_agent(
                 file=sys.stderr,
                 flush=True,
             )
-        state.feed(ev)
+        if ev.get("type") == "step_start":
+            step_started_at = datetime.now(timezone.utc).isoformat()
+            step_started_ms = time.monotonic() * 1000.0
+        usage = state.feed(ev)
+        if usage is not None:
+            ended_at = datetime.now(timezone.utc).isoformat()
+            usage_line = {
+                "record_id": f"{call_id}:{len(state.usage_steps)}",
+                "stage": usage_stage,
+                "agent": agent_id,
+                "provider": model.split("/", 1)[0] if model and "/" in model else "",
+                "model": model or "",
+                "started_at": step_started_at,
+                "ended_at": ended_at,
+                "duration_ms": round(time.monotonic() * 1000.0 - step_started_ms, 2),
+                **usage,
+            }
+            if usage_tracker is not None:
+                usage_tracker.record(
+                    stage=usage_stage,
+                    agent=agent_id,
+                    provider=usage_line["provider"],
+                    model=usage_line["model"],
+                    started_at=usage_line["started_at"],
+                    ended_at=usage_line["ended_at"],
+                    duration_ms=usage_line["duration_ms"],
+                    prompt_tokens=usage["prompt_tokens"],
+                    completion_tokens=usage["completion_tokens"],
+                    total_tokens=usage["total_tokens"],
+                    cached_tokens=usage["cached_tokens"],
+                    reasoning_tokens=usage["reasoning_tokens"],
+                    exact_cost_usd=usage["cost_usd"],
+                    record_id=usage_line["record_id"],
+                )
+                try:
+                    usage_tracker.ensure_can_call(usage_stage)
+                except CostLimitExceeded as exc:
+                    budget_exceeded = True
+                    usage_line["budget_stop_reason"] = str(exc)
+                    if proc.returncode is None:
+                        proc.terminate()
+            print(
+                "[TRACEFIX LLM USAGE] "
+                + json.dumps(usage_line, separators=(",", ":")),
+                file=sys.stderr,
+                flush=True,
+            )
         if on_event is not None:
             try:
                 on_event(agent_id, ev)
@@ -295,7 +415,31 @@ async def run_opencode_agent(
         flush=True,
     )
     provider = model.split("/", 1)[0] if model and "/" in model else None
+    if usage_tracker is not None and not state.usage_steps:
+        usage_tracker.record_unavailable(
+            stage=usage_stage,
+            agent=agent_id,
+            provider=provider or "",
+            model=model or "",
+            started_at=started_at,
+            ended_at=finished_at,
+            duration_ms=finished_ms - started_ms,
+            record_id=f"{call_id}:unavailable",
+        )
+    usage_totals = {
+        "prompt_tokens": sum(step["prompt_tokens"] for step in state.usage_steps),
+        "completion_tokens": sum(step["completion_tokens"] for step in state.usage_steps),
+        "total_tokens": sum(step["total_tokens"] for step in state.usage_steps),
+        "cached_tokens": sum(step["cached_tokens"] for step in state.usage_steps),
+        "reasoning_tokens": sum(step["reasoning_tokens"] for step in state.usage_steps),
+        "cost_usd": round(sum(
+            float(step["cost_usd"] or 0.0) for step in state.usage_steps
+            if step["cost_usd"] is not None
+        ), 8),
+    }
+    status = "cost_limit" if budget_exceeded else classify(state, proc.returncode, timed_out)
     return {
+        "call_id": call_id,
         "agent_id": agent_id,
         "provider": provider,
         "model": model,
@@ -308,7 +452,7 @@ async def run_opencode_agent(
         ),
         "retry_count": retry_count,
         "rate_limit_events": rate_limit_events,
-        "status": classify(state, proc.returncode, timed_out),
+        "status": status,
         "returncode": proc.returncode,
         "signaled_done": state.signaled_done,
         "premature_done": state.premature_done,
@@ -317,4 +461,8 @@ async def run_opencode_agent(
         "tool_calls": state.tool_calls,
         "events": state.events,
         "stderr_tail": stderr_tail[-10:],
+        "usage_available": bool(state.usage_steps),
+        "usage_steps": state.usage_steps,
+        "usage": usage_totals,
+        "budget_exceeded": budget_exceeded,
     }

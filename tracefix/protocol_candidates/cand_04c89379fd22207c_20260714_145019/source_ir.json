@@ -1,0 +1,167 @@
+{
+  "agents": [
+    {
+      "id": "north_approach"
+    },
+    {
+      "id": "east_approach"
+    },
+    {
+      "id": "south_approach"
+    },
+    {
+      "id": "west_approach"
+    },
+    {
+      "id": "emergency_detector"
+    },
+    {
+      "id": "pedestrian_crossing_agent"
+    },
+    {
+      "id": "signal_controller"
+    }
+  ],
+  "resources": [
+    {
+      "id": "intersection_green_lock",
+      "type": "Lock"
+    },
+    {
+      "id": "emergency_override_lock",
+      "type": "Lock"
+    },
+    {
+      "id": "pedestrian_phase_lock",
+      "type": "Lock"
+    }
+  ],
+  "channels": [
+    {
+      "id": "north_approach_to_signal_controller",
+      "from": "north_approach",
+      "to": "signal_controller",
+      "labels": [
+        "status_report",
+        "timeout",
+        "failure_notice"
+      ]
+    },
+    {
+      "id": "east_approach_to_signal_controller",
+      "from": "east_approach",
+      "to": "signal_controller",
+      "labels": [
+        "status_report",
+        "timeout",
+        "failure_notice"
+      ]
+    },
+    {
+      "id": "south_approach_to_signal_controller",
+      "from": "south_approach",
+      "to": "signal_controller",
+      "labels": [
+        "status_report",
+        "timeout",
+        "failure_notice"
+      ]
+    },
+    {
+      "id": "west_approach_to_signal_controller",
+      "from": "west_approach",
+      "to": "signal_controller",
+      "labels": [
+        "status_report",
+        "timeout",
+        "failure_notice"
+      ]
+    },
+    {
+      "id": "signal_controller_to_north_approach",
+      "from": "signal_controller",
+      "to": "north_approach",
+      "labels": [
+        "grant_green",
+        "set_red",
+        "all_red"
+      ]
+    },
+    {
+      "id": "signal_controller_to_east_approach",
+      "from": "signal_controller",
+      "to": "east_approach",
+      "labels": [
+        "grant_green",
+        "set_red",
+        "all_red"
+      ]
+    },
+    {
+      "id": "signal_controller_to_south_approach",
+      "from": "signal_controller",
+      "to": "south_approach",
+      "labels": [
+        "grant_green",
+        "set_red",
+        "all_red"
+      ]
+    },
+    {
+      "id": "signal_controller_to_west_approach",
+      "from": "signal_controller",
+      "to": "west_approach",
+      "labels": [
+        "grant_green",
+        "set_red",
+        "all_red"
+      ]
+    },
+    {
+      "id": "emergency_detector_to_signal_controller",
+      "from": "emergency_detector",
+      "to": "signal_controller",
+      "labels": [
+        "emergency_detected",
+        "emergency_cleared"
+      ]
+    },
+    {
+      "id": "pedestrian_crossing_agent_to_signal_controller",
+      "from": "pedestrian_crossing_agent",
+      "to": "signal_controller",
+      "labels": [
+        "pedestrian_request",
+        "pedestrian_clear"
+      ]
+    },
+    {
+      "id": "signal_controller_to_pedestrian_crossing_agent",
+      "from": "signal_controller",
+      "to": "pedestrian_crossing_agent",
+      "labels": [
+        "crossing_grant",
+        "crossing_hold"
+      ]
+    }
+  ],
+  "agent_resources": {
+    "signal_controller": [
+      "intersection_green_lock",
+      "emergency_override_lock",
+      "pedestrian_phase_lock"
+    ]
+  },
+  "state_tasks": {
+    "north_approach_request": "Submit traffic or failure status for north_approach.",
+    "east_approach_request": "Submit traffic or failure status for east_approach.",
+    "south_approach_request": "Submit traffic or failure status for south_approach.",
+    "west_approach_request": "Submit traffic or failure status for west_approach.",
+    "signal_controller_coordinate": "Coordinate safe signal phases and enter all-red on failure.",
+    "signal_controller_command": "Publish verified signal commands to controlled approaches.",
+    "emergency_detector_detect": "Report emergency vehicle priority requests to the controller.",
+    "signal_controller_emergency": "Apply emergency override and return to all-red when needed.",
+    "pedestrian_crossing_agent_request": "Request a pedestrian crossing phase.",
+    "signal_controller_pedestrian": "Coordinate pedestrian crossing only after vehicle signals are held red."
+  }
+}

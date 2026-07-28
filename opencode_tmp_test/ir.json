@@ -1,0 +1,38 @@
+{
+  "agents": [
+    {
+      "id": "A"
+    },
+    {
+      "id": "B"
+    },
+    {
+      "id": "C"
+    }
+  ],
+  "resources": [
+    {
+      "id": "R",
+      "type": "Lock"
+    }
+  ],
+  "channels": [
+    {
+      "id": "bus",
+      "from": [
+        "A",
+        "B",
+        "C"
+      ],
+      "to": [
+        "A",
+        "B",
+        "C"
+      ],
+      "labels": [
+        "x",
+        "y"
+      ]
+    }
+  ]
+}
