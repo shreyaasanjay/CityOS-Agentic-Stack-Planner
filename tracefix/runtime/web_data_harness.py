@@ -1941,6 +1941,7 @@ def fetch_source_payload(
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
     raw_data_json: str | None = None,
+    recording_override: Any | None = None,
 ) -> dict[str, Any]:
     mode = str(source_mode or "auto").strip().lower()
     raw_text = str(raw_data_json or "").strip()
@@ -2122,6 +2123,7 @@ def run_web_data_apps(
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
     raw_data_json: str | None = None,
+    recording_override: Any | None = None,
 ) -> dict[str, Any]:
     manifest_path = manifest_path.expanduser().resolve()
     if not manifest_path.exists():
@@ -2145,6 +2147,7 @@ def run_web_data_apps(
         max_bytes=max_bytes,
         question_context=question_context,
         raw_data_json=raw_data_json,
+        recording_override=recording_override,
     )
     payload_metadata = write_web_payload(payload, output_root)
     payload_path = Path(str(payload_metadata["payloadPath"]))

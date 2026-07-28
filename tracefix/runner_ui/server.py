@@ -1023,6 +1023,7 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         max_bytes=max_bytes,
         question_context=question_context,
         raw_data_json=raw_data_json,
+        recording_override=recording_override,
     )
 def _open_local_path(path: Path) -> None:
     if not path.exists():

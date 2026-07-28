@@ -184,11 +184,16 @@ export function ResultView({
                       type="button"
                       onClick={() => onSelectRecording?.(candidate)}
                       disabled={!onSelectRecording}
-                      className="flex items-center rounded-lg border border-border bg-background px-3 py-2.5 text-left text-sm transition-colors hover:border-primary/50 hover:bg-secondary disabled:cursor-not-allowed"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5 text-left text-sm transition-colors hover:border-primary/50 hover:bg-secondary disabled:cursor-not-allowed"
                     >
                       <span className="font-medium">
                         {t('result.take', { count: index + 1 })}
                       </span>
+                      {(candidate.dateLabel || candidate.timeLabel) && (
+                        <span className="text-right text-xs tabular-nums text-muted-foreground">
+                          {[candidate.dateLabel, candidate.timeLabel].filter(Boolean).join(' - ')}
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>

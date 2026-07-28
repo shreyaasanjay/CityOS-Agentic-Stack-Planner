@@ -42,6 +42,24 @@ def test_slugify_short_and_safe():
     assert slugify("___") == "design"
 
 
+@pytest.mark.parametrize(
+    ("procedure", "expected"),
+    [
+        ("single_agent_generation", False),
+        ("exact_reuse", False),
+        ("parameterized_reuse", False),
+        ("partial_recomposition", True),
+        ("full_generation", True),
+        (None, False),
+    ],
+)
+def test_generated_template_promotion_only_runs_for_template_generating_procedures(
+    procedure,
+    expected,
+):
+    assert design_module._requires_generated_template_promotion(procedure) is expected
+
+
 # --- designer prompt (skill injection) ---------------------------------------
 
 def test_designer_prompt_embeds_skill_without_frontmatter():

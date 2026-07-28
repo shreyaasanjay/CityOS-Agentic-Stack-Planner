@@ -66,6 +66,11 @@ _PROMPT_GEN_SKILL = ".claude/skills/tla-prompt-gen/SKILL.md"
 #: 5 repair attempts — give it real time by default.
 DEFAULT_TIMEOUT = 1800.0
 
+_TEMPLATE_PROMOTION_PROCEDURES = frozenset({
+    "partial_recomposition",
+    "full_generation",
+})
+
 
 def _print_audit_block(label: str, payload: object) -> None:
     print(f"[TRACEFIX {label} START]", flush=True)
@@ -94,6 +99,12 @@ def _execution_marker_name(mode: str) -> str:
         "full_generation": "FULL GENERATION",
         "single_agent_generation": "SINGLE AGENT GENERATION",
     }[mode]
+
+
+def _requires_generated_template_promotion(procedure: str | None) -> bool:
+    """Return whether the selected procedure creates a new coordination template."""
+
+    return procedure in _TEMPLATE_PROMOTION_PROCEDURES
 
 
 def _generate_and_verify_single_agent(
@@ -2410,7 +2421,7 @@ async def run_design(
     if (
         result.success
         and attributes is not None
-        and procedure_decision_selected != "exact_reuse"
+        and _requires_generated_template_promotion(procedure_decision_selected)
     ):
         promotion_started_at = datetime.now(timezone.utc).isoformat()
         promotion_started_ms = time.monotonic() * 1000.0
