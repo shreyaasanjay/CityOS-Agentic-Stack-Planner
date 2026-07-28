@@ -2009,7 +2009,7 @@ class RunnerHandler(BaseHTTPRequestHandler):
                 "workspaceType": workspace_type or "",
                 "cityosRoot": str(cityos_root) if cityos_root is not None else "",
                 "appsDir": str((cityos_root / "apps").resolve()) if cityos_root is not None else "",
-                "webDataUrl": "https://smartroom-mirror.vercel.app/api/v1",
+                "webDataUrl": "http://172.16.60.239:3000/api",
                 "workspaces": workspaces,
             })
             return

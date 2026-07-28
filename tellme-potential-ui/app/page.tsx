@@ -54,7 +54,7 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   appModel: 'gpt-4.1-mini',
   openaiApiKey: '',
   spaceId: 'smart_room_1',
-  mirrorApiUrl: 'https://smartroom-mirror.vercel.app/api/v1',
+  mirrorApiUrl: 'http://172.16.60.239:3000/api',
   timestamp: '',
   tracefixProvider: 'openrouter',
   tracefixModel: 'z-ai/glm-5.2',
@@ -185,9 +185,16 @@ export default function Page() {
     const storedRuntimeConfig = window.localStorage.getItem(RUNTIME_CONFIG_STORAGE_KEY)
     if (storedRuntimeConfig) {
       try {
+        const savedConfig = JSON.parse(storedRuntimeConfig) as Partial<RuntimeConfig>
         setRuntimeConfig({
           ...DEFAULT_RUNTIME_CONFIG,
-          ...JSON.parse(storedRuntimeConfig),
+          ...savedConfig,
+          mirrorApiUrl: [
+            'https://smartroom-mirror.vercel.app/api/v1',
+            'http://172.16.60.239:3000/api/v1',
+          ].includes(savedConfig.mirrorApiUrl || '')
+            ? DEFAULT_RUNTIME_CONFIG.mirrorApiUrl
+            : savedConfig.mirrorApiUrl || DEFAULT_RUNTIME_CONFIG.mirrorApiUrl,
           mode: 'llm',
           openaiApiKey: '',
           tracefixApiKey: '',

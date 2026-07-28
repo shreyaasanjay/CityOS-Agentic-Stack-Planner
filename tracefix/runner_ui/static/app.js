@@ -32,7 +32,7 @@ const state = {
     workspaceType: "custom",
     cityosRoot: "",
     appsDir: "",
-    webDataUrl: "https://smartroom-mirror.vercel.app/api/v1",
+    webDataUrl: "http://172.16.60.239:3000/api",
   },
 };
 
@@ -988,7 +988,7 @@ function appendTellMeMessage(kind, text) {
 function pipelineWebDataUrl() {
   const fromTellMe = els.tellmeWebDataUrl?.value?.trim() || "";
   const fromSynth = els.synthWebDataUrl?.value?.trim() || "";
-  const url = fromTellMe || fromSynth || state.synth.webDataUrl || "https://smartroom-mirror.vercel.app/api/v1";
+  const url = fromTellMe || fromSynth || state.synth.webDataUrl || "http://172.16.60.239:3000/api";
   if (els.tellmeWebDataUrl) els.tellmeWebDataUrl.value = url;
   if (els.synthWebDataUrl) els.synthWebDataUrl.value = url;
   state.synth.webDataUrl = url;
@@ -1656,7 +1656,7 @@ async function runWebDataApps() {
     showToast("Generate CityOS artifacts first");
     return;
   }
-  const sourceUrl = els.synthWebDataUrl?.value?.trim() || state.synth.webDataUrl || "https://smartroom-mirror.vercel.app/api/v1";
+  const sourceUrl = els.synthWebDataUrl?.value?.trim() || state.synth.webDataUrl || "http://172.16.60.239:3000/api";
   const rawDataJson = pipelineRawDataJson();
   els.synthRunWebData.disabled = true;
   els.synthOutputStatus.textContent = "Running web data apps...";

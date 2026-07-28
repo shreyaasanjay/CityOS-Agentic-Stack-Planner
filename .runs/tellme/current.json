@@ -1,12 +1,12 @@
 {
-  "run_id": "tellme_d5f2b2ceee0b",
+  "run_id": "tellme_d4b787f3ed90",
   "tellme": {
-    "query_id": "tellme_d5f2b2ceee0b",
-    "query": "How many people were in smart_room_1 on July 23?",
-    "mode": "deterministic",
+    "query_id": "tellme_d4b787f3ed90",
+    "query": "How many people are in the room on July 20th?",
+    "mode": "llm",
     "model": "gpt-4.1-mini",
-    "api_key_detected": false,
-    "llm_timeout_seconds": null,
+    "api_key_detected": true,
+    "llm_timeout_seconds": 120,
     "status": "needs_tracefix",
     "route_decision": {
       "route": "single_agent",
@@ -54,7 +54,9 @@
       "needs_temporal_consistency": false,
       "output_contract": {
         "allowed_claims": [
-          "bounded_count"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
         "answer_type": "direct_answer",
         "fallback_answer_type": "insufficient_evidence",
@@ -86,7 +88,7 @@
         ]
       },
       "plan_type": "tracefix",
-      "query_id": "tellme_d5f2b2ceee0b",
+      "query_id": "tellme_d4b787f3ed90",
       "required_harnesses": [
         "occupancy_context_harness"
       ],
@@ -98,10 +100,10 @@
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
         "No available sensor supports 'room_state' context for this space.",
-        "The current run is dry-run only; no measured runtime retrieval occurs.",
-        "Occupancy is anonymous and bounded by camera coverage.",
-        "No identity or raw media access is permitted.",
+        "Mock CityOS structured context may be incomplete.",
+        "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
+        "Do not request raw sensor access, identity claims, unrestricted transcription, or medical diagnosis.",
         "Do not request raw sensor access.",
         "Do not identify a person, diagnose injury, or infer unsupported behavior."
       ],
@@ -109,7 +111,9 @@
     },
     "execution_brief": {
       "allowed_claims": [
-        "bounded_count"
+        "bounded_count",
+        "presence_state",
+        "timestamped_event_summary"
       ],
       "ambiguity": {
         "ambiguity_type": null,
@@ -120,7 +124,9 @@
       },
       "answer_packet_requirements": {
         "allowed_claims": [
-          "bounded_count"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
         "answer_type": "direct_answer",
         "fallback_answer_type": "insufficient_evidence",
@@ -144,7 +150,7 @@
         ]
       },
       "application_goal": {
-        "failure_condition": "Return insufficient_evidence when the bounded evidence is not enough.",
+        "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
         "goal_type": "occupancy_count",
         "non_goals": [
           "identify person",
@@ -152,10 +158,10 @@
           "medical diagnosis",
           "infer cause or intent"
         ],
-        "success_condition": "Return a privacy-bounded answer with confidence and evidence references.",
+        "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
         "user_intent": "occupancy_lookup"
       },
-      "brief_id": "brief_task_d5f2b2ceee0b",
+      "brief_id": "brief_task_d4b787f3ed90",
       "candidate_harnesses": [
         "occupancy_context_harness",
         "answer_synthesis_harness"
@@ -165,10 +171,10 @@
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
         "No available sensor supports 'room_state' context for this space.",
-        "The current run is dry-run only; no measured runtime retrieval occurs.",
-        "Occupancy is anonymous and bounded by camera coverage.",
-        "No identity or raw media access is permitted.",
+        "Mock CityOS structured context may be incomplete.",
+        "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
+        "Do not request raw sensor access, identity claims, unrestricted transcription, or medical diagnosis.",
         "Do not request raw sensor access.",
         "Do not identify a person, diagnose injury, or infer unsupported behavior."
       ],
@@ -319,10 +325,10 @@
       "evidence_plan": {
         "conflicting_evidence_checks": [],
         "minimum_sufficient_evidence": [
-          "occupancy_context_harness_packet"
+          "occupancy_context_packet"
         ],
         "primary_evidence": [
-          "occupancy_context_harness_packet"
+          "occupancy_context_packet"
         ],
         "supporting_evidence": []
       },
@@ -334,7 +340,7 @@
         "medical_diagnosis",
         "unsupported_behavioral_inference"
       ],
-      "normalized_query": "how many people were in smart_room_1 on july 23?",
+      "normalized_query": "how many people are in the room on july 20th?",
       "privacy_policy": {
         "forbidden_inferences": [
           "raw_sensor_access",
@@ -352,8 +358,8 @@
         "privacy_scope": "cityos_structured_context_only",
         "raw_sensor_access_allowed": false
       },
-      "query_id": "tellme_d5f2b2ceee0b",
-      "reasoning_summary": "FakeLLM semantic proposal for deterministic demo mode using only discovered sensors and APIs.",
+      "query_id": "tellme_d4b787f3ed90",
+      "reasoning_summary": "Deterministic template proposal generated for query tellme_d4b787f3ed90.",
       "required_modalities": [
         "video"
       ],
@@ -406,7 +412,7 @@
           "privacy_scope": "cityos_structured_context_only",
           "raw_sensor_access_allowed": false
         },
-        "query_id": "tellme_d5f2b2ceee0b",
+        "query_id": "tellme_d4b787f3ed90",
         "relevant_sensors": [
           {
             "allowed_api_names": [
@@ -580,7 +586,7 @@
       "space_id": "smart_room_1",
       "task_category": "occupancy_count",
       "time_windows": [],
-      "user_query": "How many people were in smart_room_1 on July 23?",
+      "user_query": "How many people are in the room on July 20th?",
       "validation_policy": {
         "bounded_time_windows_required": true,
         "llm_proposal_untrusted": true,
@@ -592,9 +598,9 @@
       }
     },
     "tracefix_task_spec": {
-      "task_id": "task_d5f2b2ceee0b",
-      "query_id": "tellme_d5f2b2ceee0b",
-      "user_query": "How many people were in smart_room_1 on July 23?",
+      "task_id": "task_d4b787f3ed90",
+      "query_id": "tellme_d4b787f3ed90",
+      "user_query": "How many people are in the room on July 20th?",
       "space_id": "smart_room_1",
       "intent": "occupancy_lookup",
       "tracefix_reason": "Preserve routing, privacy, and output verification.",
@@ -604,10 +610,10 @@
       ],
       "input_artifacts": [
         {
-          "artifact_id": "occupancy_context_harness_packet",
+          "artifact_id": "occupancy_context_packet",
           "artifact_type": "packet",
           "time_range": null,
-          "modality": null,
+          "modality": "video",
           "privacy_level": "structured_context_only"
         }
       ],
@@ -623,7 +629,7 @@
         "identity_inference_allowed": false
       },
       "success_criteria": [
-        "Return a privacy-bounded answer with confidence and evidence references.",
+        "Return a privacy-bounded answer packet with confidence and evidence refs.",
         "Return required fields only.",
         "Preserve privacy limits and caveats."
       ],
@@ -640,8 +646,8 @@
       "application_goal": {
         "goal_type": "occupancy_count",
         "user_intent": "occupancy_lookup",
-        "success_condition": "Return a privacy-bounded answer with confidence and evidence references.",
-        "failure_condition": "Return insufficient_evidence when the bounded evidence is not enough.",
+        "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
+        "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
         "non_goals": [
           "identify person",
           "face recognition",
@@ -651,11 +657,11 @@
       },
       "evidence_plan": {
         "primary_evidence": [
-          "occupancy_context_harness_packet"
+          "occupancy_context_packet"
         ],
         "supporting_evidence": [],
         "minimum_sufficient_evidence": [
-          "occupancy_context_harness_packet"
+          "occupancy_context_packet"
         ],
         "conflicting_evidence_checks": []
       },
@@ -670,7 +676,9 @@
           "limitations"
         ],
         "allowed_claims": [
-          "bounded_count"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
         "forbidden_claims": [
           "raw_sensor_access",
@@ -843,7 +851,9 @@
         "answer_type": "direct_answer",
         "fallback_answer_type": "insufficient_evidence",
         "allowed_claims": [
-          "bounded_count"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
         "forbidden_claims": [
           "raw_sensor_access",
@@ -895,9 +905,11 @@
         "unsupported_behavioral_inference"
       ],
       "allowed_claims": [
-        "bounded_count"
+        "bounded_count",
+        "presence_state",
+        "timestamped_event_summary"
       ],
-      "reasoning_summary": "FakeLLM semantic proposal for deterministic demo mode using only discovered sensors and APIs.",
+      "reasoning_summary": "Deterministic template proposal generated for query tellme_d4b787f3ed90.",
       "executable": true,
       "reason": "occupancy_lookup",
       "target_tracefix_path": "TraceFix-main/",
@@ -907,10 +919,10 @@
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
         "No available sensor supports 'room_state' context for this space.",
-        "The current run is dry-run only; no measured runtime retrieval occurs.",
-        "Occupancy is anonymous and bounded by camera coverage.",
-        "No identity or raw media access is permitted.",
+        "Mock CityOS structured context may be incomplete.",
+        "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
+        "Do not request raw sensor access, identity claims, unrestricted transcription, or medical diagnosis.",
         "Do not request raw sensor access.",
         "Do not identify a person, diagnose injury, or infer unsupported behavior."
       ]
@@ -942,7 +954,9 @@
       ],
       "output_contract": {
         "allowed_claims": [
-          "bounded_count"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
         "answer_type": "direct_answer",
         "fallback_answer_type": "insufficient_evidence",
@@ -973,7 +987,7 @@
           "limitations"
         ]
       },
-      "query_id": "tellme_d5f2b2ceee0b",
+      "query_id": "tellme_d4b787f3ed90",
       "resources": [
         {
           "modalities": [
@@ -986,12 +1000,12 @@
         },
         {
           "name": "tellme_query_logs",
-          "query_id": "tellme_d5f2b2ceee0b",
+          "query_id": "tellme_d4b787f3ed90",
           "type": "local_query_run_directory"
         }
       ],
-      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\nHow many people were in smart_room_1 on July 23?\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- none specified\n\n## Required Modalities\n- video\n\n## Candidate Harnesses\n- answer_synthesis_harness\n- occupancy_context_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence when the bounded evidence is not enough.\n- goal_type: occupancy_count\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer with confidence and evidence references.\n- user_intent: occupancy_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['occupancy_context_harness_packet']\n- primary_evidence: ['occupancy_context_harness_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['bounded_count']\n- answer_type: direct_answer\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- bounded_count\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
-      "task_id": "task_d5f2b2ceee0b",
+      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\nHow many people are in the room on July 20th?\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- none specified\n\n## Required Modalities\n- video\n\n## Candidate Harnesses\n- answer_synthesis_harness\n- occupancy_context_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence or escalate when the structured context is inadequate.\n- goal_type: occupancy_count\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer packet with confidence and evidence refs.\n- user_intent: occupancy_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['occupancy_context_packet']\n- primary_evidence: ['occupancy_context_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['bounded_count', 'presence_state', 'timestamped_event_summary']\n- answer_type: direct_answer\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- bounded_count, presence_state, timestamped_event_summary\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
+      "task_id": "task_d4b787f3ed90",
       "tool_manifest": {
         "answer_synthesis_harness": [
           "synthesize_answer_packet"
@@ -1000,10 +1014,10 @@
           "get_occupancy_context"
         ]
       },
-      "user_query": "How many people were in smart_room_1 on July 23?"
+      "user_query": "How many people are in the room on July 20th?"
     },
     "answer_packet": {
-      "query_id": "tellme_d5f2b2ceee0b",
+      "query_id": "tellme_d4b787f3ed90",
       "status": "needs_tracefix",
       "answer": "This query requires a future TraceFix multi-agent workflow and cannot be fully answered in V0.",
       "confidence": 0.0,
@@ -1035,20 +1049,43 @@
       },
       "agent_plan": {},
       "raw_outputs": {
-        "run_dir": "C:\\Users\\razer\\Downloads\\TeLLME Traceifx\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_d5f2b2ceee0b",
+        "run_dir": "C:\\Users\\shrey\\TraceFixCityOS\\.runs\\tellme\\tellme_d4b787f3ed90",
         "logging_fallback_used": false,
         "llm_operational": {
-          "agent_backend_mode": "deterministic",
-          "real_llm_requested": false,
-          "openai_key_configured": false,
-          "model": null,
-          "timeout_seconds": null
+          "agent_backend_mode": "llm",
+          "real_llm_requested": true,
+          "openai_key_configured": true,
+          "model": "gpt-4.1-mini",
+          "timeout_seconds": 120,
+          "decomposition": {
+            "model": "gpt-4.1-mini",
+            "last_used": "primary",
+            "last_latency_ms": 25969.0,
+            "fallback_reason": null,
+            "primary_calls": 1,
+            "fallback_calls": 0,
+            "last_request": {
+              "request_start": "2026-07-28T14:10:32.650526+00:00",
+              "first_response_time": "2026-07-28T14:10:58.604933+00:00",
+              "request_end": "2026-07-28T14:10:58.622160+00:00",
+              "total_duration_ms": 25969.0,
+              "time_to_first_response_ms": 25953.0,
+              "model": "gpt-4.1-mini",
+              "provider": "https://api.openai.com/v1",
+              "provider_name": "OpenAI",
+              "endpoint": "https://api.openai.com/v1/chat/completions",
+              "failed": false,
+              "error": null,
+              "http_status": null,
+              "retry_count": 0
+            }
+          }
         },
-        "agent_backend_mode": "deterministic",
+        "agent_backend_mode": "llm",
         "tracefix_task_spec": {
-          "task_id": "task_d5f2b2ceee0b",
-          "query_id": "tellme_d5f2b2ceee0b",
-          "user_query": "How many people were in smart_room_1 on July 23?",
+          "task_id": "task_d4b787f3ed90",
+          "query_id": "tellme_d4b787f3ed90",
+          "user_query": "How many people are in the room on July 20th?",
           "space_id": "smart_room_1",
           "intent": "occupancy_lookup",
           "tracefix_reason": "Preserve routing, privacy, and output verification.",
@@ -1058,10 +1095,10 @@
           ],
           "input_artifacts": [
             {
-              "artifact_id": "occupancy_context_harness_packet",
+              "artifact_id": "occupancy_context_packet",
               "artifact_type": "packet",
               "time_range": null,
-              "modality": null,
+              "modality": "video",
               "privacy_level": "structured_context_only"
             }
           ],
@@ -1077,7 +1114,7 @@
             "identity_inference_allowed": false
           },
           "success_criteria": [
-            "Return a privacy-bounded answer with confidence and evidence references.",
+            "Return a privacy-bounded answer packet with confidence and evidence refs.",
             "Return required fields only.",
             "Preserve privacy limits and caveats."
           ],
@@ -1094,8 +1131,8 @@
           "application_goal": {
             "goal_type": "occupancy_count",
             "user_intent": "occupancy_lookup",
-            "success_condition": "Return a privacy-bounded answer with confidence and evidence references.",
-            "failure_condition": "Return insufficient_evidence when the bounded evidence is not enough.",
+            "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
+            "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
             "non_goals": [
               "identify person",
               "face recognition",
@@ -1105,11 +1142,11 @@
           },
           "evidence_plan": {
             "primary_evidence": [
-              "occupancy_context_harness_packet"
+              "occupancy_context_packet"
             ],
             "supporting_evidence": [],
             "minimum_sufficient_evidence": [
-              "occupancy_context_harness_packet"
+              "occupancy_context_packet"
             ],
             "conflicting_evidence_checks": []
           },
@@ -1124,7 +1161,9 @@
               "limitations"
             ],
             "allowed_claims": [
-              "bounded_count"
+              "bounded_count",
+              "presence_state",
+              "timestamped_event_summary"
             ],
             "forbidden_claims": [
               "raw_sensor_access",
@@ -1297,7 +1336,9 @@
             "answer_type": "direct_answer",
             "fallback_answer_type": "insufficient_evidence",
             "allowed_claims": [
-              "bounded_count"
+              "bounded_count",
+              "presence_state",
+              "timestamped_event_summary"
             ],
             "forbidden_claims": [
               "raw_sensor_access",
@@ -1349,9 +1390,11 @@
             "unsupported_behavioral_inference"
           ],
           "allowed_claims": [
-            "bounded_count"
+            "bounded_count",
+            "presence_state",
+            "timestamped_event_summary"
           ],
-          "reasoning_summary": "FakeLLM semantic proposal for deterministic demo mode using only discovered sensors and APIs.",
+          "reasoning_summary": "Deterministic template proposal generated for query tellme_d4b787f3ed90.",
           "executable": true,
           "reason": "occupancy_lookup",
           "target_tracefix_path": "TraceFix-main/",
@@ -1361,16 +1404,16 @@
             "Real TraceFix multi-agent execution is not integrated yet.",
             "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
             "No available sensor supports 'room_state' context for this space.",
-            "The current run is dry-run only; no measured runtime retrieval occurs.",
-            "Occupancy is anonymous and bounded by camera coverage.",
-            "No identity or raw media access is permitted.",
+            "Mock CityOS structured context may be incomplete.",
+            "Confidence must remain bounded by available evidence.",
             "Use CityOS structured context only.",
+            "Do not request raw sensor access, identity claims, unrestricted transcription, or medical diagnosis.",
             "Do not request raw sensor access.",
             "Do not identify a person, diagnose injury, or infer unsupported behavior."
           ]
         },
         "tracefix_bundle_summary": {
-          "task_id": "task_d5f2b2ceee0b",
+          "task_id": "task_d4b787f3ed90",
           "agent_names": [
             "answer_synthesis_harness",
             "occupancy_context_harness"
@@ -1385,9 +1428,9 @@
         }
       },
       "tracefix_task_spec": {
-        "task_id": "task_d5f2b2ceee0b",
-        "query_id": "tellme_d5f2b2ceee0b",
-        "user_query": "How many people were in smart_room_1 on July 23?",
+        "task_id": "task_d4b787f3ed90",
+        "query_id": "tellme_d4b787f3ed90",
+        "user_query": "How many people are in the room on July 20th?",
         "space_id": "smart_room_1",
         "intent": "occupancy_lookup",
         "tracefix_reason": "Preserve routing, privacy, and output verification.",
@@ -1397,10 +1440,10 @@
         ],
         "input_artifacts": [
           {
-            "artifact_id": "occupancy_context_harness_packet",
+            "artifact_id": "occupancy_context_packet",
             "artifact_type": "packet",
             "time_range": null,
-            "modality": null,
+            "modality": "video",
             "privacy_level": "structured_context_only"
           }
         ],
@@ -1416,7 +1459,7 @@
           "identity_inference_allowed": false
         },
         "success_criteria": [
-          "Return a privacy-bounded answer with confidence and evidence references.",
+          "Return a privacy-bounded answer packet with confidence and evidence refs.",
           "Return required fields only.",
           "Preserve privacy limits and caveats."
         ],
@@ -1433,8 +1476,8 @@
         "application_goal": {
           "goal_type": "occupancy_count",
           "user_intent": "occupancy_lookup",
-          "success_condition": "Return a privacy-bounded answer with confidence and evidence references.",
-          "failure_condition": "Return insufficient_evidence when the bounded evidence is not enough.",
+          "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
+          "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
           "non_goals": [
             "identify person",
             "face recognition",
@@ -1444,11 +1487,11 @@
         },
         "evidence_plan": {
           "primary_evidence": [
-            "occupancy_context_harness_packet"
+            "occupancy_context_packet"
           ],
           "supporting_evidence": [],
           "minimum_sufficient_evidence": [
-            "occupancy_context_harness_packet"
+            "occupancy_context_packet"
           ],
           "conflicting_evidence_checks": []
         },
@@ -1463,7 +1506,9 @@
             "limitations"
           ],
           "allowed_claims": [
-            "bounded_count"
+            "bounded_count",
+            "presence_state",
+            "timestamped_event_summary"
           ],
           "forbidden_claims": [
             "raw_sensor_access",
@@ -1636,7 +1681,9 @@
           "answer_type": "direct_answer",
           "fallback_answer_type": "insufficient_evidence",
           "allowed_claims": [
-            "bounded_count"
+            "bounded_count",
+            "presence_state",
+            "timestamped_event_summary"
           ],
           "forbidden_claims": [
             "raw_sensor_access",
@@ -1688,9 +1735,11 @@
           "unsupported_behavioral_inference"
         ],
         "allowed_claims": [
-          "bounded_count"
+          "bounded_count",
+          "presence_state",
+          "timestamped_event_summary"
         ],
-        "reasoning_summary": "FakeLLM semantic proposal for deterministic demo mode using only discovered sensors and APIs.",
+        "reasoning_summary": "Deterministic template proposal generated for query tellme_d4b787f3ed90.",
         "executable": true,
         "reason": "occupancy_lookup",
         "target_tracefix_path": "TraceFix-main/",
@@ -1700,22 +1749,22 @@
           "Real TraceFix multi-agent execution is not integrated yet.",
           "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
           "No available sensor supports 'room_state' context for this space.",
-          "The current run is dry-run only; no measured runtime retrieval occurs.",
-          "Occupancy is anonymous and bounded by camera coverage.",
-          "No identity or raw media access is permitted.",
+          "Mock CityOS structured context may be incomplete.",
+          "Confidence must remain bounded by available evidence.",
           "Use CityOS structured context only.",
+          "Do not request raw sensor access, identity claims, unrestricted transcription, or medical diagnosis.",
           "Do not request raw sensor access.",
           "Do not identify a person, diagnose injury, or infer unsupported behavior."
         ]
       },
       "error_message": null
     },
-    "run_dir": "C:\\Users\\razer\\Downloads\\TeLLME Traceifx\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_d5f2b2ceee0b",
+    "run_dir": "C:\\Users\\shrey\\TraceFixCityOS\\.runs\\tellme\\tellme_d4b787f3ed90",
     "warnings": []
   },
   "tracefix": {
-    "run_id": "a3e906f58c",
-    "workspace": "C:\\Users\\razer\\Downloads\\TeLLME Traceifx\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260727_134407"
+    "run_id": "8f8ae9bec6",
+    "workspace": "C:\\Users\\shrey\\TraceFixCityOS\\workspace\\tellme_structured_smart_room_application_20260728_101059"
   },
   "cityos": {}
 }

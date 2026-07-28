@@ -221,7 +221,7 @@ function ConnectionSetup({
         <input
           value={config.mirrorApiUrl}
           onChange={(event) => update('mirrorApiUrl', event.target.value)}
-          placeholder="https://smartroom-mirror.vercel.app/api/v1"
+          placeholder="http://172.16.60.239:3000/api"
           className="form-field"
         />
       </Field>

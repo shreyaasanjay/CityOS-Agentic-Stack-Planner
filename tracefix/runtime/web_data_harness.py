@@ -23,7 +23,7 @@ from urllib.parse import quote, urlencode, urlparse, urlunparse
 from tracefix.runtime.cityos_agent_harness import CityOSAgentHarness, CityOSHarnessConfig
 from tracefix.runtime.cityos_docker_harness import CityOSDockerApp, load_manifest, manifest_apps
 
-_DEFAULT_SOURCE_URL = "https://smartroom-mirror.vercel.app/api/v1"
+_DEFAULT_SOURCE_URL = "http://172.16.60.239:3000/api"
 _DEFAULT_MAX_BYTES = 50 * 1024 * 1024
 _SMARTROOM_MODELS = ("action-hmdb", "action", "yolo26l", "yolo26n-pose")
 _ACTIVITY_LABEL_KEYS = {
@@ -925,12 +925,7 @@ def _smartroom_base_url(source_url: str) -> str:
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
         raise ValueError(f"Invalid smartroom API URL: {source_url}")
-    path = parsed.path.rstrip("/")
-    marker = "/api/v1"
-    if marker in path:
-        path = path[:path.index(marker) + len(marker)]
-    else:
-        path = marker
+    path = parsed.path.rstrip("/") or "/api"
     return urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
 
 
