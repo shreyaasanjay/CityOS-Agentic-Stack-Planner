@@ -78,6 +78,38 @@ def test_metadata_ir_count_conflict_writes_report_and_blocks(tmp_path):
     assert report["conflicts"][0]["field"] == "number_of_agents"
 
 
+def test_coordination_pattern_order_does_not_block_verified_promotion(tmp_path, monkeypatch):
+    workspace, spec, extracted, metadata = _promotion_workspace(tmp_path)
+    registry = tmp_path / "registry"
+    monkeypatch.setenv("TRACEFIX_GENERATED_TEMPLATE_DIR", str(registry))
+    extracted = ExtractedCoordinationAttributes.from_payload({
+        **extracted.as_dict(),
+        "coordination_patterns": ["Request-Response", "Verification"],
+        "communication_flow": [],
+    })
+    metadata.update(extracted.as_dict())
+    metadata["coordination_patterns"] = ["Verification", "Request-Response"]
+    (spec / "generated_template.json").write_text(json.dumps(metadata), encoding="utf-8")
+
+    promoted, destination = promote_verified_workspace_template(
+        workspace,
+        extracted=extracted,
+        tlc_passed=True,
+    )
+
+    assert promoted.get_coordination_patterns() == ["Verification", "Request-Response"]
+    assert destination.is_dir()
+
+
+def test_genuinely_different_coordination_patterns_still_block_promotion(tmp_path):
+    workspace, spec, extracted, metadata = _promotion_workspace(tmp_path)
+    metadata["coordination_patterns"] = ["Publish-Subscribe"]
+    (spec / "generated_template.json").write_text(json.dumps(metadata), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="coordination_patterns"):
+        promote_verified_workspace_template(workspace, extracted=extracted, tlc_passed=True)
+
+
 def test_injected_taskspec_to_exact_reuse_and_promotion_lifecycle(tmp_path, monkeypatch):
     registry = tmp_path / "lifecycle_registry"
     monkeypatch.setenv("TRACEFIX_GENERATED_TEMPLATE_DIR", str(registry))

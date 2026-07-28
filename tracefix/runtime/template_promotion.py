@@ -57,10 +57,23 @@ def _validate_against_extraction(template: Template, extracted: ExtractedCoordin
     metadata = template.to_dict()
     for field in Template.COORDINATION_ATTRIBUTE_FIELDS:
         expected = attributes[field]
+        if field == "coordination_patterns":
+            if expected not in (None, []) and _normalized_patterns(metadata[field]) != _normalized_patterns(expected):
+                raise ValueError(
+                    "generated metadata conflicts with authoritative extracted field: "
+                    "coordination_patterns"
+                )
+            continue
         if expected not in (None, []) and metadata[field] != expected:
             raise ValueError(f"generated metadata conflicts with authoritative extracted field: {field}")
-    if metadata["coordination_patterns"] != attributes["coordination_patterns"]:
-        raise ValueError("generated metadata conflicts with authoritative extracted field: coordination_patterns")
+
+
+def _normalized_patterns(values: list[Any]) -> frozenset[str]:
+    """Compare coordination-pattern labels as an unordered canonical set."""
+    return frozenset(
+        " ".join(str(value).strip().casefold().replace("_", " ").replace("-", " ").split())
+        for value in values
+    )
 
 
 def _write_ir_consistency_report(spec: Path, template: Template, ir: dict[str, Any]) -> None:
