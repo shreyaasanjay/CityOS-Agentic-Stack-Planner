@@ -22,6 +22,11 @@ import { UserQuery } from '@/components/user-query'
 import { ResultView } from '@/components/result-view'
 import { ThinkingIndicator } from '@/components/thinking-indicator'
 import { GuidelinesPanel } from '@/components/guidelines-panel'
+import {
+  LANGUAGE_LOCALES,
+  translate,
+  type TranslationKey,
+} from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type Feedback = 'helpful' | 'incorrect'
@@ -87,29 +92,29 @@ const STREAM_DELAY_MS = 45
 const PLANNED_CAPABILITIES = [
   {
     icon: MessageSquareText,
-    title: 'Ask in plain language',
-    detail:
-      'Residents describe what happened in their own words. No need to know which cameras, sensors, or feeds exist.',
+    title: 'empty.askTitle',
+    detail: 'empty.askDetail',
   },
   {
     icon: FileText,
-    title: 'Answers with evidence',
-    detail:
-      'Every answer is meant to arrive with a private evidence receipt showing that sources were checked without exposing raw captures.',
+    title: 'empty.evidenceTitle',
+    detail: 'empty.evidenceDetail',
   },
   {
     icon: ShieldCheck,
-    title: 'Privacy-aware by design',
-    detail:
-      'Raw media, source identifiers, exact timestamps, and precise evidence locations are withheld from the resident-facing app.',
+    title: 'empty.privacyTitle',
+    detail: 'empty.privacyDetail',
   },
   {
     icon: MapPin,
-    title: 'Grounded to a place and time',
-    detail:
-      'Queries would be scoped to the location and window implied by the question, not the whole city.',
+    title: 'empty.groundedTitle',
+    detail: 'empty.groundedDetail',
   },
-]
+] satisfies {
+  icon: typeof MessageSquareText
+  title: TranslationKey
+  detail: TranslationKey
+}[]
 
 function createConversation(): Conversation {
   const now = new Date().toISOString()
@@ -158,6 +163,8 @@ export default function Page() {
   const guidelines = latestResult?.guidelines ?? []
   const hasTurns = turns.length > 0
   const isCompact = settings.density === 'compact'
+  const t = (key: TranslationKey, values?: Record<string, string | number>) =>
+    translate(settings.language, key, values)
 
   const conversationSummaries = useMemo<ConversationSummary[]>(() => {
     return [...conversations]
@@ -239,6 +246,8 @@ export default function Page() {
   useEffect(() => {
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
     document.documentElement.classList.toggle('dark', settings.theme === 'dark')
+    document.documentElement.dataset.textScale = settings.textScale
+    document.documentElement.lang = LANGUAGE_LOCALES[settings.language]
   }, [settings])
 
   useEffect(() => {
@@ -314,6 +323,7 @@ export default function Page() {
         cityosAgentModel: runtimeConfig.cityosAgentModel,
         cityosAgentProvider: runtimeConfig.cityosAgentProvider,
         cityosAgentApiKey: runtimeConfig.cityosAgentApiKey,
+        language: settings.language,
       }, {
         signal: controller.signal,
         onProgress: (progress) => {
@@ -347,7 +357,8 @@ export default function Page() {
         visibleAnswer: '',
         errorMessage: error instanceof Error
           ? error.message
-          : 'Something went wrong reaching the backend.',
+          : t('main.error'),
+        responseMs: Math.max(1, Date.now() - (turn.startedAt ?? Date.now())),
       }))
       setIsLoading(false)
     } finally {
@@ -367,6 +378,8 @@ export default function Page() {
       status: 'loading',
       visibleAnswer: '',
       errorMessage: undefined,
+      startedAt: Date.now(),
+      responseMs: undefined,
       progressStage: 'answering',
     }))
     try {
@@ -384,6 +397,7 @@ export default function Page() {
         cityosAgentProvider: runtimeConfig.cityosAgentProvider,
         cityosAgentModel: runtimeConfig.cityosAgentModel,
         cityosAgentApiKey: runtimeConfig.cityosAgentApiKey,
+        language: settings.language,
       }, candidate.recordingId, { signal: controller.signal })
       if (settings.streamingEnabled) beginStreaming(turn.id, result)
       else {
@@ -400,7 +414,8 @@ export default function Page() {
       updateTurn(turn.id, (current) => ({
         ...current,
         status: 'error',
-        errorMessage: error instanceof Error ? error.message : 'The selected recording could not be retrieved.',
+        errorMessage: error instanceof Error ? error.message : t('main.recordingError'),
+        responseMs: Math.max(1, Date.now() - (current.startedAt ?? Date.now())),
       }))
       setIsLoading(false)
     } finally {
@@ -462,6 +477,7 @@ export default function Page() {
       ...turn,
       status: 'stopped',
       visibleAnswer: turn.visibleAnswer || '',
+      responseMs: Math.max(1, Date.now() - (turn.startedAt ?? Date.now())),
     }))
     setIsLoading(false)
   }
@@ -627,7 +643,6 @@ export default function Page() {
         'flex min-h-screen flex-col bg-background',
         settings.themeColor === 'blue' && '[--primary:oklch(0.58_0.11_230)] [--ring:oklch(0.58_0.11_230)] [--accent:oklch(0.94_0.035_230)] [--accent-foreground:oklch(0.34_0.06_230)]',
         settings.themeColor === 'violet' && '[--primary:oklch(0.58_0.13_300)] [--ring:oklch(0.58_0.13_300)] [--accent:oklch(0.94_0.04_300)] [--accent-foreground:oklch(0.36_0.07_300)]',
-        settings.textScale === 'large' && 'text-[110%]',
         settings.highContrast && 'contrast-125',
         settings.reduceMotion && '[&_*]:!scroll-auto [&_*]:!transition-none [&_*]:!animate-none',
       )}
@@ -648,6 +663,7 @@ export default function Page() {
           renamingId={renamingConversationId}
           renameValue={renameValue}
           runtimeConfig={runtimeConfig}
+          language={settings.language}
           onRuntimeConfigChange={setRuntimeConfig}
           onSearchChange={setConversationSearch}
           onNewChat={newChat}
@@ -669,7 +685,7 @@ export default function Page() {
               )}
             >
               {!hasTurns ? (
-                <EmptyState compact={isCompact} />
+                <EmptyState compact={isCompact} language={settings.language} />
               ) : (
                 <div className={cn('flex flex-col', isCompact ? 'gap-5' : 'gap-8')}>
                   {turns.map((turn) => (
@@ -683,11 +699,13 @@ export default function Page() {
                           onChange={setEditValue}
                           onCancel={() => setEditingTurnId(null)}
                           onSubmit={() => submitEditedPrompt(turn.id)}
+                          language={settings.language}
                         />
                       ) : (
                         <UserQuery
                           text={turn.query}
                           onEdit={() => startEditing(turn)}
+                          language={settings.language}
                         />
                       )}
 
@@ -695,31 +713,33 @@ export default function Page() {
                         <ThinkingIndicator
                           stage={turn.progressStage ?? 'planning'}
                           backendRunId={turn.backendRunId}
+                          startedAt={turn.startedAt ?? Date.now()}
+                          language={settings.language}
                           onStop={() => stopTurn(turn.id)}
                         />
                       )}
                       {turn.status === 'error' && (
                         <div className="flex flex-col gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                          <span>{turn.errorMessage || 'Something went wrong reaching the backend. Please try again.'}</span>
+                          <span>{turn.errorMessage || t('main.error')}</span>
                           <div className="flex gap-2">
                             <ActionButton onClick={() => handleSubmit(turn.query, turn.id)}>
-                              Regenerate
+                              {t('main.regenerate')}
                             </ActionButton>
                             <ActionButton onClick={() => startEditing(turn)}>
-                              Edit prompt
+                              {t('main.editPrompt')}
                             </ActionButton>
                           </div>
                         </div>
                       )}
                       {turn.status === 'stopped' && !turn.result && (
                         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm">
-                          <span>Generation stopped before an answer was ready.</span>
+                          <span>{t('main.stopped')}</span>
                           <div className="flex gap-2">
                             <ActionButton onClick={() => handleSubmit(turn.query, turn.id)}>
-                              Regenerate
+                              {t('main.regenerate')}
                             </ActionButton>
                             <ActionButton onClick={() => startEditing(turn)}>
-                              Edit prompt
+                              {t('main.editPrompt')}
                             </ActionButton>
                           </div>
                         </div>
@@ -735,6 +755,7 @@ export default function Page() {
                           feedback={turn.feedback}
                           responseMs={turn.responseMs}
                           tracefixRunId={turn.status === 'done' ? turn.backendRunId : undefined}
+                          language={settings.language}
                           onViewGuidelines={() => setActiveTab('guidelines')}
                           onCopy={() => copyResponse(turn)}
                           onShare={() => shareResponse(turn)}
@@ -747,7 +768,9 @@ export default function Page() {
                       )}
                       {turn.status === 'streaming' && (
                         <div className="flex justify-start">
-                          <ActionButton onClick={() => stopTurn(turn.id)}>Stop generation</ActionButton>
+                          <ActionButton onClick={() => stopTurn(turn.id)}>
+                            {t('main.stopGeneration')}
+                          </ActionButton>
                         </div>
                       )}
                     </div>
@@ -764,7 +787,11 @@ export default function Page() {
                   isCompact ? 'py-2.5' : 'py-4',
                 )}
               >
-                <QueryConsole onSubmit={(query) => handleSubmit(query)} disabled={isLoading} />
+                <QueryConsole
+                  onSubmit={(query) => handleSubmit(query)}
+                  disabled={isLoading}
+                  language={settings.language}
+                />
               </div>
             </div>
           </div>
@@ -782,6 +809,7 @@ export default function Page() {
                   ? turns.findLast((turn) => turn.result)?.query ?? null
                   : null
               }
+              language={settings.language}
             />
           </main>
         )}
@@ -813,12 +841,16 @@ function EditPromptForm({
   onChange,
   onCancel,
   onSubmit,
+  language,
 }: {
   value: string
   onChange: (value: string) => void
   onCancel: () => void
   onSubmit: () => void
+  language: AppearanceSettings['language']
 }) {
+  const t = (key: TranslationKey) => translate(language, key)
+
   return (
     <div className="flex justify-end">
       <div className="flex w-full max-w-2xl flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
@@ -827,18 +859,26 @@ function EditPromptForm({
           onChange={(event) => onChange(event.target.value)}
           rows={3}
           className="min-h-20 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm leading-relaxed text-foreground outline-none transition-colors focus:border-ring"
-          aria-label="Edit previous prompt"
+          aria-label={t('main.editPreviousPrompt')}
         />
         <div className="flex justify-end gap-2">
-          <ActionButton onClick={onCancel}>Cancel</ActionButton>
-          <ActionButton onClick={onSubmit}>Update and regenerate</ActionButton>
+          <ActionButton onClick={onCancel}>{t('main.cancel')}</ActionButton>
+          <ActionButton onClick={onSubmit}>{t('main.updateRegenerate')}</ActionButton>
         </div>
       </div>
     </div>
   )
 }
 
-function EmptyState({ compact }: { compact: boolean }) {
+function EmptyState({
+  compact,
+  language,
+}: {
+  compact: boolean
+  language: AppearanceSettings['language']
+}) {
+  const t = (key: TranslationKey) => translate(language, key)
+
   return (
     <div className={cn('flex flex-col', compact ? 'gap-6 py-5' : 'gap-10 py-8 sm:py-12')}>
       <div className="flex flex-col items-center gap-4 text-center">
@@ -847,20 +887,17 @@ function EmptyState({ compact }: { compact: boolean }) {
         </span>
         <div className="max-w-xl">
           <h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
-            Ask the city a question
+            {t('empty.title')}
           </h1>
           <p className="mt-2 text-pretty leading-relaxed text-muted-foreground">
-            Describe what happened in plain language, like losing your keys on
-            a street this afternoon. TeLLMe returns a grounded answer backed by
-            private verification from nearby city sensors. You do not need to
-            know which cameras or sensors exist.
+            {t('empty.description')}
           </p>
         </div>
       </div>
 
       <div className="flex flex-col gap-3">
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          What TeLLMe is meant to do
+          {t('empty.capabilities')}
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {PLANNED_CAPABILITIES.map(({ icon: Icon, title, detail }) => (
@@ -873,12 +910,12 @@ function EmptyState({ compact }: { compact: boolean }) {
                   <Icon className="size-4" aria-hidden="true" />
                 </span>
                 <span className="rounded-full border border-border bg-background px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Planned
+                  {t('empty.planned')}
                 </span>
               </div>
-              <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+              <h3 className="text-sm font-semibold text-foreground">{t(title)}</h3>
               <p className="text-[13px] leading-relaxed text-muted-foreground">
-                {detail}
+                {t(detail)}
               </p>
             </div>
           ))}

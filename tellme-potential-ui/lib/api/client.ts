@@ -109,6 +109,8 @@ const httpQueryApi: QueryApi = {
       agentProvider: req.cityosAgentProvider,
       agentModel: req.cityosAgentModel,
       agentApiKey: cityosAgentKey,
+      model: req.tracefixModel,
+      language: req.language,
     }, options?.signal)
   },
 
@@ -120,6 +122,10 @@ const httpQueryApi: QueryApi = {
       model: req.tracefixModel,
       timestamp: req.timestamp,
       recordingOverride: { recordingId },
+      language: req.language,
+      agentProvider: req.cityosAgentProvider,
+      agentModel: req.cityosAgentModel,
+      agentApiKey: req.cityosAgentApiKey,
     }, options?.signal)
   },
 

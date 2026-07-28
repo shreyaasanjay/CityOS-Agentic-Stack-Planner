@@ -22,6 +22,12 @@ import {
   getApiKeyOriginPolicy,
   type ApiKeyOriginPolicy,
 } from '@/lib/security/api-key-origin'
+import {
+  LANGUAGE_LOCALES,
+  translate,
+  type LanguageMode,
+  type TranslationKey,
+} from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 export interface ConversationSummary {
@@ -55,6 +61,7 @@ interface ConversationSidebarProps {
   renamingId: string | null
   renameValue: string
   runtimeConfig: RuntimeConfig
+  language: LanguageMode
   onRuntimeConfigChange: (config: RuntimeConfig) => void
   onSearchChange: (value: string) => void
   onNewChat: () => void
@@ -74,6 +81,7 @@ export function ConversationSidebar({
   renamingId,
   renameValue,
   runtimeConfig,
+  language,
   onRuntimeConfigChange,
   onSearchChange,
   onNewChat,
@@ -85,6 +93,7 @@ export function ConversationSidebar({
   onTogglePin,
   onDeleteConversation,
 }: ConversationSidebarProps) {
+  const t = (key: TranslationKey) => translate(language, key)
   const filtered = conversations.filter((conversation) =>
     conversation.title.toLowerCase().includes(search.toLowerCase()),
   )
@@ -100,14 +109,15 @@ export function ConversationSidebar({
           className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           <MessageSquarePlus className="size-4" aria-hidden="true" />
-          New chat
+          {t('sidebar.newChat')}
         </button>
         <label className="flex h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground focus-within:border-ring">
           <Search className="size-4 shrink-0" aria-hidden="true" />
           <input
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search chats"
+            placeholder={t('sidebar.searchChats')}
+            aria-label={t('sidebar.searchChats')}
             className="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
           />
         </label>
@@ -117,11 +127,13 @@ export function ConversationSidebar({
         <ConnectionSetup
           config={runtimeConfig}
           onChange={onRuntimeConfigChange}
+          language={language}
         />
 
         {pinned.length > 0 && (
           <ConversationGroup
-            label="Pinned"
+            label={t('sidebar.pinned')}
+            language={language}
             conversations={pinned}
             activeConversationId={activeConversationId}
             renamingId={renamingId}
@@ -137,7 +149,8 @@ export function ConversationSidebar({
         )}
 
         <ConversationGroup
-          label="Recent"
+          label={t('sidebar.recent')}
+          language={language}
           conversations={recent}
           activeConversationId={activeConversationId}
           renamingId={renamingId}
@@ -158,9 +171,11 @@ export function ConversationSidebar({
 function ConnectionSetup({
   config,
   onChange,
+  language,
 }: {
   config: RuntimeConfig
   onChange: (config: RuntimeConfig) => void
+  language: LanguageMode
 }) {
   const hasOpenAiKey = config.openaiApiKey.trim().length > 0
   const hasTracefixKey = config.tracefixApiKey.trim().length > 0
@@ -176,6 +191,7 @@ function ConnectionSetup({
   useEffect(() => {
     setOriginPolicy(getApiKeyOriginPolicy(window.location))
   }, [])
+  const t = (key: TranslationKey) => translate(language, key)
 
   function update<K extends keyof RuntimeConfig>(key: K, value: RuntimeConfig[K]) {
     onChange({ ...config, [key]: value })
@@ -186,9 +202,11 @@ function ConnectionSetup({
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-semibold uppercase text-muted-foreground">
-            Connection setup
+            {t('sidebar.connectionSetup')}
           </p>
-          <p className="mt-1 text-sm font-semibold text-foreground">Smart-room request</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">
+            {t('sidebar.smartRoomRequest')}
+          </p>
         </div>
         <span
           className={cn(
@@ -204,17 +222,17 @@ function ConnectionSetup({
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Mode">
+        <Field label={t('sidebar.mode')}>
           <select
             value={config.mode}
             onChange={(event) => update('mode', event.target.value as RuntimeConfig['mode'])}
             className="form-field"
           >
             <option value="llm">LLM / API</option>
-            <option value="deterministic">Deterministic</option>
+            <option value="deterministic">{t('sidebar.deterministic')}</option>
           </select>
         </Field>
-        <Field label="Model">
+        <Field label={t('sidebar.model')}>
           <select
             value={config.appModel}
             onChange={(event) => update('appModel', event.target.value)}
@@ -227,17 +245,22 @@ function ConnectionSetup({
         </Field>
       </div>
 
-      <Field label="OpenAI API key" icon={KeyRound} status={hasOpenAiKey ? 'Detected' : 'Missing'}>
+      <Field
+        label={t('sidebar.openAiKey')}
+        icon={KeyRound}
+        status={hasOpenAiKey ? t('sidebar.detected') : t('sidebar.missing')}
+        detected={hasOpenAiKey}
+      >
         <ApiKeyInput
           name="openai-api-key"
           value={config.openaiApiKey}
           onValueChange={(value) => update('openaiApiKey', value)}
-          placeholder="Paste provider key"
+          placeholder={t('sidebar.pasteProviderKey')}
           policy={originPolicy}
         />
       </Field>
 
-      <Field label="Space ID" icon={Box}>
+      <Field label={t('sidebar.spaceId')} icon={Box}>
         <input
           value={config.spaceId}
           onChange={(event) => update('spaceId', event.target.value)}
@@ -246,7 +269,7 @@ function ConnectionSetup({
         />
       </Field>
 
-      <Field label="Smartroom mirror API URL" icon={Link2}>
+      <Field label={t('sidebar.mirrorUrl')} icon={Link2}>
         <input
           value={config.mirrorApiUrl}
           onChange={(event) => update('mirrorApiUrl', event.target.value)}
@@ -255,7 +278,7 @@ function ConnectionSetup({
         />
       </Field>
 
-      <Field label="Timestamp" icon={Clock}>
+      <Field label={t('sidebar.timestamp')} icon={Clock}>
         <div className="flex gap-2">
           <input
             value={config.timestamp}
@@ -268,19 +291,19 @@ function ConnectionSetup({
             onClick={() => update('timestamp', new Date().toISOString())}
             className="inline-flex shrink-0 items-center rounded-lg border border-border bg-background px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-muted"
           >
-            Now
+            {t('sidebar.now')}
           </button>
         </div>
       </Field>
 
       <details className="mt-3 rounded-lg border border-border bg-secondary/40 p-2">
         <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-foreground">
-          TraceFix setup
+          {t('sidebar.tracefixSetup')}
           <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
         </summary>
         <div className="mt-3 flex flex-col gap-2">
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Provider">
+            <Field label={t('sidebar.provider')}>
               <select
                 value={config.tracefixProvider}
                 onChange={(event) => update('tracefixProvider', event.target.value as RuntimeConfig['tracefixProvider'])}
@@ -292,7 +315,7 @@ function ConnectionSetup({
                 <option value="local">Local</option>
               </select>
             </Field>
-            <Field label="Model" icon={Cpu}>
+            <Field label={t('sidebar.model')} icon={Cpu}>
               <input
                 value={config.tracefixModel}
                 onChange={(event) => update('tracefixModel', event.target.value)}
@@ -300,12 +323,17 @@ function ConnectionSetup({
               />
             </Field>
           </div>
-          <Field label="TraceFix API key" icon={KeyRound} status={hasTracefixKey ? 'Detected' : 'Missing'}>
+          <Field
+            label={t('sidebar.tracefixKey')}
+            icon={KeyRound}
+            status={hasTracefixKey ? t('sidebar.detected') : t('sidebar.missing')}
+            detected={hasTracefixKey}
+          >
             <ApiKeyInput
               name="tracefix-api-key"
               value={config.tracefixApiKey}
               onValueChange={(value) => update('tracefixApiKey', value)}
-              placeholder="Paste TraceFix provider key"
+              placeholder={t('sidebar.pasteTracefixKey')}
               policy={originPolicy}
             />
           </Field>
@@ -352,10 +380,7 @@ function ConnectionSetup({
       </details>
 
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        {originPolicy.message} API keys stay in memory for this session only. Each
-        browser origin requires its own entry. Non-secret endpoint settings
-        can persist locally. Internal planning, task payloads, and decomposition
-        details remain hidden from the user UI.
+        {originPolicy.message} {t('sidebar.keyNote')}
       </p>
     </section>
   )
@@ -365,11 +390,13 @@ function Field({
   label,
   icon: Icon,
   status,
+  detected,
   children,
 }: {
   label: string
   icon?: typeof KeyRound
   status?: string
+  detected?: boolean
   children: React.ReactNode
 }) {
   return (
@@ -382,7 +409,7 @@ function Field({
         {status && (
           <span className={cn(
             'rounded-full border px-1.5 py-0.5 text-[9px] font-medium',
-            status === 'Detected'
+            detected
               ? 'border-primary/30 bg-accent text-accent-foreground'
               : 'border-border bg-background text-muted-foreground',
           )}>
@@ -408,17 +435,20 @@ function ConversationGroup({
   onCancelRename,
   onTogglePin,
   onDeleteConversation,
+  language,
 }: Omit<ConversationSidebarProps, 'conversations' | 'search' | 'onSearchChange' | 'onNewChat' | 'runtimeConfig' | 'onRuntimeConfigChange'> & {
   label: string
   conversations: ConversationSummary[]
 }) {
+  const t = (key: TranslationKey) => translate(language, key)
+
   return (
     <section className="flex flex-col gap-1.5">
       <p className="px-1 text-[10px] font-semibold uppercase text-muted-foreground">
         {label}
       </p>
       {conversations.length === 0 ? (
-        <p className="px-1 py-2 text-xs text-muted-foreground">No chats here yet.</p>
+        <p className="px-1 py-2 text-xs text-muted-foreground">{t('sidebar.noChats')}</p>
       ) : (
         conversations.map((conversation) => (
           <div
@@ -440,10 +470,13 @@ function ConversationGroup({
                   className="min-w-0 flex-1 rounded-md border border-border bg-card px-2 py-1 text-xs outline-none focus:border-ring"
                   autoFocus
                 />
-                <IconButton label="Save name" onClick={() => onCommitRename(conversation.id)}>
+                <IconButton
+                  label={t('sidebar.saveName')}
+                  onClick={() => onCommitRename(conversation.id)}
+                >
                   <Check className="size-3.5" aria-hidden="true" />
                 </IconButton>
-                <IconButton label="Cancel rename" onClick={onCancelRename}>
+                <IconButton label={t('sidebar.cancelRename')} onClick={onCancelRename}>
                   <X className="size-3.5" aria-hidden="true" />
                 </IconButton>
               </div>
@@ -455,15 +488,18 @@ function ConversationGroup({
                   className="block w-full text-left"
                 >
                   <span className="line-clamp-2 text-sm font-medium text-foreground">
-                    {conversation.title}
+                    {conversation.title === 'New chat'
+                      ? t('sidebar.newChat')
+                      : conversation.title}
                   </span>
                   <span className="mt-1 block text-[11px] text-muted-foreground">
-                    {formatTimestamp(conversation.updatedAt)} - {conversation.turnCount} turns
+                    {formatTimestamp(conversation.updatedAt, language)} - {conversation.turnCount}{' '}
+                    {t(conversation.turnCount === 1 ? 'sidebar.turn' : 'sidebar.turns')}
                   </span>
                 </button>
                 <div className="mt-2 flex items-center gap-1 opacity-100 lg:opacity-0 lg:transition-opacity lg:group-hover:opacity-100">
                   <IconButton
-                    label={conversation.pinned ? 'Unpin chat' : 'Pin chat'}
+                    label={conversation.pinned ? t('sidebar.unpinChat') : t('sidebar.pinChat')}
                     onClick={() => onTogglePin(conversation.id)}
                   >
                     {conversation.pinned ? (
@@ -473,13 +509,13 @@ function ConversationGroup({
                     )}
                   </IconButton>
                   <IconButton
-                    label="Rename chat"
+                    label={t('sidebar.renameChat')}
                     onClick={() => onStartRename(conversation.id, conversation.title)}
                   >
                     <Pencil className="size-3.5" aria-hidden="true" />
                   </IconButton>
                   <IconButton
-                    label="Delete chat"
+                    label={t('sidebar.deleteChat')}
                     onClick={() => onDeleteConversation(conversation.id)}
                   >
                     <Trash2 className="size-3.5" aria-hidden="true" />
@@ -515,14 +551,15 @@ function IconButton({
   )
 }
 
-function formatTimestamp(value: string) {
+function formatTimestamp(value: string, language: LanguageMode) {
   const date = new Date(value)
   const now = new Date()
   const sameDay = date.toDateString() === now.toDateString()
+  const locale = LANGUAGE_LOCALES[language]
 
   if (sameDay) {
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    return date.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
   }
 
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
 }

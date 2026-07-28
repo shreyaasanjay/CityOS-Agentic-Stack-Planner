@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import type { Agent, EvidenceItem, QueryResult } from '@/lib/api/types'
 import { getRequestApiKeyOriginPolicy } from '@/lib/security/api-key-origin'
+import type { LanguageMode } from '@/lib/i18n'
 import {
   asArray,
   asNumber,
@@ -23,6 +24,7 @@ interface AnswerRequest {
   model?: string
   timestamp?: string
   recordingOverride?: { recordingId?: string; day?: string; rec?: string }
+  language?: LanguageMode
 }
 
 function normalizedRecordingOverride(value: AnswerRequest['recordingOverride']) {
@@ -36,6 +38,88 @@ function normalizedRecordingOverride(value: AnswerRequest['recordingOverride']) 
   }
 }
 
+const ANSWER_COPY = {
+  en: {
+    occupancyPeak: (peak: number) =>
+      `The approved occupancy summary shows up to ${peak} ${peak === 1 ? 'person' : 'people'}.`,
+    occupancyLatest: (peak: number, latest: number) =>
+      `The approved occupancy summary shows up to ${peak} ${peak === 1 ? 'person' : 'people'}, with ${latest} in the latest aggregate reading.`,
+    activityOne: (label: string, count: number) =>
+      `${label.charAt(0).toUpperCase()}${label.slice(1)} appeared in ${count} approved activity ${count === 1 ? 'record' : 'records'}.`,
+    activityMany: (summary: string) =>
+      `The approved sensor summary found these activity records: ${summary}. These aggregate counts do not identify people or establish that separate activities involved the same person.`,
+    unavailable: 'The smart-room data was processed, but no privacy-safe aggregate answer was available for this request.',
+    evidenceTitle: 'Approved private sensor summary',
+    tracefixName: 'TraceFix verifier',
+    tracefixType: 'Verification service',
+    tracefixRole: 'Verified the workflow before smart-room access.',
+    verified: 'Verified',
+    cityosName: 'Approved smart-room service',
+    cityosType: 'Sensor service',
+    cityosRole: 'Returned an aggregate result without exposing raw captures.',
+    complete: 'Complete',
+    keyPoints: [
+      'TraceFix verification completed before smart-room access.',
+      'Only an aggregate result is shown.',
+      'Raw captures, identities, source names, timestamps, and file paths were withheld.',
+    ],
+  },
+  es: {
+    occupancyPeak: (peak: number) =>
+      `El resumen de ocupación aprobado muestra hasta ${peak} ${peak === 1 ? 'persona' : 'personas'}.`,
+    occupancyLatest: (peak: number, latest: number) =>
+      `El resumen de ocupación aprobado muestra hasta ${peak} ${peak === 1 ? 'persona' : 'personas'}, con ${latest} en la lectura agregada más reciente.`,
+    activityOne: (label: string, count: number) =>
+      `${label.charAt(0).toUpperCase()}${label.slice(1)} apareció en ${count} ${count === 1 ? 'registro de actividad aprobado' : 'registros de actividad aprobados'}.`,
+    activityMany: (summary: string) =>
+      `El resumen de sensores aprobado encontró estos registros de actividad: ${summary}. Estos conteos agregados no identifican personas ni demuestran que actividades distintas correspondan a la misma persona.`,
+    unavailable: 'Los datos de la sala inteligente fueron procesados, pero no hubo una respuesta agregada que protegiera la privacidad.',
+    evidenceTitle: 'Resumen privado de sensores aprobado',
+    tracefixName: 'Verificador TraceFix',
+    tracefixType: 'Servicio de verificación',
+    tracefixRole: 'Verificó el flujo antes de acceder a la sala inteligente.',
+    verified: 'Verificado',
+    cityosName: 'Servicio de sala inteligente aprobado',
+    cityosType: 'Servicio de sensores',
+    cityosRole: 'Devolvió un resultado agregado sin exponer capturas originales.',
+    complete: 'Completo',
+    keyPoints: [
+      'TraceFix completó la verificación antes de acceder a la sala inteligente.',
+      'Solo se muestra un resultado agregado.',
+      'Se ocultaron capturas, identidades, nombres de fuentes, horas y rutas de archivos.',
+    ],
+  },
+  hi: {
+    occupancyPeak: (peak: number) =>
+      `स्वीकृत उपस्थिति सारांश में अधिकतम ${peak} ${peak === 1 ? 'व्यक्ति' : 'लोग'} दिखे।`,
+    occupancyLatest: (peak: number, latest: number) =>
+      `स्वीकृत उपस्थिति सारांश में अधिकतम ${peak} ${peak === 1 ? 'व्यक्ति' : 'लोग'} दिखे और नवीनतम समेकित रीडिंग में ${latest} थे।`,
+    activityOne: (label: string, count: number) =>
+      `${label} ${count} स्वीकृत गतिविधि रिकॉर्ड में दिखाई दिया।`,
+    activityMany: (summary: string) =>
+      `स्वीकृत सेंसर सारांश में ये गतिविधि रिकॉर्ड मिले: ${summary}। ये समेकित गिनतियां लोगों की पहचान नहीं करतीं और यह साबित नहीं करतीं कि अलग गतिविधियां एक ही व्यक्ति की थीं।`,
+    unavailable: 'स्मार्ट रूम डेटा संसाधित हुआ, लेकिन इस अनुरोध के लिए गोपनीयता-सुरक्षित समेकित जवाब उपलब्ध नहीं था।',
+    evidenceTitle: 'स्वीकृत निजी सेंसर सारांश',
+    tracefixName: 'TraceFix सत्यापक',
+    tracefixType: 'सत्यापन सेवा',
+    tracefixRole: 'स्मार्ट रूम पहुंच से पहले कार्यप्रवाह सत्यापित किया।',
+    verified: 'सत्यापित',
+    cityosName: 'स्वीकृत स्मार्ट रूम सेवा',
+    cityosType: 'सेंसर सेवा',
+    cityosRole: 'कच्ची रिकॉर्डिंग दिखाए बिना समेकित परिणाम दिया।',
+    complete: 'पूर्ण',
+    keyPoints: [
+      'स्मार्ट रूम पहुंच से पहले TraceFix सत्यापन पूरा हुआ।',
+      'केवल समेकित परिणाम दिखाया गया है।',
+      'कच्ची रिकॉर्डिंग, पहचान, स्रोत नाम, टाइमस्टैम्प और फाइल पथ छिपाए गए हैं।',
+    ],
+  },
+}
+
+function normalizedLanguage(language: LanguageMode | undefined): LanguageMode {
+  return language === 'es' || language === 'hi' ? language : 'en'
+}
+
 function safeLabel(value: string) {
   return value.replace(/[^a-z0-9 _-]/gi, '').replace(/\s+/g, ' ').trim().slice(0, 40)
 }
@@ -47,24 +131,32 @@ function safeAnswerText(value: string) {
   return text.slice(0, 600)
 }
 
-function aggregateAnswer(query: string, answer: JsonObject): string {
+function aggregateAnswer(
+  query: string,
+  answer: JsonObject,
+  language: LanguageMode,
+): string {
+  const copy = ANSWER_COPY[language]
   // TeLLMe presents the generated TraceFix agent's answer; it must not silently
   // replace that answer with a second, UI-authored interpretation of the data.
   const agentAnswer = safeAnswerText(
     asString(answer.answer) || asString(answer.chat_answer) || asString(answer.chatAnswer),
   )
   if (agentAnswer) return agentAnswer
-
   const cameras = asArray(answer.cameras).map(asObject)
-  if (/\b(how many people|occupancy|occupied)\b/i.test(query) && cameras.length) {
+  const isOccupancyQuestion =
+    /\b(how many people|occupancy|occupied)\b/i.test(query)
+    || /\b(cuántas personas|cuantas personas|ocupación|ocupacion|ocupado|ocupada)\b/i.test(query)
+    || /(कितने लोग|कितने व्यक्ति|उपस्थिति|लोगों की संख्या)/i.test(query)
+  if (isOccupancyQuestion && cameras.length) {
     const peaks = cameras.map((camera) => asNumber(camera.peakPeople)).filter((value): value is number => value !== null)
     const latest = cameras.map((camera) => asNumber(camera.lastPeople)).filter((value): value is number => value !== null)
     if (peaks.length) {
       const peak = Math.max(...peaks)
       const latestValue = latest.length ? Math.max(...latest) : null
       return latestValue === null
-        ? `The approved occupancy summary shows up to ${peak} ${peak === 1 ? 'person' : 'people'}.`
-        : `The approved occupancy summary shows up to ${peak} ${peak === 1 ? 'person' : 'people'}, with ${latestValue} in the latest aggregate reading.`
+        ? copy.occupancyPeak(peak)
+        : copy.occupancyLatest(peak, latestValue)
     }
   }
 
@@ -80,35 +172,51 @@ function aggregateAnswer(query: string, answer: JsonObject): string {
 
   if (entries.length === 1) {
     const [label, count] = entries[0]
-    return `${label.charAt(0).toUpperCase()}${label.slice(1)} appeared in ${count} approved activity ${count === 1 ? 'record' : 'records'}.`
+    return copy.activityOne(label, count)
   }
   if (entries.length > 1) {
     const summary = entries.map(([label, count]) => `${label}: ${count}`).join('; ')
-    return `The approved sensor summary found these activity records: ${summary}. These aggregate counts do not identify people or establish that separate activities involved the same person.`
+    return copy.activityMany(summary)
   }
 
   const backendText = cameras.length === 0 ? safeAnswerText(asString(answer.text)) : ''
   if (backendText) return backendText
 
-  return 'The smart-room data was processed, but no privacy-safe aggregate answer was available for this request.'
+  return copy.unavailable
 }
 
-function selectionResult(webRun: JsonObject, query: string, model: string): QueryResult {
+function selectionResult(
+  webRun: JsonObject,
+  model: string,
+  language: LanguageMode,
+): QueryResult {
   const answer = asObject(webRun.answer)
+  const fallbackPrompt = language === 'es'
+    ? 'Elige la grabación que mejor coincida con tu solicitud.'
+    : language === 'hi'
+      ? 'वह रिकॉर्डिंग चुनें जो आपके अनुरोध से सबसे अच्छी तरह मेल खाती है।'
+      : 'Choose the recording that best matches your request.'
+  const fallbackKeyPoint = language === 'es'
+    ? 'Elige una grabación para continuar con la pregunta original.'
+    : language === 'hi'
+      ? 'मूल प्रश्न जारी रखने के लिए एक रिकॉर्डिंग चुनें।'
+      : 'Choose one recording to continue with the original question.'
+  const fallbackLabel = language === 'es'
+    ? 'Grabación disponible'
+    : language === 'hi'
+      ? 'उपलब्ध रिकॉर्डिंग'
+      : 'Available recording'
   const candidates = asArray(answer.clarificationCandidates)
     .map(asObject)
-    .map((candidate) => ({
+    .map((candidate, index) => ({
       recordingId: asString(candidate.recordingId) || [asString(candidate.day), asString(candidate.rec)].filter(Boolean).join('/'),
-      label: asString(candidate.label) || 'Available recording',
-      detail: asString(candidate.detail),
-      dateLabel: asString(candidate.dateLabel),
-      timeLabel: asString(candidate.timeLabel),
+      label: `${fallbackLabel} ${index + 1}`,
     }))
     .filter((candidate) => Boolean(candidate.recordingId))
   return {
     id: `tellme_selection_${Date.now()}`,
-    answer: asString(answer.clarificationPrompt) || 'Choose the recording that best matches your request.',
-    keyPoints: ['Choose one recording to continue with the original question.'],
+    answer: fallbackPrompt,
+    keyPoints: [fallbackKeyPoint],
     confidence: null,
     agents: [],
     evidence: [],
@@ -116,14 +224,20 @@ function selectionResult(webRun: JsonObject, query: string, model: string): Quer
     model: model || undefined,
     workflow: { requiresVerification: false },
     recordingSelection: {
-      prompt: asString(answer.clarificationPrompt) || 'Choose the recording that best matches your request.',
+      prompt: fallbackPrompt,
       candidates,
     },
     createdAt: new Date().toISOString(),
   }
 }
 
-function safeFinalResult(envelope: JsonObject, query: string, model: string): QueryResult {
+function safeFinalResult(
+  envelope: JsonObject,
+  query: string,
+  model: string,
+  language: LanguageMode,
+): QueryResult {
+  const copy = ANSWER_COPY[language]
   const data = asObject(envelope.data)
   const answer = asObject(data.web_data_answer)
   const cameras = asArray(answer.cameras)
@@ -134,7 +248,7 @@ function safeFinalResult(envelope: JsonObject, query: string, model: string): Qu
   const evidence: EvidenceItem[] = Array.from({ length: evidenceCount }, (_, index) => ({
     id: `private-evidence-${index + 1}`,
     kind: 'sensor',
-    title: 'Approved private sensor summary',
+    title: copy.evidenceTitle,
     sourceId: '',
     capturedAt: '',
     summary: '',
@@ -143,29 +257,25 @@ function safeFinalResult(envelope: JsonObject, query: string, model: string): Qu
   const agents: Agent[] = [
     {
       id: 'tracefix',
-      name: 'TraceFix verifier',
-      type: 'Verification service',
-      role: 'Verified the workflow before smart-room access.',
-      status: 'Verified',
+      name: copy.tracefixName,
+      type: copy.tracefixType,
+      role: copy.tracefixRole,
+      status: copy.verified,
     },
     {
       id: 'cityos',
       name: safeLabel(asString(answer.producer_agent)) || 'TraceFix answer agent',
-      type: 'Generated runtime agent',
-      role: 'Produced the final answer from approved evidence packets.',
-      status: 'Complete',
+      type: copy.cityosType,
+      role: copy.cityosRole,
+      status: copy.complete,
     },
   ]
   const reportedConfidence = asNumber(answer.confidence)
 
   return {
     id: asString(envelope.run_id) || asString(data.query_id) || `tellme_${Date.now()}`,
-    answer: aggregateAnswer(query, answer),
-    keyPoints: [
-      'TraceFix verification completed before smart-room access.',
-      'Only an aggregate result is shown.',
-      'Raw captures, identities, source names, timestamps, and file paths were withheld.',
-    ],
+    answer: aggregateAnswer(query, answer, language),
+    keyPoints: copy.keyPoints,
     confidence: reportedConfidence === null ? null : Math.max(0, Math.min(1, reportedConfidence)),
     agents,
     evidence,
@@ -185,6 +295,7 @@ export async function POST(request: Request) {
   }
 
   const query = body.query?.trim() || ''
+  const language = normalizedLanguage(body.language)
   if (!query) return NextResponse.json({ error: 'The original question is required.' }, { status: 400 })
   const agentProvider = body.agentProvider || 'local'
   const agentModel = body.agentModel?.trim() || 'gemma3:4b'
@@ -233,14 +344,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'The smart-room service could not produce an answer.' }, { status: 502 })
     }
     if (asObject(webRun.payload.answer).needsClarification === true) {
-      return NextResponse.json(selectionResult(webRun.payload, query, body.model?.trim() || ''))
+      return NextResponse.json(
+        selectionResult(webRun.payload, body.model?.trim() || '', language),
+      )
     }
 
     const currentTellme = await runnerJson('/api/tellme/current')
     if (!currentTellme.response.ok || currentTellme.payload.ok !== true) {
       return NextResponse.json({ error: 'The final answer was not available.' }, { status: 502 })
     }
-    return NextResponse.json(safeFinalResult(currentTellme.payload, query, agentModel))
+    return NextResponse.json(
+      safeFinalResult(currentTellme.payload, query, agentModel || body.model?.trim() || '', language),
+    )
   } catch {
     return NextResponse.json({ error: 'The smart-room answer service is unavailable.' }, { status: 502 })
   }

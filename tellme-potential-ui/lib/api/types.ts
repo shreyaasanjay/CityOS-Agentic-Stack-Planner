@@ -6,6 +6,7 @@
  * unchanged. Swap the implementation in `lib/api/client.ts` -- nothing in the
  * components imports the mock directly.
  */
+import type { LanguageMode } from '@/lib/i18n'
 
 /**
  * Privacy note: TeLLMe may use private evidence to verify an answer, but the
@@ -118,6 +119,7 @@ export interface QueryRequest {
   cityosAgentProvider: 'openai' | 'anthropic' | 'openrouter' | 'local'
   cityosAgentModel: string
   cityosAgentApiKey?: string
+  language: LanguageMode
 }
 
 export type QueryProgressStage = 'planning' | 'verifying' | 'synthesizing' | 'answering'
