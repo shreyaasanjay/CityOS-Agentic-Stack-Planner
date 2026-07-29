@@ -55,6 +55,14 @@ const httpQueryApi: QueryApi = {
     const plan = await postJson<QueryResult>('/api/tellme/query', req, options?.signal)
     if (!plan.workflow?.requiresVerification) return plan
 
+    const recordingPreflight = await postJson<{ needsRecordingSelection: boolean; result?: QueryResult }>('/api/tellme/recordings', {
+      query: req.query,
+      mirrorApiUrl: req.mirrorApiUrl,
+      model: req.tracefixModel,
+      timestamp: req.timestamp,
+    }, options?.signal)
+    if (recordingPreflight.needsRecordingSelection && recordingPreflight.result) return recordingPreflight.result
+
     report(options, 'verifying')
     const verification = await postJson<VerificationStart>('/api/tellme/verify', {
       provider: req.tracefixProvider,
@@ -78,7 +86,12 @@ const httpQueryApi: QueryApi = {
     if (Date.now() >= deadline) throw new Error('TraceFix verification timed out.')
 
     report(options, 'synthesizing', verification.runId)
-    await postJson<{ ok: true }>('/api/tellme/synthesize', {}, options?.signal)
+    await postJson<{ ok: true }>('/api/tellme/synthesize', {
+      provider: req.tracefixProvider,
+      model: req.tracefixModel,
+      apiKey: req.tracefixApiKey?.trim()
+        || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : ''),
+    }, options?.signal)
 
     report(options, 'answering', verification.runId)
     return postJson<QueryResult>('/api/tellme/answer', {
@@ -89,13 +102,30 @@ const httpQueryApi: QueryApi = {
   },
 
   async selectRecording(req: QueryRequest, recordingId: string, options?: QuerySubmitOptions): Promise<QueryResult> {
-    report(options, 'answering')
-    return postJson<QueryResult>('/api/tellme/answer', {
-      query: req.query,
-      mirrorApiUrl: req.mirrorApiUrl,
+    report(options, 'verifying')
+    const verification = await postJson<VerificationStart>('/api/tellme/verify', {
+      provider: req.tracefixProvider,
       model: req.tracefixModel,
-      timestamp: req.timestamp,
-      recordingOverride: { recordingId },
+      apiKey: req.tracefixApiKey?.trim() || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : ''),
+    }, options?.signal)
+    const deadline = Date.now() + 30 * 60 * 1000
+    while (Date.now() < deadline) {
+      await wait(1200, options?.signal)
+      const response = await fetch(`/api/tellme/verify/${verification.runId}`, { cache: 'no-store', signal: options?.signal })
+      const status = await readJson<VerificationStatus>(response)
+      if (status.failed) throw new Error('TraceFix could not verify this request.')
+      if (status.completed) break
+    }
+    if (Date.now() >= deadline) throw new Error('TraceFix verification timed out.')
+    report(options, 'synthesizing', verification.runId)
+    await postJson<{ ok: true }>('/api/tellme/synthesize', {
+      provider: req.tracefixProvider, model: req.tracefixModel,
+      apiKey: req.tracefixApiKey?.trim() || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : ''),
+    }, options?.signal)
+    report(options, 'answering', verification.runId)
+    return postJson<QueryResult>('/api/tellme/answer', {
+      query: req.query, mirrorApiUrl: req.mirrorApiUrl, model: req.tracefixModel,
+      timestamp: req.timestamp, recordingOverride: { recordingId },
     }, options?.signal)
   },
 

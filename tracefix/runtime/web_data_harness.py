@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import mimetypes
 import re
 import shlex
@@ -23,7 +24,7 @@ from urllib.parse import quote, urlencode, urlparse, urlunparse
 from tracefix.runtime.cityos_agent_harness import CityOSAgentHarness, CityOSHarnessConfig
 from tracefix.runtime.cityos_docker_harness import CityOSDockerApp, load_manifest, manifest_apps
 
-_DEFAULT_SOURCE_URL = "http://172.16.60.239:3000/api"
+_DEFAULT_SOURCE_URL = "http://172.16.60.239:3000/api/v1"
 _DEFAULT_MAX_BYTES = 50 * 1024 * 1024
 _SMARTROOM_MODELS = ("action-hmdb", "action", "yolo26l", "yolo26n-pose")
 _ACTIVITY_LABEL_KEYS = {
@@ -477,7 +478,7 @@ def _recording_option(recording: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _recording_options(recordings: list[dict[str, Any]], limit: int = 12) -> list[dict[str, Any]]:
+def _recording_options(recordings: list[dict[str, Any]], limit: int = 100) -> list[dict[str, Any]]:
     return [_recording_option(recording) for recording in recordings[:limit]]
 
 
@@ -1941,6 +1942,7 @@ def fetch_source_payload(
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
     raw_data_json: str | None = None,
+    recording_override: Any | None = None,
 ) -> dict[str, Any]:
     mode = str(source_mode or "auto").strip().lower()
     raw_text = str(raw_data_json or "").strip()
@@ -1998,6 +2000,45 @@ def write_web_payload(payload: dict[str, Any], output_root: Path) -> dict[str, A
     return metadata
 
 
+
+def _write_agent_request(
+    *,
+    output_root: Path,
+    source_url: str,
+    source_mode: str,
+    question_context: Any | None,
+    raw_data_json: str | None,
+    recording_override: Any | None,
+) -> tuple[Path, dict[str, Any]]:
+    """The harness transports instructions only; generated agents own retrieval and answers."""
+    source_dir = output_root / "source_data"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    request = {
+        "sourceUrl": source_url,
+        "sourceMode": source_mode,
+        "question": _question_text(question_context),
+        "rawDataJson": raw_data_json or "",
+        "recordingOverride": _normalize_recording_override(recording_override),
+        "requestedAt": _utc_now().isoformat(),
+    }
+    path = source_dir / f"{_utc_now().strftime('%Y%m%d-%H%M%S-%f')}_agent_request.json"
+    path.write_text(json.dumps(request, indent=2) + "\n", encoding="utf-8")
+    return path, {"url": source_url, "sourceKind": "agent-owned", "payloadPath": str(path), "metadataPath": None, "sizeBytes": path.stat().st_size}
+
+
+def _answer_from_generated_runs(runs: list[dict[str, Any]]) -> Any:
+    for run in reversed(runs):
+        if (run.get("app") or {}).get("kind") == "monitor":
+            continue
+        for record in reversed(run.get("handlerRecords") or []):
+            try:
+                output = json.loads(Path(record).read_text(encoding="utf-8")).get("handler", {}).get("output", "")
+                value = json.loads(output.strip().splitlines()[-1])
+                return value.get("answer", value) if isinstance(value, dict) else value
+            except (OSError, ValueError, json.JSONDecodeError, IndexError):
+                continue
+    return None
+
 def _resolve_app_path(app: CityOSDockerApp, manifest_path: Path) -> Path:
     path = app.path.expanduser()
     return path.resolve() if path.is_absolute() else (manifest_path.parent / path).resolve()
@@ -2037,7 +2078,7 @@ async def _run_app_against_payload(
             output_dir=output_dir,
             ready_dir=output_root / "ready",
             startup_cmd=[],
-            handler_cmd=_handler_command(handler_command),
+            handler_cmd=_handler_command(handler_command) or [sys.executable, str(app_path / "generated_handler.py")],
             handler_timeout=float(handler_timeout_seconds),
             verbose=False,
             task_id="",
@@ -2122,6 +2163,7 @@ def run_web_data_apps(
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
     raw_data_json: str | None = None,
+    recording_override: Any | None = None,
 ) -> dict[str, Any]:
     manifest_path = manifest_path.expanduser().resolve()
     if not manifest_path.exists():
@@ -2145,22 +2187,49 @@ def run_web_data_apps(
         max_bytes=max_bytes,
         question_context=question_context,
         raw_data_json=raw_data_json,
+        recording_override=recording_override,
     )
-    payload_metadata = write_web_payload(payload, output_root)
-    payload_path = Path(str(payload_metadata["payloadPath"]))
-    runs = asyncio.run(_run_apps(
-        apps=apps,
-        manifest_path=manifest_path,
-        payload_path=payload_path,
-        output_root=output_root,
-        handler_command=handler_command,
-        handler_timeout_seconds=handler_timeout_seconds,
-    ))
-    answer = _answer_from_payload(payload)
+    source_answer = payload.get("answer")
+    needs_recording_choice = (
+        isinstance(source_answer, dict)
+        and source_answer.get("needsClarification") is True
+    )
+    # The preflight uses the server's recording index only. Once an exact
+    # recording is selected, hand an instruction envelope to the generated
+    # agent so it owns retrieval and analysis of the chosen data.
+    if needs_recording_choice:
+        payload_metadata = write_web_payload(payload, output_root)
+        payload_path = Path(str(payload_metadata["payloadPath"]))
+    else:
+        payload_path, payload_metadata = _write_agent_request(
+            output_root=output_root,
+            source_url=source_url,
+            source_mode=source_mode,
+            question_context=question_context,
+            raw_data_json=raw_data_json,
+            recording_override=recording_override,
+        )
+    # A selection is returned directly rather than allowing a generated app to
+    # overwrite it with an answer from incomplete context.
+    if needs_recording_choice:
+        runs = []
+        answer = source_answer
+    else:
+        runs = asyncio.run(_run_apps(
+            apps=apps,
+            manifest_path=manifest_path,
+            payload_path=payload_path,
+            output_root=output_root,
+            handler_command=handler_command,
+            handler_timeout_seconds=handler_timeout_seconds,
+        ))
+        answer = _answer_from_generated_runs(runs)
     answer_path = _write_answer_artifacts(output_root, runs, answer)
     finished_at = _utc_now().isoformat()
     result = {
-        "ok": bool(runs) and all(run.get("status") == "completed" for run in runs),
+        "ok": needs_recording_choice or (
+            bool(runs) and all(run.get("status") == "completed" for run in runs)
+        ),
         "sourceUrl": payload.get("url") or source_url,
         "sourceKind": payload.get("sourceKind") or "http",
         "sourceMode": source_mode,

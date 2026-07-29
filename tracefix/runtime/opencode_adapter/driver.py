@@ -79,6 +79,23 @@ def _try_json(value) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _materialize_kickoff(kickoff: str, output_dir: str | Path) -> str:
+    """Store a large kickoff locally and return a short CLI-safe instruction.
+
+    Windows includes command arguments in a single bounded command line. A
+    structured multi-agent request can exceed that limit before OpenCode starts.
+    Keeping the substantive prompt in a workspace-local file avoids that limit
+    while leaving the provider and model selection unchanged.
+    """
+    task_file = Path(output_dir) / ".tracefix" / "kickoffs" / f"{uuid.uuid4().hex}.md"
+    task_file.parent.mkdir(parents=True, exist_ok=True)
+    task_file.write_text(kickoff, encoding="utf-8")
+    return (
+        "Read the complete task instructions from "
+        f"`{task_file.resolve()}` and carry them out exactly."
+    )
+
+
 def _agent_model(config: dict, key: str) -> str | None:
     agent = (config.get("agent") or {}).get(key) or {}
     model = agent.get("model")
@@ -272,7 +289,8 @@ async def run_opencode_agent(
 
     key = agent_key(agent_id)
     env = {**os.environ, **to_env(config), **(env_overrides or {})}
-    cmd = [*_spawnable_command(opencode_cmd), "run", kickoff, "--agent", key,
+    kickoff_instruction = _materialize_kickoff(kickoff, output_dir)
+    cmd = [*_spawnable_command(opencode_cmd), "run", kickoff_instruction, "--agent", key,
            "--format", "json", "--dir", str(output_dir)]
     model = _agent_model(config, key)
     if model:

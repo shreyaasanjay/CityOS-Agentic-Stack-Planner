@@ -32,7 +32,7 @@ const state = {
     workspaceType: "custom",
     cityosRoot: "",
     appsDir: "",
-    webDataUrl: "http://172.16.60.239:3000/api",
+    webDataUrl: "http://172.16.60.239:3000/api/v1",
   },
 };
 
@@ -390,7 +390,7 @@ function bindEvents() {
 
   els.tellmeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    await processTellMeQuery();
+    await processTellMeAndTraceFix();
   });
 
   els.tellmeMode.addEventListener("change", () => {
@@ -620,8 +620,8 @@ function updateWorkflow() {
     els.statusBadge.textContent = state.tellme.current ? "Task ready" : "Idle";
     els.statusBadge.className = `status-badge ${state.tellme.current ? "completed" : "idle"}`;
   } else if (isSynth) {
-    els.runTitle.textContent = "CityOS Synthesizer";
-    els.runMeta.textContent = "Generate CityOS app artifacts from a verified TraceFix plan";
+    els.runTitle.textContent = "Agent Synthesizer";
+    els.runMeta.textContent = "Generate agent artifacts from a verified TraceFix plan";
     els.statusBadge.textContent = "Synthesis";
     els.statusBadge.className = "status-badge idle";
     // Sync workspace type button + benchmark field visibility
@@ -1009,7 +1009,7 @@ function appendTellMeMessage(kind, text) {
 function pipelineWebDataUrl() {
   const fromTellMe = els.tellmeWebDataUrl?.value?.trim() || "";
   const fromSynth = els.synthWebDataUrl?.value?.trim() || "";
-  const url = fromTellMe || fromSynth || state.synth.webDataUrl || "http://172.16.60.239:3000/api";
+  const url = fromTellMe || fromSynth || state.synth.webDataUrl || "http://172.16.60.239:3000/api/v1";
   if (els.tellmeWebDataUrl) els.tellmeWebDataUrl.value = url;
   if (els.synthWebDataUrl) els.synthWebDataUrl.value = url;
   state.synth.webDataUrl = url;
@@ -1135,7 +1135,7 @@ async function runSmartroomClarificationChoice(choice) {
   }
   const manifestPath = currentWebDataManifestPath();
   if (!manifestPath) {
-    showToast("Generate CityOS artifacts before choosing a recording");
+    showToast("Generate agent artifacts before choosing a recording");
     return;
   }
   const buttons = Array.from(els.tellmeClarification?.querySelectorAll("[data-recording-choice]") || []);
@@ -1237,9 +1237,9 @@ async function processTellMeFullPipeline() {
     appendTellMeMessage("info", "TraceFix verification is running from the TeLLMe task spec...");
     const tracefixRun = await startTraceFixFromTellMe({ waitForCompletion: true, stayOnTellMe: true });
     const workspace = tracefixRun?.artifacts?.workspace || state.artifacts?.workspace || currentWorkspacePath();
-    if (!workspace) throw new Error("TraceFix completed but did not return a workspace for CityOS synthesis.");
+    if (!workspace) throw new Error("TraceFix completed but did not return a workspace for agent synthesis.");
 
-    appendTellMeMessage("info", "CityOS synthesis is generating app bundles for the verified workspace...");
+    appendTellMeMessage("info", "agent synthesis is generating app bundles for the verified workspace...");
     state.synth.workspaceType = "custom";
     if (els.synthWorkspacePath) els.synthWorkspacePath.value = workspace;
     pipelineWebDataUrl();
@@ -1253,6 +1253,8 @@ async function processTellMeFullPipeline() {
       appsDir: els.synthOutputDir?.value || state.synth.appsDir || "",
       packageName: els.synthPackageName?.value || "",
       overwrite: els.synthOverwrite?.checked || false,
+      ...traceFixProviderPayload(),
+      codegenModel: "z-ai/glm-5.2",
     });
     const cityosResult = cityosResponse.data || cityosResponse;
     state.synth.result = cityosResult;
@@ -1269,6 +1271,9 @@ async function processTellMeFullPipeline() {
       rawDataJson,
       timeoutSeconds: 30,
       question: state.tellme.current?.query || els.tellmeQuery.value.trim(),
+      // Preserve an exact recording chosen during TeLLMe clarification for
+      // any subsequent web-data run.
+      recordingOverride: state.tellme.current?.web_data_recording_override || null,
     });
     state.synth.webDataResult = webResult;
     await refreshTellMeCurrentFromServer();
@@ -1280,7 +1285,7 @@ async function processTellMeFullPipeline() {
     }
     appendTellMeMessage(webResult.ok ? "success" : "warning", webResult.ok
       ? "Full pipeline complete. The Answer Summary now contains the requested smartroom result."
-      : "Full pipeline finished, but one or more generated apps reported errors. Check the CityOS Synthesizer output.");
+      : "Full pipeline finished, but one or more generated apps reported errors. Check the Agent Synthesizer output.");
     showToast(webResult.ok ? "Full pipeline complete" : "Pipeline finished with app errors");
   } catch (error) {
     appendTellMeMessage("error", error.message);
@@ -1711,6 +1716,14 @@ async function loadSynthWorkspace(workspacePath) {
     const data = await getJson(`/api/synth/workspace?workspace=${encodeURIComponent(workspacePath)}`);
     state.synth.selected = data.workspace;
     renderSynthSummary(data.workspace);
+    if (data.synthesisResult) {
+      state.synth.result = data.synthesisResult;
+      renderSynthArtifacts(data.synthesisResult);
+      els.synthOutputStatus.textContent = "Restored saved generated agents";
+    } else {
+      state.synth.result = null;
+      renderSynthArtifacts(null);
+    }
   } catch (error) {
     state.synth.selected = null;
     els.synthStatus.textContent = error.message;
@@ -1734,7 +1747,7 @@ function renderSynthSummary(summary) {
   }
   const isCustom = summary.workspaceType === "custom";
   els.synthStatus.textContent = summary.ready
-    ? "Ready for CityOS synthesis"
+    ? "Ready for agent synthesis"
     : `Not ready: ${({ verified_no_summary: "Verified (no TLC summary)", unknown: "pending verification", verification_incomplete: "incomplete" })[summary.verificationStatus] || summary.verificationStatus || "missing artifacts"}`;
 
   if (els.synthWorkspaceTypeDisplay) {
@@ -1789,6 +1802,8 @@ async function synthesizeCityOSArtifacts() {
       overwrite: els.synthOverwrite.checked,
       cityosRoot: els.synthCityOSRoot.value,
       appsDir: els.synthOutputDir.value,
+      ...traceFixProviderPayload(),
+      codegenModel: "z-ai/glm-5.2",
     });
     state.synth.result = result;
     state.synth.selected = result.summary;
@@ -1796,7 +1811,7 @@ async function synthesizeCityOSArtifacts() {
     els.synthOutputStatus.textContent = "Generated";
     renderSynthArtifacts(result);
     els.synthOutput.textContent = renderSynthResult(result);
-    showToast("CityOS artifacts generated");
+    showToast("agent artifacts generated");
   } catch (error) {
     els.synthOutputStatus.textContent = "Failed";
     els.synthOutput.textContent += `\n${error.message}\n`;
@@ -1809,7 +1824,7 @@ async function synthesizeCityOSArtifacts() {
 async function buildCityOSArtifacts() {
   const manifestPath = state.synth.result?.manifestPath || els.synthManifestPath.textContent.trim();
   if (!manifestPath || manifestPath === "No synthesis yet") {
-    showToast("Generate CityOS artifacts first");
+    showToast("Generate agent artifacts first");
     return;
   }
   els.synthBuildCityOS.disabled = true;
@@ -1837,10 +1852,10 @@ async function buildCityOSArtifacts() {
 async function runWebDataApps() {
   const manifestPath = state.synth.result?.manifestPath || els.synthManifestPath.textContent.trim();
   if (!manifestPath || manifestPath === "No synthesis yet") {
-    showToast("Generate CityOS artifacts first");
+    showToast("Generate agent artifacts first");
     return;
   }
-  const sourceUrl = els.synthWebDataUrl?.value?.trim() || state.synth.webDataUrl || "http://172.16.60.239:3000/api";
+  const sourceUrl = els.synthWebDataUrl?.value?.trim() || state.synth.webDataUrl || "http://172.16.60.239:3000/api/v1";
   const rawDataJson = pipelineRawDataJson();
   els.synthRunWebData.disabled = true;
   els.synthOutputStatus.textContent = "Running web data apps...";
@@ -1854,6 +1869,9 @@ async function runWebDataApps() {
       rawDataJson,
       timeoutSeconds: 30,
       question: state.tellme.current?.query || els.tellmeQuery.value.trim(),
+      // Preserve an exact recording chosen during TeLLMe clarification for
+      // any subsequent web-data run.
+      recordingOverride: state.tellme.current?.web_data_recording_override || null,
     });
     els.synthOutputStatus.textContent = result.ok ? "Web data run complete" : "Web data run failed";
     els.synthOutput.textContent = `${els.synthOutput.textContent}\n${renderWebDataRunResult(result)}`;
@@ -1936,7 +1954,7 @@ function renderSynthArtifacts(result) {
     : "No apps generated";
 
   if (!apps.length) {
-    els.synthAppsList.innerHTML = `<div class="synth-empty">Generate CityOS artifacts to see app containers, prompts, and build commands here.</div>`;
+    els.synthAppsList.innerHTML = `<div class="synth-empty">Generate agent artifacts to see app containers, prompts, and build commands here.</div>`;
     els.synthBuildCommands.textContent = "No build commands yet.";
     updateWorkflowReadiness();
     return;
@@ -2167,7 +2185,7 @@ function connectEvents(runId, completion = null) {
       els.startRun.disabled = false;
       els.stopRun.disabled = true;
       const latestRun = await refreshRun();
-      // If TraceFix completed with a workspace, prime the CityOS Synthesizer to
+      // If TraceFix completed with a workspace, prime the Agent Synthesizer to
       // show it as a custom workspace so the user can synthesize without switching tabs.
       if (event.status === "completed" && state.artifacts?.workspace) {
         state.synth.workspaceType = "custom";

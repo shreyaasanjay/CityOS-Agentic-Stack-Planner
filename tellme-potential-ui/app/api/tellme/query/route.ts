@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 import { asObject, asString, runnerJson } from '@/lib/api/server/runner'
 import type { Agent, QueryRequest, QueryResult } from '@/lib/api/types'
@@ -8,6 +8,27 @@ export const runtime = 'nodejs'
 
 type JsonObject = Record<string, unknown>
 
+const EXPLICIT_DATE = /\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:,?\s+\d{2,4})?)\b/i
+const RELATIVE_DATE = /\b(?:today|yesterday|tomorrow|last\s+(?:night|week|month)|this\s+(?:morning|afternoon|evening|week)|on\s+\w+day)\b/i
+
+function needsRecordingDate(query: string, timestamp?: string) {
+  return !timestamp?.trim() && !EXPLICIT_DATE.test(query) && !RELATIVE_DATE.test(query)
+}
+
+function dateFollowUp(query: string, model: string): QueryResult {
+  return {
+    id: `tellme_date_${Date.now()}`,
+    answer: 'Which date should I check? I need a date before I can choose the exact smart-room recording for this request.',
+    keyPoints: ['No recording was opened.', 'Reply with a date, for example: July 21, 2026.'],
+    confidence: null,
+    agents: [{ id: 'tellme', name: 'TeLLMe planner', type: 'Planning service', role: 'Requested the missing recording date before retrieval.', status: 'Waiting for date' }],
+    evidence: [],
+    guidelines: [],
+    model,
+    workflow: { requiresVerification: false },
+    createdAt: new Date().toISOString(),
+  }
+}
 function asConfidence(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(0, Math.min(1, value))
@@ -76,7 +97,7 @@ function safeResult(
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   let body: QueryRequest
   try {
     body = await request.json() as QueryRequest
@@ -88,6 +109,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Enter a question before submitting.' }, { status: 400 })
   }
 
+  const pendingQuery = request.cookies.get('tellme_pending_recording_question')?.value || ''
+  const dateReply = EXPLICIT_DATE.test(body.query) || RELATIVE_DATE.test(body.query) || Boolean(body.timestamp?.trim())
+  const effectiveQuery = pendingQuery && dateReply ? `${pendingQuery} on ${body.query}` : body.query
+
+  if (needsRecordingDate(effectiveQuery, body.timestamp)) {
+    const response = NextResponse.json(dateFollowUp(effectiveQuery, body.model?.trim() || 'TeLLMe'), { status: 200 })
+    response.cookies.set('tellme_pending_recording_question', effectiveQuery, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 900 })
+    return response
+  }
   const mode: QueryRequest['mode'] = body.mode === 'deterministic' ? 'deterministic' : 'llm'
   const model = body.model?.trim() || 'gpt-4.1-mini'
 
@@ -96,7 +126,7 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        query: body.query.trim(),
+        query: effectiveQuery.trim(),
         space_id: body.spaceId?.trim() || 'smart_room_1',
         timestamp: body.timestamp?.trim() || null,
         mode,
@@ -113,7 +143,9 @@ export async function POST(request: Request) {
         { status: upstream.status >= 400 ? upstream.status : 502 },
       )
     }
-    return NextResponse.json(safeResult(envelope, mode, model), { status: 201 })
+    const response = NextResponse.json(safeResult(envelope, mode, model), { status: 201 })
+    response.cookies.delete('tellme_pending_recording_question')
+    return response
   } catch {
     return NextResponse.json(
       { error: 'The local TeLLMe service is unavailable.' },
