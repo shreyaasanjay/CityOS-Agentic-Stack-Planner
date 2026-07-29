@@ -86,6 +86,9 @@ export function ResultView({
   onSelectRecording?: (candidate: RecordingCandidate) => void
 }) {
   const [tab, setTab] = useState<ResultTab>('answer')
+  const [selectedRecordingId, setSelectedRecordingId] = useState('')
+  const recordingCandidates = result.recordingSelection?.candidates || []
+  const selectedRecording = recordingCandidates.find((candidate) => candidate.recordingId === selectedRecordingId) || recordingCandidates[0]
   const pct = result.confidence === null ? null : Math.round(result.confidence * 100)
   const answer = visibleAnswer ?? result.answer
   const t = (key: TranslationKey, values?: Record<string, string | number>) =>
@@ -177,24 +180,22 @@ export function ResultView({
             {result.recordingSelection && !isStreaming && (
               <div className="flex flex-col gap-3 border-t border-border pt-4">
                 <p className="text-sm text-muted-foreground">{result.recordingSelection.prompt}</p>
-                <div className="grid gap-2">
-                  {result.recordingSelection.candidates.map((candidate, index) => (
-                    <button
-                      key={candidate.recordingId}
-                      type="button"
-                      onClick={() => onSelectRecording?.(candidate)}
-                      disabled={!onSelectRecording}
-                      className="flex items-center rounded-lg border border-border bg-background px-3 py-2.5 text-left text-sm transition-colors hover:border-primary/50 hover:bg-secondary disabled:cursor-not-allowed"
-                    >
-                      <span className="font-medium">
-                        {t('result.take', { count: index + 1 })}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                {recordingCandidates.length ? (
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <select value={selectedRecording?.recordingId || ''} onChange={(event) => setSelectedRecordingId(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2.5 text-sm" aria-label="Choose a recording">
+                      {recordingCandidates.map((candidate, index) => (
+                        <option key={candidate.recordingId} value={candidate.recordingId}>
+                          {`Recording ${index + 1}: ${[candidate.dateLabel, candidate.timeLabel, candidate.detail, candidate.label].filter(Boolean).join(' - ')}`}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => selectedRecording && onSelectRecording?.(selectedRecording)} disabled={!selectedRecording || !onSelectRecording} className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">Use recording</button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-destructive">The retrieval agent did not return selectable recording IDs. Regenerate the agents with the latest template.</p>
+                )}
               </div>
             )}
-
             {result.keyPoints.length > 0 && !isStreaming && (
               <ul className="flex flex-col gap-2 border-t border-border pt-4">
                 {result.keyPoints.map((point) => (

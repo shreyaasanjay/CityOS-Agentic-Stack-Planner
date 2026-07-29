@@ -12,8 +12,12 @@ weaken the verified protocol boundary.
 from __future__ import annotations
 
 import json
+import ast
+import hashlib
 import re
 import shutil
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +28,167 @@ from tracefix.textio import safe_read_json, safe_read_text
 
 
 SYNTHESIS_VERSION = "0.1"
+HANDLER_TEMPLATE_MARKER = "# tracefix-handler-template: smartroom-v7"
 GENERATED_MARKER = ".tracefix-synthesized"
+
+def _handler_scaffold(kind: str) -> str:
+    """Stable, versioned starting point reused for every generated CityOS handler."""
+    result_fields = 'status, checks, violations' if 'monitor' in kind else 'answer, evidence, confidence'
+    return f'''import json
+import os
+from urllib.request import urlopen
+
+
+def main():
+    request = json.load(open(os.environ["TRACEFIX_FRAME_PATH"], encoding="utf-8"))
+    # LLM: implement the task-specific retrieval and reasoning here.
+    result = {{"agent": "", "kind": "{kind}", "{result_fields.split(', ')[0]}": None}}
+    print(json.dumps(result))
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+
+def _stable_cache_value(value: Any) -> Any:
+    """Remove run-specific fields so equivalent verified tasks share generated code."""
+    volatile = {"task_id", "query_id", "run_id", "workspace", "workspace_path", "generated_at", "created_at", "updated_at", "plan_path"}
+    if isinstance(value, dict):
+        return {str(key): _stable_cache_value(item) for key, item in value.items() if str(key).lower() not in volatile}
+    if isinstance(value, list):
+        return [_stable_cache_value(item) for item in value]
+    if isinstance(value, str):
+        normalized = re.sub(r"tellme_structured_smart_room_application_\d+(?:_\d+)?", "<workspace>", value, flags=re.IGNORECASE)
+        return re.sub(r"(?:tellme|task)_[a-z0-9]+", "<run>", normalized, flags=re.IGNORECASE)
+    return value
+
+
+def _persistent_handler_cache_dir() -> Path:
+    # This is repository-local generated code, never a credential store.
+    return Path(__file__).resolve().parents[2] / ".tracefix_agent_cache"
+
+
+def _cached_handler_source(*, workspace: Path, kind: str, identity: str, plan: dict[str, Any], instructions: str, model: str, api_key: str) -> str:
+    key_input = json.dumps({
+        "template": "cityos-handler-v7-window-timestamps",
+        "kind": kind,
+        "identity": identity,
+        "plan": _stable_cache_value(plan),
+        "instructions": _stable_cache_value(instructions),
+        "model": model,
+    }, sort_keys=True, default=str)
+    digest = hashlib.sha256(key_input.encode("utf-8")).hexdigest()
+    cache_paths = [
+        _persistent_handler_cache_dir() / f"{digest}.py",
+        workspace / "output" / "cityos_handler_cache" / f"{digest}.py",
+    ]
+    for cache_path in cache_paths:
+        if cache_path.is_file():
+            try:
+                source = _validate_generated_handler(safe_read_text(cache_path))
+                # Backfill the workspace-local cache for transparent portability.
+                _write_text(cache_paths[1], source)
+                return source
+            except (SyntaxError, ValueError):
+                cache_path.unlink()
+    source = _generate_handler_source(kind=kind, identity=identity, plan=plan, instructions=instructions, model=model, api_key=api_key)
+    for cache_path in cache_paths:
+        _write_text(cache_path, source)
+    return source
+def _generated_handler_prompt(*, kind: str, identity: str, plan: dict[str, Any], instructions: str) -> str:
+    return f"""Write complete Python source for a CityOS {kind} handler named {identity!r}. It must be a distinct implementation based on the verified plan and instructions. It runs as `python generated_handler.py` with TRACEFIX_FRAME_PATH pointing to an agent-request JSON file. That request supplies sourceUrl, sourceMode, question, rawDataJson, and recordingOverride. The smart-room contract is mandatory: recordingOverride is an object, normally {{"recordingId":"day_15_2026-07-21/rec_20260721_164500","day":"day_15_2026-07-21","rec":"rec_20260721_164500"}}; never compare that whole object to a string. Prefer its day+rec values, and treat recordingId as the same two values joined with '/'. The /api/v1/recordings response is not guaranteed to be a flat list: walk nested dicts/lists and preserve enclosing day keys. A usable recording record has a day and rec (or nested day/rec fields), and may contain cameras, metadata, frames, results, occupancy, count, people, or analysis. Build candidates only from real day+rec pairs and emit recordingId as day + '/' + rec; never emit blank IDs. When an override is present, fetch and analyze that exact pair rather than asking again. Inspect the actual JSON response before choosing field paths; do not assume a top-level recordings/data list. Use only standard-library modules. Real API schema observed from the configured mirror: GET sourceUrl + "/recordings" returns one JSON object with a top-level `recordings` array (not a bare list). Each array item is one session with string `day` and `rec`, plus `cameras`, which is a dictionary keyed by camera ID. Each camera contains `models` (model name to status) and `urls.inference`, a URL template ending `/inference/{{model}}`. Choose a camera/model whose status is `done`, replace `{{model}}` with the model name, and GET that inference URL. Inference JSON contains the selected day, rec, camera, model, and model-specific structured results. For action-ava, `detections.tracks` and the number of `persons.persons` keys are cumulative track-ID totals across the whole recording; they are not occupancy and must never be phrased as people simultaneously in the room. To answer occupancy, use `persons.persons[trackId].windows`. Each window is an object shaped like `{{ "t": 33.133, "kept": true, "action": "walk", ... }}`; it has a point timestamp `t`, not `start`/`end` fields. For each numeric `t`, count distinct anonymous track IDs whose window has `kept == true` at that exact timestamp, then take the maximum concurrent count. Do not return zero when valid windows with numeric `t` exist; treat `kept` missing as usable rather than discarding the window. State the result as “up to N people were observed at once during the recording,” not “N people were in the room.” Do not sum people across cameras: use one selected camera only. Include the selected camera, model, and that the result is peak concurrent anonymous tracks in the caveat. Handle non-JSON, HTTP errors, and empty model outputs explicitly in the answer caveats rather than silently replacing them with an empty object. The handler itself must fetch the supplied web-server source when sourceMode is not raw-json (use urllib.request), interpret/process the returned data, and produce the answer. First resolve one exact recording: query the sourceUrl recordings collection (normally sourceUrl + "/recordings" when sourceUrl ends in "/api/v1"), match the requested calendar date and any supplied recordingOverride. If no exact recording can be chosen, return {{"agent": ..., "kind": ..., "answer": {{"needsClarification": true, "clarificationPrompt": "...", "clarificationCandidates": [{{"recordingId": "day/rec", "label": "...", "dateLabel": "...", "timeLabel": "..."}}]}}}} rather than guessing. Never return an ambiguous-recordings message without at least one candidate containing recordingId, label, dateLabel, and timeLabel. Do not rely on any TraceFix smart-room retrieval or answer helper. Read the request file, print one JSON object, exit 0. Do not run subprocesses or use eval/exec. Include main() and an __main__ entry point. An agent returns agent, kind, answer, evidence, confidence. A monitor independently inspects the request and prior result context if supplied, returning agent, kind, status, checks, violations. Start from this required reusable scaffold; preserve its environment/JSON contract and replace the TODO with task-specific code:\n```python\n{_handler_scaffold(kind)}\n```\nReturn the completed Python source only, no Markdown.
+
+Verified plan:\n{json.dumps(plan, indent=2)[:18000]}
+
+Assigned instructions:\n{instructions[:18000]}"""
+
+
+def _validate_generated_handler(source: str) -> str:
+    source = source.strip()
+    if source.startswith("```"):
+        source = re.sub(r"^```(?:python)?\s*|\s*```$", "", source, flags=re.IGNORECASE).strip()
+    tree = ast.parse(source)
+    banned = {"subprocess", "socket", "requests", "pathlib", "shutil"}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)) and any(alias.name.split(".")[0] in banned for alias in node.names):
+            raise ValueError("generated handler imports a disallowed module")
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"eval", "exec", "compile"}:
+            raise ValueError("generated handler uses a disallowed dynamic execution primitive")
+    if not any(isinstance(node, ast.FunctionDef) and node.name == "main" for node in tree.body):
+        raise ValueError("generated handler did not define main()")
+    if not source.startswith(HANDLER_TEMPLATE_MARKER):
+        source = HANDLER_TEMPLATE_MARKER + "\n" + source
+    return source + "\n"
+
+
+def _completion_text(payload: Any) -> str:
+    """Normalize OpenRouter/OpenAI-compatible message content shapes."""
+    choices = payload.get("choices") if isinstance(payload, dict) else None
+    message = choices[0].get("message") if isinstance(choices, list) and choices and isinstance(choices[0], dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts).strip()
+    return ""
+
+def _generate_handler_source(*, kind: str, identity: str, plan: dict[str, Any], instructions: str, model: str, api_key: str, repair_attempt: int = 0) -> str:
+    if not api_key:
+        raise ValueError("CityOS code generation needs the OpenRouter API key from the TraceFix settings.")
+    body = json.dumps({"model": model or "z-ai/glm-5.2", "messages": [{"role": "user", "content": _generated_handler_prompt(kind=kind, identity=identity, plan=plan, instructions=instructions)}], "temperature": 0.1, "max_tokens": 24000, "reasoning": {"effort": "medium"}}).encode("utf-8")
+    request = urllib.request.Request("https://openrouter.ai/api/v1/chat/completions", data=body, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "HTTP-Referer": "https://tracefix.local", "X-Title": "TraceFix CityOS synthesis"}, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"OpenRouter could not generate CityOS handler code ({exc.code}): {exc.read().decode('utf-8', 'replace')[:500]}") from exc
+    content = _completion_text(payload)
+    if not content:
+        choice = (payload.get("choices") or [{}])[0] if isinstance(payload, dict) else {}
+        finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
+        message = choice.get("message") if isinstance(choice, dict) else {}
+        if finish_reason == "length" and repair_attempt < 2:
+            return _generate_handler_source(
+                kind=kind,
+                identity=identity,
+                plan=plan,
+                instructions=(instructions + "\n\nReturn concise, complete Python in under 350 lines. Do not explain your reasoning; output code only."),
+                model=model,
+                api_key=api_key,
+                repair_attempt=repair_attempt + 1,
+            )
+        raise RuntimeError(
+            "OpenRouter returned no CityOS handler source code "
+            f"(finish_reason={finish_reason!r}, message_keys={sorted(message) if isinstance(message, dict) else []})."
+        )
+    try:
+        return _validate_generated_handler(content)
+    except (SyntaxError, ValueError) as exc:
+        if repair_attempt >= 2:
+            raise RuntimeError(f"OpenRouter generated invalid CityOS handler code after {repair_attempt + 1} attempts: {exc}") from exc
+        repair_instructions = (
+            f"{instructions}\n\nThe previous generated Python source was invalid: {exc}. "
+            "Return a complete corrected Python file only. Ensure every string and triple-quoted string is closed. "
+            f"Previous source:\n```python\n{content[:24000]}\n```"
+        )
+        return _generate_handler_source(
+            kind=kind,
+            identity=identity,
+            plan=plan,
+            instructions=repair_instructions,
+            model=model,
+            api_key=api_key,
+            repair_attempt=repair_attempt + 1,
+        )
 
 
 @dataclass(frozen=True)
@@ -221,7 +385,7 @@ ExtraEnv = [
     "TRACEFIX_OUTPUT_DIR=/app/{app_name}/tracefix_output",
     "TRACEFIX_READY_DIR=/run/cityos",
     "TRACEFIX_STARTUP_CMD=",
-    "TRACEFIX_HANDLER_CMD=python3 -m tracefix.runtime.web_data_agent",
+    "TRACEFIX_HANDLER_CMD=python3 /app/{app_name}/generated_handler.py",
     "TRACEFIX_HANDLER_TIMEOUT=60",
     "TRACEFIX_VERBOSE=0",
 ]
@@ -249,7 +413,7 @@ ExtraEnv = [
     "TRACEFIX_OUTPUT_DIR=/app/{app_name}/tracefix_output",
     "TRACEFIX_READY_DIR=/run/cityos",
     "TRACEFIX_STARTUP_CMD=",
-    "TRACEFIX_HANDLER_CMD=python3 -m tracefix.runtime.web_data_agent",
+    "TRACEFIX_HANDLER_CMD=python3 /app/{app_name}/generated_handler.py",
     "TRACEFIX_HANDLER_TIMEOUT=60",
     "TRACEFIX_VERBOSE=0",
 ]
@@ -300,6 +464,8 @@ def _write_agent_app(
     plan: dict[str, Any],
     agent: dict[str, Any],
     overwrite: bool,
+    codegen_model: str,
+    codegen_api_key: str,
 ) -> CityOSAppPackage:
     app_dir = apps_dir / app_name
     _prepare_app_dir(app_dir, overwrite=overwrite)
@@ -317,6 +483,8 @@ def _write_agent_app(
         prompt_source = workspace / prompt_path
         if prompt_source.exists():
             _write_text(app_dir / "tracefix_bundle" / "prompt.md", safe_read_text(prompt_source))
+    instructions = safe_read_text(app_dir / "tracefix_bundle" / "prompt.md") if (app_dir / "tracefix_bundle" / "prompt.md").exists() else json.dumps(agent, indent=2)
+    _write_text(app_dir / "generated_handler.py", _cached_handler_source(workspace=workspace, kind="agent", identity=agent_name, plan=plan, instructions=instructions, model=codegen_model, api_key=codegen_api_key))
     return CityOSAppPackage(name=app_name, path=app_dir, kind="agent", agent=agent_name)
 
 
@@ -327,6 +495,8 @@ def _write_monitor_app(
     workspace: Path,
     plan: dict[str, Any],
     overwrite: bool,
+    codegen_model: str,
+    codegen_api_key: str,
 ) -> CityOSAppPackage:
     app_dir = apps_dir / app_name
     _prepare_app_dir(app_dir, overwrite=overwrite)
@@ -338,6 +508,7 @@ def _write_monitor_app(
     _copy_tracefix_runtime(app_dir)
     _copy_bundle_artifacts(workspace, app_dir, plan)
     _write_json(app_dir / "tracefix_bundle" / "monitor.json", plan.get("runtime_monitor", {}))
+    _write_text(app_dir / "generated_handler.py", _cached_handler_source(workspace=workspace, kind="runtime monitor", identity="monitor", plan=plan, instructions=json.dumps(plan.get("runtime_monitor", {}), indent=2), model=codegen_model, api_key=codegen_api_key))
     return CityOSAppPackage(name=app_name, path=app_dir, kind="monitor")
 
 
@@ -380,6 +551,8 @@ def synthesize_cityos_apps(
     apps_dir: Path,
     package_name: str | None = None,
     overwrite: bool = False,
+    codegen_model: str = "z-ai/glm-5.2",
+    codegen_api_key: str = "",
 ) -> CityOSSynthesisResult:
     workspace = Path(workspace).expanduser().resolve()
     apps_dir = Path(apps_dir).expanduser().resolve()
@@ -399,6 +572,8 @@ def synthesize_cityos_apps(
             plan=plan,
             agent=agent,
             overwrite=overwrite,
+            codegen_model=codegen_model,
+            codegen_api_key=codegen_api_key,
         ))
 
     monitor_name = _slug(f"{package}-monitor")
@@ -408,6 +583,8 @@ def synthesize_cityos_apps(
         workspace=workspace,
         plan=plan,
         overwrite=overwrite,
+        codegen_model=codegen_model,
+        codegen_api_key=codegen_api_key,
     ))
 
     manifest = {

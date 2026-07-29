@@ -59,7 +59,7 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   appModel: 'gpt-4.1-mini',
   openaiApiKey: '',
   spaceId: 'smart_room_1',
-  mirrorApiUrl: 'http://172.16.60.239:3000/api',
+  mirrorApiUrl: 'http://172.16.60.239:3000/api/v1',
   timestamp: '',
   tracefixProvider: 'openrouter',
   tracefixModel: 'z-ai/glm-5.2',
@@ -378,9 +378,7 @@ export default function Page() {
       status: 'loading',
       visibleAnswer: '',
       errorMessage: undefined,
-      startedAt: Date.now(),
-      responseMs: undefined,
-      progressStage: 'answering',
+      progressStage: 'verifying',
     }))
     try {
       const result = await queryApi.selectRecording({
@@ -411,6 +409,7 @@ export default function Page() {
         setIsLoading(false)
       }
     } catch (error) {
+      if (controller.signal.aborted) return
       updateTurn(turn.id, (current) => ({
         ...current,
         status: 'error',
