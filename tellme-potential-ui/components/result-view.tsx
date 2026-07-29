@@ -25,16 +25,18 @@ import {
 import type { Agent, QueryResult, RecordingCandidate } from '@/lib/api/types'
 import { EvidenceCard } from '@/components/evidence-card'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
+import { formatResponseTime } from '@/components/response-timer'
+import { translate, type LanguageMode, type TranslationKey } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type ResultTab = 'answer' | 'agents' | 'evidence'
 type Feedback = 'helpful' | 'incorrect'
 
-function confidenceLabel(value: number | null) {
-  if (value === null) return 'Confidence not reported'
-  if (value >= 0.85) return 'High confidence'
-  if (value >= 0.6) return 'Moderate confidence'
-  return 'Low confidence'
+function confidenceLabel(value: number | null, language: LanguageMode) {
+  if (value === null) return translate(language, 'result.confidenceNotReported')
+  if (value >= 0.85) return translate(language, 'result.highConfidence')
+  if (value >= 0.6) return translate(language, 'result.moderateConfidence')
+  return translate(language, 'result.lowConfidence')
 }
 
 function agentIcon(type: string) {
@@ -54,6 +56,7 @@ export function ResultView({
   feedback,
   responseMs,
   tracefixRunId,
+  language,
   onViewGuidelines,
   onCopy,
   onShare,
@@ -72,6 +75,7 @@ export function ResultView({
   feedback?: Feedback
   responseMs?: number
   tracefixRunId?: string
+  language: LanguageMode
   onViewGuidelines: () => void
   onCopy?: () => void
   onShare?: () => void
@@ -87,16 +91,18 @@ export function ResultView({
   const selectedRecording = recordingCandidates.find((candidate) => candidate.recordingId === selectedRecordingId) || recordingCandidates[0]
   const pct = result.confidence === null ? null : Math.round(result.confidence * 100)
   const answer = visibleAnswer ?? result.answer
+  const t = (key: TranslationKey, values?: Record<string, string | number>) =>
+    translate(language, key, values)
 
   const tabs: { id: ResultTab; label: string; icon: typeof Sparkles; count?: number }[] = [
-    { id: 'answer', label: 'Answer', icon: MessageSquareText },
-    { id: 'agents', label: 'Sensors used', icon: Cpu, count: result.agents.length },
-    { id: 'evidence', label: 'Privacy receipt', icon: FileSearch, count: result.evidence.length },
+    { id: 'answer', label: t('result.answer'), icon: MessageSquareText },
+    { id: 'agents', label: t('result.sensorsUsed'), icon: Cpu, count: result.agents.length },
+    { id: 'evidence', label: t('result.privacyReceipt'), icon: FileSearch, count: result.evidence.length },
   ]
 
   return (
     <section
-      aria-label="Answer"
+      aria-label={t('result.answer')}
       className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
     >
       <div className="flex items-center gap-1 border-b border-border bg-secondary/50 px-2 py-2 sm:px-3">
@@ -139,15 +145,15 @@ export function ResultView({
                 <span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
                   <Sparkles className="size-3.5" aria-hidden="true" />
                 </span>
-                Grounded answer
+                {t('result.groundedAnswer')}
                 {isStreaming && (
                   <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    Streaming
+                    {t('result.streaming')}
                   </span>
                 )}
                 {isStopped && (
                   <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    Stopped
+                    {t('result.stopped')}
                   </span>
                 )}
               </div>
@@ -160,11 +166,11 @@ export function ResultView({
                 )}
               >
                 <ShieldCheck className="size-3.5" aria-hidden="true" />
-                {confidenceLabel(result.confidence)}{pct === null ? '' : ` - ${pct}%`}
+                {confidenceLabel(result.confidence, language)}{pct === null ? '' : ` - ${pct}%`}
               </span>
             </div>
 
-            <TrustIndicators result={result} responseMs={responseMs} />
+            <TrustIndicators result={result} responseMs={responseMs} language={language} />
 
             <MarkdownRenderer
               content={answer}
@@ -213,45 +219,45 @@ export function ResultView({
                     onClick={() => onFeedback('helpful')}
                   >
                     <ThumbsUp className="size-3.5" aria-hidden="true" />
-                    Helpful
+                    {t('result.helpful')}
                   </ResponseButton>
                   <ResponseButton
                     active={feedback === 'incorrect'}
                     onClick={() => onFeedback('incorrect')}
                   >
                     <ThumbsDown className="size-3.5" aria-hidden="true" />
-                    Incorrect
+                    {t('result.incorrect')}
                   </ResponseButton>
                 </>
               )}
               {onCopy && (
                 <ResponseButton onClick={onCopy}>
                   <Copy className="size-3.5" aria-hidden="true" />
-                  {copied ? 'Copied' : 'Copy'}
+                  {copied ? t('result.copied') : t('result.copy')}
                 </ResponseButton>
               )}
               {onShare && (
                 <ResponseButton onClick={onShare}>
                   <Share2 className="size-3.5" aria-hidden="true" />
-                  {shared ? 'Shared' : 'Share'}
+                  {shared ? t('result.shared') : t('result.share')}
                 </ResponseButton>
               )}
               {onExport && (
                 <ResponseButton onClick={onExport}>
                   <Download className="size-3.5" aria-hidden="true" />
-                  Export
+                  {t('result.export')}
                 </ResponseButton>
               )}
               {onRegenerate && (
                 <ResponseButton onClick={onRegenerate}>
                   <RotateCcw className="size-3.5" aria-hidden="true" />
-                  Regenerate
+                  {t('main.regenerate')}
                 </ResponseButton>
               )}
               {onEditPrompt && (
                 <ResponseButton onClick={onEditPrompt}>
                   <Pencil className="size-3.5" aria-hidden="true" />
-                  Edit prompt
+                  {t('main.editPrompt')}
                 </ResponseButton>
               )}
               {tracefixRunId && !isStreaming && !isStopped && (
@@ -259,15 +265,15 @@ export function ResultView({
                   href={`/api/tellme/backend?run=${encodeURIComponent(tracefixRunId)}`}
                   target="_blank"
                   rel="noreferrer"
-                  title="Open the technical TraceFix view in a new tab"
+                  title={t('result.tracefixTitle')}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
                 >
-                  TraceFix run
+                  {t('result.tracefixRun')}
                   <ArrowUpRight className="size-3.5" aria-hidden="true" />
                 </a>
               )}
               <ResponseButton onClick={onViewGuidelines}>
-                {result.guidelines.length} guidelines
+                {t('result.guidelinesCount', { count: result.guidelines.length })}
                 <ArrowUpRight className="size-3.5" aria-hidden="true" />
               </ResponseButton>
             </div>
@@ -277,9 +283,7 @@ export function ResultView({
         {tab === 'agents' && (
           <div className="flex flex-col gap-4">
             <p className="text-[13px] leading-relaxed text-muted-foreground">
-              These are the only sensors and systems TeLLMe used for this
-              answer. Each was limited to what was needed; nothing more was
-              exposed in the user-facing result.
+              {t('result.sensorsDescription')}
             </p>
             <ul className="flex flex-col gap-3">
               {result.agents.map((agent) => (
@@ -288,7 +292,7 @@ export function ResultView({
             </ul>
             <div className="flex items-center gap-2 rounded-xl border border-border bg-secondary/50 px-3 py-2 text-[11px] text-muted-foreground">
               <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
-              Privacy first -- no faces, voices, identities, raw captures, or precise source details are shown here.
+              {t('result.privacyFirst')}
             </div>
           </div>
         )}
@@ -296,12 +300,11 @@ export function ResultView({
         {tab === 'evidence' && (
           <div className="flex flex-col gap-4">
             <p className="text-[13px] leading-relaxed text-muted-foreground">
-              TeLLMe can use approved sensors to verify an answer, but captured
-              media and raw evidence details are never shown in this app.
+              {t('result.evidenceDescription')}
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {result.evidence.map((item) => (
-                <EvidenceCard key={item.id} item={item} />
+                <EvidenceCard key={item.id} item={item} language={language} />
               ))}
             </div>
           </div>
@@ -314,22 +317,25 @@ export function ResultView({
 function TrustIndicators({
   result,
   responseMs,
+  language,
 }: {
   result: QueryResult
   responseMs?: number
+  language: LanguageMode
 }) {
+  const t = (key: TranslationKey) => translate(language, key)
   const confidence = result.confidence === null
-    ? 'Not reported'
+    ? t('result.notReported')
     : `${Math.round(result.confidence * 100)}%`
   const responseTime = typeof responseMs === 'number'
-    ? `${(responseMs / 1000).toFixed(responseMs >= 1000 ? 1 : 2)}s`
-    : 'Pending'
+    ? formatResponseTime(responseMs)
+    : t('result.pending')
   const metrics = [
-    { label: 'Confidence', value: confidence, icon: ShieldCheck },
-    { label: 'Sources', value: result.agents.length.toString(), icon: Database },
-    { label: 'Evidence used', value: result.evidence.length.toString(), icon: FileSearch },
-    { label: 'Model', value: result.model || 'Not reported', icon: Cpu },
-    { label: 'Response time', value: responseTime, icon: Timer },
+    { label: t('result.confidence'), value: confidence, icon: ShieldCheck },
+    { label: t('result.sources'), value: result.agents.length.toString(), icon: Database },
+    { label: t('result.evidenceUsed'), value: result.evidence.length.toString(), icon: FileSearch },
+    { label: t('result.model'), value: result.model || t('result.notReported'), icon: Cpu },
+    { label: t('result.responseTime'), value: responseTime, icon: Timer },
   ]
 
   return (

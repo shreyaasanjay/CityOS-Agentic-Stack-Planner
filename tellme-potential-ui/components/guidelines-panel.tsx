@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Copy, Check, ListChecks, Code2, Terminal } from 'lucide-react'
 import type { Guideline, GuidelineSeverity } from '@/lib/api/types'
+import { translate, type LanguageMode, type TranslationKey } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 const SEVERITY_STYLES: Record<GuidelineSeverity, string> = {
@@ -14,11 +15,15 @@ const SEVERITY_STYLES: Record<GuidelineSeverity, string> = {
 export function GuidelinesPanel({
   guidelines,
   query,
+  language,
 }: {
   guidelines: Guideline[]
   query: string | null
+  language: LanguageMode
 }) {
   const [copied, setCopied] = useState(false)
+  const t = (key: TranslationKey, values?: Record<string, string | number>) =>
+    translate(language, key, values)
 
   if (guidelines.length === 0) {
     return (
@@ -27,11 +32,9 @@ export function GuidelinesPanel({
           <ListChecks className="size-5" aria-hidden="true" />
         </span>
         <div className="max-w-sm">
-          <p className="text-sm font-medium">No guidelines yet</p>
+          <p className="text-sm font-medium">{t('guidelines.none')}</p>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            Ask a question in the conversation view. Each answer synthesizes a
-            machine-readable guideline set for your downstream software to
-            consume.
+            {t('guidelines.noneDescription')}
           </p>
         </div>
       </div>
@@ -57,10 +60,9 @@ export function GuidelinesPanel({
             <Code2 className="size-4" aria-hidden="true" />
           </span>
           <div>
-            <p className="text-sm font-semibold">Downstream guidelines</p>
+            <p className="text-sm font-semibold">{t('guidelines.title')}</p>
             <p className="text-[13px] text-muted-foreground">
-              Machine-readable rules generated from the latest query. Consumed
-              by backend services, not shown to end users.
+              {t('guidelines.description')}
             </p>
           </div>
         </div>
@@ -74,7 +76,7 @@ export function GuidelinesPanel({
           ) : (
             <Copy className="size-3.5" aria-hidden="true" />
           )}
-          {copied ? 'Copied' : 'Copy as JSON'}
+          {copied ? t('guidelines.copied') : t('guidelines.copyJson')}
         </button>
       </div>
 
@@ -115,7 +117,7 @@ export function GuidelinesPanel({
       <div className="flex items-center gap-2 rounded-xl border border-border bg-secondary/50 px-3 py-2 text-[11px] text-muted-foreground">
         <Terminal className="size-3.5 shrink-0" aria-hidden="true" />
         <span className="font-mono">
-          POST /v1/guidelines · {guidelines.length} rules · ready for ingestion
+          POST /v1/guidelines - {t('guidelines.ready', { count: guidelines.length })}
         </span>
       </div>
     </div>

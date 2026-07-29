@@ -1,13 +1,16 @@
 'use client'
 
 import { Pencil } from 'lucide-react'
+import { translate, type LanguageMode } from '@/lib/i18n'
 
 export function UserQuery({
   text,
   onEdit,
+  language,
 }: {
   text: string
   onEdit?: () => void
+  language: LanguageMode
 }) {
   return (
     <div className="flex justify-end">
@@ -22,7 +25,7 @@ export function UserQuery({
             className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <Pencil className="size-3" aria-hidden="true" />
-            Edit prompt
+            {translate(language, 'main.editPrompt')}
           </button>
         )}
       </div>

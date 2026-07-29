@@ -11,13 +11,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 import mimetypes
 import re
 import shlex
 import sys
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode, urlparse, urlunparse
@@ -25,7 +24,7 @@ from urllib.parse import quote, urlencode, urlparse, urlunparse
 from tracefix.runtime.cityos_agent_harness import CityOSAgentHarness, CityOSHarnessConfig
 from tracefix.runtime.cityos_docker_harness import CityOSDockerApp, load_manifest, manifest_apps
 
-_DEFAULT_SOURCE_URL = "http://172.16.60.239:3000/api/v1"
+_DEFAULT_SOURCE_URL = "https://smartroom-mirror.vercel.app/api/v1"
 _DEFAULT_MAX_BYTES = 50 * 1024 * 1024
 _SMARTROOM_MODELS = ("action-hmdb", "action", "yolo26l", "yolo26n-pose")
 _ACTIVITY_LABEL_KEYS = {
@@ -333,58 +332,6 @@ def _requested_date_from_context(question_context: Any | None) -> dict[str, Any]
     return None
 
 
-def _requested_time_from_context(question_context: Any | None) -> dict[str, Any] | None:
-    requested_date = _requested_date_from_context(question_context)
-    text = _question_text(question_context)
-    if not requested_date or not text:
-        return None
-    iso_match = re.search(r"\b20\d{2}-\d{1,2}-\d{1,2}[T\s]+(\d{1,2}):(\d{2})(?::\d{2})?", text)
-    meridiem_match = re.search(r"\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?\b", text, flags=re.IGNORECASE)
-    clock_match = re.search(r"\bat\s+([01]?\d|2[0-3]):([0-5]\d)\b", text, flags=re.IGNORECASE)
-    hour = minute = None
-    if iso_match:
-        hour, minute = int(iso_match.group(1)), int(iso_match.group(2))
-    elif meridiem_match:
-        hour = int(meridiem_match.group(1)) % 12
-        minute = int(meridiem_match.group(2) or 0)
-        if meridiem_match.group(3).lower() == "p":
-            hour += 12
-    elif clock_match:
-        hour, minute = int(clock_match.group(1)), int(clock_match.group(2))
-    if hour is None or minute is None or not (0 <= hour <= 23 and 0 <= minute <= 59):
-        return None
-    return {
-        **requested_date,
-        "hour": hour,
-        "minute": minute,
-        "seconds": hour * 3600 + minute * 60,
-        "timeLabel": f"{hour % 12 or 12}:{minute:02d} {'AM' if hour < 12 else 'PM'}",
-    }
-
-
-def _recording_start_time(recording: dict[str, Any]) -> datetime | None:
-    rec = str(recording.get("rec") or "")
-    match = re.search(r"(20\d{2})(\d{2})(\d{2})[_-](\d{2})(\d{2})(\d{2})", rec)
-    if match:
-        try:
-            return datetime(*(int(value) for value in match.groups()))
-        except ValueError:
-            return None
-    mtime = recording.get("mtime")
-    try:
-        value = float(mtime)
-        if value > 10_000_000_000:
-            value /= 1000
-        return datetime.fromtimestamp(value, tz=timezone.utc).replace(tzinfo=None)
-    except (TypeError, ValueError, OSError):
-        return None
-
-
-def _recording_time_label(recording: dict[str, Any]) -> str:
-    start = _recording_start_time(recording)
-    return f"{start.hour % 12 or 12}:{start.minute:02d} {'AM' if start.hour < 12 else 'PM'}" if start else ""
-
-
 def _recording_date(recording: dict[str, Any]) -> dict[str, int] | None:
     candidates = [str(recording.get("day") or ""), str(recording.get("rec") or "")]
     for candidate in candidates:
@@ -427,246 +374,21 @@ def _available_recording_date_labels(recordings: list[Any]) -> list[str]:
             labels.append(label)
     return labels
 
-def _recording_option(recording: dict[str, Any]) -> dict[str, Any]:
-    cameras = recording.get("cameras") if isinstance(recording.get("cameras"), dict) else {}
-    camera_names = [str(name) for name in cameras.keys()]
-    durations: list[float] = []
-    models: set[str] = set()
-    nodes: set[str] = set()
-    for raw_camera in cameras.values():
-        camera = raw_camera if isinstance(raw_camera, dict) else {}
-        if camera.get("node"):
-            nodes.add(str(camera.get("node")))
-        try:
-            duration = float(camera.get("durationSec") or 0)
-        except (TypeError, ValueError):
-            duration = 0
-        if duration > 0:
-            durations.append(duration)
-        camera_models = camera.get("models") if isinstance(camera.get("models"), dict) else {}
-        for model, status in camera_models.items():
-            if str(status or "").strip().lower() == "done":
-                models.add(str(model))
-    day = str(recording.get("day") or "")
-    rec = str(recording.get("rec") or "")
-    recording_date = _recording_date(recording)
-    date_label = (
-        _date_label(recording_date["month"], recording_date["day"], recording_date["year"])
-        if recording_date
-        else ""
-    )
-    details = []
-    if date_label:
-        details.append(date_label)
-    if camera_names:
-        details.append(", ".join(camera_names))
-    if durations:
-        details.append(f"{max(durations):.0f}s")
-    return {
-        "recordingId": "/".join(part for part in [day, rec] if part),
-        "day": day,
-        "rec": rec,
-        "label": " / ".join(part for part in [day, rec] if part) or rec or day or "recording",
-        "detail": " - ".join(details),
-        "dateLabel": date_label,
-        "timeLabel": _recording_time_label(recording),
-        "cameras": camera_names,
-        "cameraCount": len(camera_names),
-        "durationSec": max(durations) if durations else None,
-        "models": sorted(models),
-        "nodes": sorted(nodes),
-        "mtime": recording.get("mtime"),
-    }
-
-
-def _recording_options(recordings: list[dict[str, Any]], limit: int = 100) -> list[dict[str, Any]]:
-    return [_recording_option(recording) for recording in recordings[:limit]]
-
-
-def _normalize_recording_override(value: Any | None) -> dict[str, str] | None:
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        identifier = str(value.get("recordingId") or value.get("id") or "").strip()
-        day = str(value.get("day") or "").strip()
-        rec = str(value.get("rec") or value.get("recording") or "").strip()
-        if identifier and (not day or not rec):
-            identifier_parts = [part.strip() for part in identifier.split("/") if part.strip()]
-            if len(identifier_parts) >= 2:
-                day, rec = identifier_parts[-2:]
-        return {"day": day, "rec": rec} if day or rec else None
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        parsed = None
-    if isinstance(parsed, dict):
-        return _normalize_recording_override(parsed)
-    parts = [part.strip() for part in re.split(r"\s*/\s*|\s*,\s*", text) if part.strip()]
-    if len(parts) >= 2:
-        return {"day": parts[0], "rec": parts[1]}
-    if text.startswith("rec_"):
-        return {"day": "", "rec": text}
-    if text.startswith("day_"):
-        return {"day": text, "rec": ""}
-    return {"day": "", "rec": text}
-
-
-def _resolve_recording_selection(
-    recordings: list[dict[str, Any]],
-    question_context: Any | None,
-    recording_override: Any | None,
-) -> tuple[dict[str, str] | None, str | None]:
-    """Resolve a typed take number/name to the stable day/recording pair."""
-    if recording_override is None:
-        return None, None
-    if isinstance(recording_override, dict):
-        return _normalize_recording_override(recording_override), None
-    text = str(recording_override or "").strip()
-    if not text:
-        return None, None
-    requested = _requested_date_from_context(question_context)
-    candidates = recordings
-    if requested:
-        dated = [recording for recording in recordings if _recording_matches_requested_date(recording, requested)]
-        if dated:
-            candidates = dated
-    take_match = re.fullmatch(r"(?:take\s*)?(\d+)", text, flags=re.IGNORECASE)
-    if take_match:
-        take_index = int(take_match.group(1)) - 1
-        if 0 <= take_index < len(candidates):
-            return _normalize_recording_override(_recording_option(candidates[take_index])), None
-        return None, f"Take {take_index + 1} is not available."
-    lowered = text.casefold()
-    for recording in candidates:
-        option = _recording_option(recording)
-        values = (option.get("recordingId"), option.get("rec"), option.get("label"))
-        if any(str(value or "").casefold() == lowered for value in values):
-            return _normalize_recording_override(option), None
-    return _normalize_recording_override(text), None
-
-
-def _is_cumulative_occupancy_question(question_context: Any | None) -> bool:
-    text = _question_text(question_context).casefold()
-    return bool(re.search(r"\b(total|cumulative|across all (?:takes|recordings)|all takes|all recordings)\b", text)) and bool(
-        re.search(r"\b(people|person|occupancy|occupied|room)\b", text)
-    )
-
-
-def _recording_matches_override(recording: dict[str, Any], override: dict[str, str]) -> bool:
-    day = str(recording.get("day") or "")
-    rec = str(recording.get("rec") or "")
-    override_day = str(override.get("day") or "")
-    override_rec = str(override.get("rec") or "")
-    if override_day and day != override_day:
-        return False
-    if override_rec and rec != override_rec:
-        return False
-    return bool(override_day or override_rec)
-
 def _select_smartroom_recording(
     recordings: list[Any],
     question_context: Any | None,
-    recording_override: Any | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     typed_recordings = [item for item in recordings if isinstance(item, dict)]
-    override, selection_error = _resolve_recording_selection(typed_recordings, question_context, recording_override)
-    if selection_error:
-        requested = _requested_date_from_context(question_context)
-        candidates = typed_recordings
-        if requested:
-            dated = [recording for recording in typed_recordings if _recording_matches_requested_date(recording, requested)]
-            if dated:
-                candidates = dated
-        return None, {
-            "mode": "needs_clarification",
-            "requestedDate": requested,
-            "requestedDateLabel": requested.get("label") if requested else None,
-            "needsClarification": True,
-            "clarificationPrompt": f"{selection_error} Choose one of the listed takes.",
-            "candidates": _recording_options(candidates),
-            "reason": "invalid recording selection",
-        }
-    if override:
-        matches = [recording for recording in typed_recordings if _recording_matches_override(recording, override)]
-        if len(matches) == 1:
-            selected = matches[0]
-            option = _recording_option(selected)
-            return selected, {
-                "mode": "recording_override",
-                "requestedDate": _recording_date(selected),
-                "requestedDateLabel": option.get("dateLabel"),
-                "recordingOverride": override,
-                "reason": f"selected requested recording {selected.get('rec')}",
-            }
-        return None, {
-            "mode": "recording_override",
-            "requestedDate": None,
-            "requestedDateLabel": None,
-            "recordingOverride": override,
-            "needsClarification": True,
-            "clarificationPrompt": "I could not find that exact recording. Choose one of the available recordings.",
-            "candidates": _recording_options(typed_recordings),
-            "reason": "recording override did not match exactly",
-        }
     requested = _requested_date_from_context(question_context)
     if requested:
-        matches = [recording for recording in typed_recordings if _recording_matches_requested_date(recording, requested)]
-        requested_time = _requested_time_from_context(question_context)
-        if matches and requested_time:
-            requested_start = datetime(
-                int(requested_time["year"] or datetime.now().year),
-                int(requested_time["month"]),
-                int(requested_time["day"]),
-                int(requested_time["hour"]),
-                int(requested_time["minute"]),
-            )
-            timed = [(recording, _recording_start_time(recording)) for recording in matches]
-            timed = [(recording, start) for recording, start in timed if start is not None]
-            if timed:
-                containing: list[tuple[dict[str, Any], datetime]] = []
-                for recording, start in timed:
-                    durations = [
-                        float(camera.get("durationSec") or 0)
-                        for camera in (recording.get("cameras") or {}).values()
-                        if isinstance(camera, dict)
-                    ]
-                    duration = max(durations, default=0)
-                    if duration > 0 and start <= requested_start <= start + timedelta(seconds=duration):
-                        containing.append((recording, start))
-                pool = containing or timed
-                selected, selected_start = min(pool, key=lambda item: abs((item[1] - requested_start).total_seconds()))
-                option = _recording_option(selected)
-                return selected, {
-                    "mode": "requested_timestamp",
+        for recording in typed_recordings:
+            if _recording_matches_requested_date(recording, requested):
+                return recording, {
+                    "mode": "requested_date",
                     "requestedDate": requested,
                     "requestedDateLabel": requested["label"],
-                    "requestedTimeLabel": requested_time["timeLabel"],
-                    "recordingOverride": _normalize_recording_override(option),
-                    "reason": f"selected recording closest to requested time {requested_time['timeLabel']}",
+                    "reason": f"matched requested date {requested['label']}",
                 }
-        if matches and _is_cumulative_occupancy_question(question_context):
-            return None, {
-                "mode": "requested_date_total",
-                "requestedDate": requested,
-                "requestedDateLabel": requested["label"],
-                "aggregateRecordings": matches,
-                "reason": f"aggregate occupancy requested across {len(matches)} recordings for {requested['label']}",
-            }
-        if matches:
-            count = len(matches)
-            noun = "recording" if count == 1 else "recordings"
-            return None, {
-                "mode": "needs_clarification",
-                "requestedDate": requested,
-                "requestedDateLabel": requested["label"],
-                "needsClarification": True,
-                "clarificationPrompt": f"I found {count} smartroom {noun} for {requested['label']}. Which take should I use?",
-                "candidates": _recording_options(matches),
-                "reason": f"recording selection required for requested date {requested['label']}",
-            }
         available_dates = _available_recording_date_labels(typed_recordings)
         return None, {
             "mode": "requested_date",
@@ -675,24 +397,13 @@ def _select_smartroom_recording(
             "availableDates": available_dates,
             "reason": f"no recording matched requested date {requested['label']}",
         }
-    if len(typed_recordings) > 1:
-        return None, {
-            "mode": "needs_clarification",
-            "requestedDate": None,
-            "requestedDateLabel": None,
-            "needsClarification": True,
-            "clarificationPrompt": "I found multiple smartroom recordings. Which date/take should I use?",
-            "candidates": _recording_options(typed_recordings),
-            "reason": "the question did not identify a specific recording",
-        }
     selected = typed_recordings[0] if typed_recordings else None
     return selected, {
         "mode": "latest",
         "requestedDate": None,
         "requestedDateLabel": None,
-        "reason": "selected newest recording because it was the only available recording",
+        "reason": "selected newest recording because the question did not include a specific date",
     }
-
 
 def default_web_data_url() -> str:
     return _DEFAULT_SOURCE_URL
@@ -1275,38 +986,6 @@ def _download_smartroom_frame(
     }
 
 
-def _fetch_smartroom_recording_payload(
-    selected: dict[str, Any], *, base_url: str, output_root: Path, timeout_seconds: int, max_bytes: int, errors: list[dict[str, str]],
-) -> dict[str, Any]:
-    day = str(selected.get("day") or "")
-    rec = str(selected.get("rec") or "")
-    selected_payload: dict[str, Any] = {"day": day, "rec": rec, "mtime": selected.get("mtime"), "cameras": {}}
-    cameras = selected.get("cameras") if isinstance(selected.get("cameras"), dict) else {}
-    for camera, raw_camera_info in cameras.items():
-        camera_name = str(camera)
-        camera_info = raw_camera_info if isinstance(raw_camera_info, dict) else {}
-        camera_payload: dict[str, Any] = {"metadata": camera_info, "inference": {}, "frame": None}
-        models = camera_info.get("models") if isinstance(camera_info.get("models"), dict) else {}
-        for model in _models_to_fetch(models):
-            if str(models.get(model) or "").lower() != "done":
-                continue
-            inference_url = _api_url(base_url, "recordings", day, rec, camera_name, "inference", model)
-            try:
-                inference, _response = _read_json_url(inference_url, timeout_seconds=timeout_seconds, max_bytes=max_bytes)
-                camera_payload["inference"][model] = {"url": inference_url, "data": inference}
-            except Exception as exc:  # noqa: BLE001
-                errors.append({"url": inference_url, "error": f"{type(exc).__name__}: {exc}"})
-        try:
-            camera_payload["frame"] = _download_smartroom_frame(
-                base_url=base_url, day=day, rec=rec, camera=camera_name, camera_info=camera_info,
-                frames_dir=output_root / "source_data" / "frames", timeout_seconds=timeout_seconds, max_bytes=max_bytes,
-            )
-        except Exception as exc:  # noqa: BLE001
-            errors.append({"url": _api_url(base_url, "recordings", day, rec, camera_name, "frame"), "error": f"{type(exc).__name__}: {exc}"})
-        selected_payload["cameras"][camera_name] = camera_payload
-    return selected_payload
-
-
 def fetch_smartroom_payload(
     source_url: str,
     *,
@@ -1314,7 +993,6 @@ def fetch_smartroom_payload(
     timeout_seconds: int = 30,
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
-    recording_override: Any | None = None,
 ) -> dict[str, Any]:
     base_url = _smartroom_base_url(source_url)
     errors: list[dict[str, str]] = []
@@ -1325,7 +1003,7 @@ def fetch_smartroom_payload(
     )
     recordings = recordings_doc.get("recordings") if isinstance(recordings_doc.get("recordings"), list) else []
     question = _question_text(question_context)
-    selected, selection = _select_smartroom_recording(recordings, question, recording_override)
+    selected, selection = _select_smartroom_recording(recordings, question)
     snapshot: dict[str, Any] = {
         "kind": "smartroom-control.snapshot.v1",
         "sourceApi": base_url,
@@ -1338,20 +1016,63 @@ def fetch_smartroom_payload(
         "errors": errors,
     }
 
-    aggregate_records = selection.get("aggregateRecordings") if isinstance(selection.get("aggregateRecordings"), list) else []
-    records_to_fetch = [record for record in aggregate_records if isinstance(record, dict)]
-    if not records_to_fetch and selected is not None:
-        records_to_fetch = [selected]
-    fetched_records = [
-        _fetch_smartroom_recording_payload(
-            record, base_url=base_url, output_root=output_root, timeout_seconds=timeout_seconds, max_bytes=max_bytes, errors=errors,
-        )
-        for record in records_to_fetch
-    ]
-    if selection.get("mode") == "requested_date_total":
-        snapshot["aggregateSelected"] = fetched_records
-    elif fetched_records:
-        snapshot["selected"] = fetched_records[0]
+    if selected is not None:
+        day = str(selected.get("day") or "")
+        rec = str(selected.get("rec") or "")
+        selected_payload: dict[str, Any] = {
+            "day": day,
+            "rec": rec,
+            "mtime": selected.get("mtime"),
+            "cameras": {},
+        }
+        cameras = selected.get("cameras") if isinstance(selected.get("cameras"), dict) else {}
+        for camera, raw_camera_info in cameras.items():
+            camera_name = str(camera)
+            camera_info = raw_camera_info if isinstance(raw_camera_info, dict) else {}
+            camera_payload: dict[str, Any] = {
+                "metadata": camera_info,
+                "inference": {},
+                "frame": None,
+            }
+            models = camera_info.get("models") if isinstance(camera_info.get("models"), dict) else {}
+            for model in _models_to_fetch(models):
+                if str(models.get(model) or "").lower() != "done":
+                    continue
+                inference_url = _api_url(base_url, "recordings", day, rec, camera_name, "inference", model)
+                try:
+                    inference, _response = _read_json_url(
+                        inference_url,
+                        timeout_seconds=timeout_seconds,
+                        max_bytes=max_bytes,
+                    )
+                    camera_payload["inference"][model] = {
+                        "url": inference_url,
+                        "data": inference,
+                    }
+                except Exception as exc:  # noqa: BLE001 - keep partial snapshot useful
+                    errors.append({
+                        "url": inference_url,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    })
+            try:
+                camera_payload["frame"] = _download_smartroom_frame(
+                    base_url=base_url,
+                    day=day,
+                    rec=rec,
+                    camera=camera_name,
+                    camera_info=camera_info,
+                    frames_dir=output_root / "source_data" / "frames",
+                    timeout_seconds=timeout_seconds,
+                    max_bytes=max_bytes,
+                )
+            except Exception as exc:  # noqa: BLE001 - frames are helpful but not required
+                frame_url = _api_url(base_url, "recordings", day, rec, camera_name, "frame")
+                errors.append({
+                    "url": frame_url,
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+            selected_payload["cameras"][camera_name] = camera_payload
+        snapshot["selected"] = selected_payload
 
     answer = build_smartroom_answer(snapshot)
     snapshot["answer"] = answer
@@ -1379,10 +1100,6 @@ def fetch_smartroom_payload(
             "requestedDateLabel": selection.get("requestedDateLabel"),
             "question": question,
             "errors": len(errors),
-            "needsClarification": bool(selection.get("needsClarification")),
-            "clarificationPrompt": selection.get("clarificationPrompt"),
-            "clarificationCandidates": selection.get("candidates") or [],
-            "recordingOverride": selection.get("recordingOverride"),
         },
     }
 
@@ -1619,57 +1336,7 @@ def build_smartroom_answer(snapshot: dict[str, Any]) -> dict[str, Any]:
     selection = snapshot.get("selection") if isinstance(snapshot.get("selection"), dict) else {}
     requested_label = str(selection.get("requestedDateLabel") or "").strip()
     selected = snapshot.get("selected") if isinstance(snapshot.get("selected"), dict) else None
-    aggregate_selected = snapshot.get("aggregateSelected") if isinstance(snapshot.get("aggregateSelected"), list) else []
-    if selection.get("mode") == "requested_date_total":
-        take_peaks: list[int] = []
-        for recording in aggregate_selected:
-            if not isinstance(recording, dict):
-                continue
-            camera_peaks: list[int] = []
-            for camera in (recording.get("cameras") or {}).values():
-                if not isinstance(camera, dict):
-                    continue
-                for model, wrapper in (camera.get("inference") or {}).items():
-                    data = wrapper.get("data") if isinstance(wrapper, dict) and isinstance(wrapper.get("data"), dict) else {}
-                    peak = _extract_detection_summary(str(model), data).get("peakPeople")
-                    if peak is not None:
-                        camera_peaks.append(int(peak))
-            if camera_peaks:
-                take_peaks.append(max(camera_peaks))
-        total = sum(take_peaks)
-        label = requested_label or "the requested date"
-        text = (
-            f"Across {len(take_peaks)} recorded takes on {label}, the summed per-take peak occupancy was {total} people. "
-            "This is a recording aggregate, not a count of unique people across takes."
-        )
-        return {
-            "question": question, "text": text, "chatAnswer": text, "chat_answer": text,
-            "recording": None, "recordingsAggregated": len(take_peaks), "aggregatePeakPeople": total,
-            "cameras": [], "selection": selection, "errors": snapshot.get("errors") if isinstance(snapshot.get("errors"), list) else [],
-        }
     if selected is None:
-        candidates = selection.get("candidates") if isinstance(selection.get("candidates"), list) else []
-        if selection.get("needsClarification"):
-            prompt = str(selection.get("clarificationPrompt") or "Which smartroom recording should I use?")
-            option_text = "; ".join(
-                str(item.get("label") or item.get("rec") or item.get("day") or "recording")
-                for item in candidates[:6]
-                if isinstance(item, dict)
-            )
-            text = prompt + (f" Options: {option_text}." if option_text else "")
-            return {
-                "question": question,
-                "text": text,
-                "chatAnswer": prompt,
-                "chat_answer": prompt,
-                "needsClarification": True,
-                "clarificationPrompt": prompt,
-                "clarificationCandidates": candidates,
-                "recording": None,
-                "cameras": [],
-                "selection": selection,
-                "errors": snapshot.get("errors") if isinstance(snapshot.get("errors"), list) else [],
-            }
         available_dates = selection.get("availableDates") if isinstance(selection.get("availableDates"), list) else []
         text = (
             f"No smartroom recording matched {requested_label}."
@@ -1948,7 +1615,6 @@ def fetch_source_payload(
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
     raw_data_json: str | None = None,
-    recording_override: Any | None = None,
 ) -> dict[str, Any]:
     mode = str(source_mode or "auto").strip().lower()
     raw_text = str(raw_data_json or "").strip()
@@ -1967,7 +1633,6 @@ def fetch_source_payload(
             timeout_seconds=timeout_seconds,
             max_bytes=max_bytes,
             question_context=question_context,
-            recording_override=recording_override,
         )
     return fetch_web_payload(
         source_url,
@@ -2005,45 +1670,6 @@ def write_web_payload(payload: dict[str, Any], output_root: Path) -> dict[str, A
     metadata["metadataPath"] = str(metadata_path)
     return metadata
 
-
-
-def _write_agent_request(
-    *,
-    output_root: Path,
-    source_url: str,
-    source_mode: str,
-    question_context: Any | None,
-    raw_data_json: str | None,
-    recording_override: Any | None,
-) -> tuple[Path, dict[str, Any]]:
-    """The harness transports instructions only; generated agents own retrieval and answers."""
-    source_dir = output_root / "source_data"
-    source_dir.mkdir(parents=True, exist_ok=True)
-    request = {
-        "sourceUrl": source_url,
-        "sourceMode": source_mode,
-        "question": _question_text(question_context),
-        "rawDataJson": raw_data_json or "",
-        "recordingOverride": _normalize_recording_override(recording_override),
-        "requestedAt": _utc_now().isoformat(),
-    }
-    path = source_dir / f"{_utc_now().strftime('%Y%m%d-%H%M%S-%f')}_agent_request.json"
-    path.write_text(json.dumps(request, indent=2) + "\n", encoding="utf-8")
-    return path, {"url": source_url, "sourceKind": "agent-owned", "payloadPath": str(path), "metadataPath": None, "sizeBytes": path.stat().st_size}
-
-
-def _answer_from_generated_runs(runs: list[dict[str, Any]]) -> Any:
-    for run in reversed(runs):
-        if (run.get("app") or {}).get("kind") == "monitor":
-            continue
-        for record in reversed(run.get("handlerRecords") or []):
-            try:
-                output = json.loads(Path(record).read_text(encoding="utf-8")).get("handler", {}).get("output", "")
-                value = json.loads(output.strip().splitlines()[-1])
-                return value.get("answer", value) if isinstance(value, dict) else value
-            except (OSError, ValueError, json.JSONDecodeError, IndexError):
-                continue
-    return None
 
 def _resolve_app_path(app: CityOSDockerApp, manifest_path: Path) -> Path:
     path = app.path.expanduser()
@@ -2112,7 +1738,7 @@ async def _run_app_phase(
             output_dir=output_dir,
             ready_dir=output_root / "ready",
             startup_cmd=[],
-            handler_cmd=_handler_command(handler_command) or [sys.executable, str(app_path / "generated_handler.py")],
+            handler_cmd=_handler_command(handler_command),
             handler_timeout=float(handler_timeout_seconds),
             verbose=False,
             task_id="",
@@ -2292,7 +1918,6 @@ async def _run_agent_pipeline(
     max_bytes: int,
     question: str,
     raw_data_json: str,
-    recording_override: Any | None,
     agent_provider: str,
     agent_model: str,
     agent_api_key: str,
@@ -2317,7 +1942,6 @@ async def _run_agent_pipeline(
         "max_bytes": max_bytes,
         "question": question,
         "raw_data_json": raw_data_json,
-        "recording_override": recording_override,
         "agent_provider": agent_provider,
         "agent_model": agent_model,
     }
@@ -2467,11 +2091,6 @@ def _agent_payload_metadata(output_root: Path, evidence_packets: list[dict[str, 
         "selectionReason": selection.get("reason"),
         "requestedDate": selection.get("requestedDate"),
         "requestedDateLabel": selection.get("requestedDateLabel"),
-        "question": primary.get("question"),
-        "recordingOverride": selection.get("recordingOverride"),
-        "needsClarification": bool(selection.get("needsClarification")),
-        "clarificationPrompt": selection.get("clarificationPrompt"),
-        "clarificationCandidates": selection.get("candidates") or [],
         "errors": len(primary.get("errors") or []),
     }
     return {
@@ -2501,7 +2120,9 @@ def run_web_data_apps(
     max_bytes: int = _DEFAULT_MAX_BYTES,
     question_context: Any | None = None,
     raw_data_json: str | None = None,
-    recording_override: Any | None = None,
+    agent_provider: str = "deterministic",
+    agent_model: str = "",
+    agent_api_key: str = "",
 ) -> dict[str, Any]:
     manifest_path = manifest_path.expanduser().resolve()
     if not manifest_path.exists():
@@ -2517,52 +2138,29 @@ def run_web_data_apps(
     output_root.mkdir(parents=True, exist_ok=True)
 
     started_at = _utc_now().isoformat()
-    payload = fetch_source_payload(
-        source_url,
+    question = _question_text(question_context)
+    runs, evidence_packets, answer = asyncio.run(_run_agent_pipeline(
+        apps=apps,
+        manifest_path=manifest_path,
         output_root=output_root,
+        handler_command=handler_command,
+        handler_timeout_seconds=handler_timeout_seconds,
+        source_url=source_url,
         source_mode=source_mode,
         timeout_seconds=timeout_seconds,
         max_bytes=max_bytes,
-        question_context=question_context,
-        raw_data_json=raw_data_json,
-        recording_override=recording_override,
-    )
-    source_answer = payload.get("answer")
-    needs_recording_choice = (
-        isinstance(source_answer, dict)
-        and source_answer.get("needsClarification") is True
-    )
-    # The preflight uses the server's recording index only. Once an exact
-    # recording is selected, hand an instruction envelope to the generated
-    # agent so it owns retrieval and analysis of the chosen data.
-    if needs_recording_choice:
-        payload_metadata = write_web_payload(payload, output_root)
-        payload_path = Path(str(payload_metadata["payloadPath"]))
-    else:
-        payload_path, payload_metadata = _write_agent_request(
-            output_root=output_root,
-            source_url=source_url,
-            source_mode=source_mode,
-            question_context=question_context,
-            raw_data_json=raw_data_json,
-            recording_override=recording_override,
-        )
-    # A selection is returned directly rather than allowing a generated app to
-    # overwrite it with an answer from incomplete context.
-    if needs_recording_choice:
-        runs = []
-        answer = source_answer
-    else:
-        runs = asyncio.run(_run_apps(
-            apps=apps,
-            manifest_path=manifest_path,
-            payload_path=payload_path,
-            output_root=output_root,
-            handler_command=handler_command,
-            handler_timeout_seconds=handler_timeout_seconds,
-        ))
-        answer = _answer_from_generated_runs(runs)
-    answer_path = _write_answer_artifacts(output_root, runs, answer)
+        question=question,
+        raw_data_json=str(raw_data_json or ""),
+        agent_provider=str(agent_provider or "deterministic").strip().lower(),
+        agent_model=str(agent_model or "").strip(),
+        agent_api_key=str(agent_api_key or "").strip(),
+    ))
+    payload_metadata = _agent_payload_metadata(output_root, evidence_packets)
+    answer_path = None
+    if answer is not None:
+        answer_file = output_root / "smartroom-answer.json"
+        answer_file.write_text(json.dumps(answer, indent=2) + "\n", encoding="utf-8")
+        answer_path = str(answer_file)
     finished_at = _utc_now().isoformat()
     monitor_runs = [run for run in runs if str(run.get("phase") or "").startswith("monitor_")]
     completed_monitor_runs = [run for run in monitor_runs if run.get("phase") == "monitor_complete"]
@@ -2572,18 +2170,13 @@ def run_web_data_apps(
         for run in monitor_runs
     )
     result = {
-        "ok": needs_recording_choice or (
-            bool(runs) and all(run.get("status") == "completed" for run in runs)
-        ),
-        "sourceUrl": payload.get("url") or source_url,
-        "sourceKind": payload.get("sourceKind") or "http",
+        "ok": bool(runs) and answer is not None
+        and all(run.get("status") == "completed" for run in runs)
+        and monitors_valid,
+        "sourceUrl": payload_metadata.get("url") or source_url,
+        "sourceKind": payload_metadata.get("sourceKind") or "unknown",
         "sourceMode": source_mode,
         "question": question,
-        "recordingOverride": (
-            (payload_metadata.get("snapshotSummary") or {}).get("recordingOverride")
-            if isinstance(payload_metadata.get("snapshotSummary"), dict)
-            else _normalize_recording_override(recording_override)
-        ),
         "manifestPath": str(manifest_path),
         "outputRoot": str(output_root),
         "startedAt": started_at,

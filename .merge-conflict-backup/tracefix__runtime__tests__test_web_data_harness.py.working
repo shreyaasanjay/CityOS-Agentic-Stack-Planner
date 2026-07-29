@@ -3,9 +3,13 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+<<<<<<< HEAD
 import pytest
 
+from tracefix.runtime.web_data_harness import run_web_data_apps
+=======
 from tracefix.runtime.web_data_harness import _select_smartroom_recording, run_web_data_apps
+>>>>>>> 0e636421a1b896510e26b99dfc9734510d115316
 
 
 class _JsonHandler(BaseHTTPRequestHandler):

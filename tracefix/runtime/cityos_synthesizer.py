@@ -512,6 +512,39 @@ def _write_monitor_app(
     return CityOSAppPackage(name=app_name, path=app_dir, kind="monitor")
 
 
+def _execution_agents(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return plan agents plus any roles required by the data-answer runtime.
+
+    TraceFix protocols may legitimately contain only one logical agent, but the
+    CityOS execution boundary keeps retrieval and answer generation in separate
+    processes.  The monitor is packaged separately below.
+    """
+    agents = [dict(agent) for agent in plan.get("agents", []) if isinstance(agent, dict)]
+    labels = [str(agent.get("name") or "").lower() for agent in agents]
+
+    has_answer = any("answer" in label or "synth" in label for label in labels)
+    if not has_answer:
+        agents.append({
+            "name": "TRACEFIX_ANSWER",
+            "runtime_role": "answer",
+            "generated_by": "cityos_execution_role_enforcement",
+        })
+
+    answer_index = next(
+        index
+        for index, agent in enumerate(agents)
+        if "answer" in str(agent.get("name") or "").lower()
+        or "synth" in str(agent.get("name") or "").lower()
+    )
+    if not any(index != answer_index for index in range(len(agents))):
+        agents.insert(0, {
+            "name": "TRACEFIX_RETRIEVER",
+            "runtime_role": "retriever",
+            "generated_by": "cityos_execution_role_enforcement",
+        })
+    return agents
+
+
 def synthesize_cityos_apps(
     workspace: Path,
     *,
@@ -529,9 +562,7 @@ def synthesize_cityos_apps(
     plan_path, plan = _load_or_export_plan(workspace)
     package = _slug(package_name or f"tracefix-{workspace.name}")
     apps: list[CityOSAppPackage] = []
-    for agent in plan.get("agents", []):
-        if not isinstance(agent, dict):
-            continue
+    for agent in _execution_agents(plan):
         agent_name = str(agent.get("name") or "agent")
         app_name = _slug(f"{package}-{agent_name}")
         apps.append(_write_agent_app(
