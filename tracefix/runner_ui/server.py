@@ -728,13 +728,18 @@ def _saved_handlers_use_current_smartroom_contract(saved: dict[str, Any]) -> boo
     for app in apps:
         if not isinstance(app, dict):
             continue
-        marker = safe_read_text(Path(str(app.get("path") or "")) / "generated_handler.py")[:80]
+        source = safe_read_text(Path(str(app.get("path") or "")) / "generated_handler.py")
+        marker = source[:80]
+        handler_protocol_ready = marker.startswith("# tracefix-handler-template: smartroom-v8") or (
+            marker.startswith("# tracefix-handler-template: smartroom-v7")
+            and 'result.setdefault("ok", True)' in source
+        )
         if str(app.get("kind") or "") == "agent":
-            if not marker.startswith("# tracefix-handler-template: smartroom-v7"):
+            if not handler_protocol_ready:
                 return False
             found_agent = True
         elif str(app.get("kind") or "") == "monitor":
-            if not (marker.startswith("# tracefix-handler-template: smartroom-v7") or marker.startswith("# tracefix-handler-template: smartroom-v6")):
+            if not (handler_protocol_ready or marker.startswith("# tracefix-handler-template: smartroom-v6")):
                 return False
     return found_agent
 
@@ -1098,6 +1103,9 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         question_context=question_context,
         raw_data_json=raw_data_json,
         recording_override=recording_override,
+        agent_provider=str(payload.get("agentProvider") or payload.get("agent_provider") or "local").strip(),
+        agent_model=str(payload.get("agentModel") or payload.get("agent_model") or "gemma3:4b").strip(),
+        agent_api_key=str(payload.get("agentApiKey") or payload.get("agent_api_key") or "").strip(),
     )
 def _recording_preflight(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
     """Find candidate recordings before verification or agent synthesis."""
@@ -2136,7 +2144,13 @@ class RunnerHandler(BaseHTTPRequestHandler):
             workspace_raw = str(tracefix.get("workspace") or "")
             summary = None
             if workspace_raw and Path(workspace_raw).exists():
-                summary = _synth_workspace_summary(Path(workspace_raw), root=self.root)
+                workspace_path = Path(workspace_raw)
+                summary = _synth_workspace_summary(workspace_path, root=self.root)
+                if not str(cityos.get("manifestPath") or "").strip():
+                    saved = _saved_synthesis_result(workspace_path, self.root)
+                    if saved:
+                        cityos = saved
+                        _tellme_bridge(self.root).record_cityos_result(saved)
             data = {"result": cityos, "workspace": summary}
             self._send_json(_api_envelope(
                 ok=bool(summary or cityos),

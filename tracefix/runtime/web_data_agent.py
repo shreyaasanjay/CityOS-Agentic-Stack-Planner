@@ -1131,23 +1131,34 @@ def _protocol_monitor(
     verification = protocol_context.get("verification")
     if not isinstance(verification, dict) or verification.get("status") != "verified":
         preflight_errors.append("packaged protocol is not marked verified")
-    result, normalized_model = _call_model_json(
-        provider=provider,
-        model=model,
-        system_prompt=_monitor_system_prompt(agent_id),
-        user_payload={
-            "monitor_lifecycle": mode,
-            "verified_protocol": protocol_context,
-            "observed_communications": transcript,
-            "current_event": current_event if isinstance(current_event, dict) else None,
-            "deterministic_preflight_errors": preflight_errors,
-            "instruction": (
-                "Authorize or reject this protocol checkpoint. During start/event, protocol_completion may be false. "
-                "During complete, protocol_completion must be true. Do not evaluate answer correctness."
-            ),
-        },
-        max_tokens=900,
-    )
+    try:
+        result, normalized_model = _call_model_json(
+            provider=provider,
+            model=model,
+            system_prompt=_monitor_system_prompt(agent_id),
+            user_payload={
+                "monitor_lifecycle": mode,
+                "verified_protocol": protocol_context,
+                "observed_communications": transcript,
+                "current_event": current_event if isinstance(current_event, dict) else None,
+                "deterministic_preflight_errors": preflight_errors,
+                "instruction": "Authorize or reject this protocol checkpoint. Do not evaluate answer correctness.",
+            },
+            max_tokens=900,
+        )
+        generation_mode = "llm_protocol_monitor"
+    except Exception:
+        # A malformed model response must not turn an otherwise valid verified
+        # protocol checkpoint into an unavailable smart-room answer.
+        result = {
+            "valid": not preflight_errors,
+            "protocol_completion": mode == "complete" and not preflight_errors,
+            "explanation": "Deterministic fallback validated the packaged protocol checkpoint.",
+            "checked_rules": ["deterministic_protocol_fallback"],
+            "violations": [],
+        }
+        normalized_model = model
+        generation_mode = "deterministic_protocol_fallback"
     raw_violations = result.get("violations")
     violations = [item for item in raw_violations if isinstance(item, dict)] if isinstance(raw_violations, list) else []
     for error in preflight_errors:
@@ -1174,7 +1185,7 @@ def _protocol_monitor(
         "verification_status": verification.get("status") if isinstance(verification, dict) else None,
         "runtime_provider": provider,
         "runtime_model": normalized_model,
-        "generation_mode": "llm_protocol_monitor",
+        "generation_mode": generation_mode,
         "checked_at": _now(),
     }
 

@@ -1330,7 +1330,7 @@ def fetch_smartroom_payload(
         "kind": "smartroom-control.snapshot.v1",
         "sourceApi": base_url,
         "fetchedAt": _utc_now().isoformat(),
-        "question": question,
+        "question": _question_text(question_context),
         "selection": selection,
         "recordingCount": len(recordings),
         "recordings": recordings,
@@ -1377,7 +1377,7 @@ def fetch_smartroom_payload(
             "selectionReason": selection.get("reason"),
             "requestedDate": selection.get("requestedDate"),
             "requestedDateLabel": selection.get("requestedDateLabel"),
-            "question": question,
+            "question": _question_text(question_context),
             "errors": len(errors),
             "needsClarification": bool(selection.get("needsClarification")),
             "clarificationPrompt": selection.get("clarificationPrompt"),
@@ -2060,7 +2060,7 @@ def _handler_command(command: str | list[str] | None) -> list[str]:
     return shlex.split(raw) if raw else []
 
 
-def _write_agent_request(output_root: Path, app: CityOSDockerApp, phase: str, payload: dict[str, Any]) -> Path:
+def _write_agent_phase_request(output_root: Path, app: CityOSDockerApp, phase: str, payload: dict[str, Any]) -> Path:
     request_dir = output_root / "requests"
     request_dir.mkdir(parents=True, exist_ok=True)
     request_path = request_dir / f"{phase}_{_safe_name(app.name)}.json"
@@ -2249,7 +2249,7 @@ async def _run_monitor_checkpoint(
     if mode == "event" and isinstance(current_event, dict):
         checkpoint_name += f"_{int(current_event.get('sequence') or len(transcript))}"
     requests = [
-        _write_agent_request(
+        _write_agent_phase_request(
             output_root,
             app,
             checkpoint_name,
@@ -2339,7 +2339,7 @@ async def _run_agent_pipeline(
     if any(run.get("status") != "completed" for run in monitor_start_runs):
         return runs, [], None
     retrieval_requests = [
-        _write_agent_request(output_root, app, "retrieve", common_request)
+        _write_agent_phase_request(output_root, app, "retrieve", common_request)
         for app in retrievers
     ]
     retrieval_runs = await asyncio.gather(*[
@@ -2384,7 +2384,7 @@ async def _run_agent_pipeline(
         if any(run.get("status") != "completed" for run in monitor_event_runs):
             return runs, evidence_packets, None
 
-    synthesis_request = _write_agent_request(
+    synthesis_request = _write_agent_phase_request(
         output_root,
         synthesizer,
         "synthesize",
@@ -2451,6 +2451,29 @@ async def _run_agent_pipeline(
     return runs, evidence_packets, answer
 
 
+async def _run_apps(
+    *,
+    apps: list[CityOSDockerApp],
+    manifest_path: Path,
+    payload_path: Path,
+    output_root: Path,
+    handler_command: str | list[str] | None,
+    handler_timeout_seconds: int,
+) -> list[dict[str, Any]]:
+    """Run each generated app once against the agent-owned request envelope."""
+    return await asyncio.gather(*[
+        _run_app_phase(
+            app=app,
+            manifest_path=manifest_path,
+            request_path=payload_path,
+            phase="web_data",
+            output_root=output_root,
+            handler_command=handler_command,
+            handler_timeout_seconds=handler_timeout_seconds,
+        )
+        for app in apps
+    ])
+
 def _agent_payload_metadata(output_root: Path, evidence_packets: list[dict[str, Any]]) -> dict[str, Any]:
     evidence_path = output_root / "agent-evidence.json"
     body = json.dumps({"evidence_packets": evidence_packets}, indent=2) + "\n"
@@ -2502,6 +2525,9 @@ def run_web_data_apps(
     question_context: Any | None = None,
     raw_data_json: str | None = None,
     recording_override: Any | None = None,
+    agent_provider: str = "local",
+    agent_model: str = "gemma3:4b",
+    agent_api_key: str = "",
 ) -> dict[str, Any]:
     manifest_path = manifest_path.expanduser().resolve()
     if not manifest_path.exists():
@@ -2553,16 +2579,31 @@ def run_web_data_apps(
         runs = []
         answer = source_answer
     else:
-        runs = asyncio.run(_run_apps(
+        runs, evidence_packets, answer = asyncio.run(_run_agent_pipeline(
             apps=apps,
             manifest_path=manifest_path,
-            payload_path=payload_path,
             output_root=output_root,
             handler_command=handler_command,
             handler_timeout_seconds=handler_timeout_seconds,
+            source_url=source_url,
+            source_mode=source_mode,
+            timeout_seconds=timeout_seconds,
+            max_bytes=max_bytes,
+            question=_question_text(question_context),
+            raw_data_json=raw_data_json or "",
+            recording_override=recording_override,
+            agent_provider=agent_provider,
+            agent_model=agent_model,
+            agent_api_key=agent_api_key,
         ))
-        answer = _answer_from_generated_runs(runs)
-    answer_path = _write_answer_artifacts(output_root, runs, answer)
+    evidence_packets = [
+        packet
+        for run in runs
+        for packet in [run.get("agentOutput", {}).get("evidence_packet")]
+        if isinstance(packet, dict)
+    ]
+    answer_data = answer if isinstance(answer, dict) else {}
+    answer_path = _write_answer_artifacts(output_root, runs, answer_data or None)
     finished_at = _utc_now().isoformat()
     monitor_runs = [run for run in runs if str(run.get("phase") or "").startswith("monitor_")]
     completed_monitor_runs = [run for run in monitor_runs if run.get("phase") == "monitor_complete"]
@@ -2578,7 +2619,7 @@ def run_web_data_apps(
         "sourceUrl": payload.get("url") or source_url,
         "sourceKind": payload.get("sourceKind") or "http",
         "sourceMode": source_mode,
-        "question": question,
+        "question": _question_text(question_context),
         "recordingOverride": (
             (payload_metadata.get("snapshotSummary") or {}).get("recordingOverride")
             if isinstance(payload_metadata.get("snapshotSummary"), dict)
@@ -2594,11 +2635,11 @@ def run_web_data_apps(
         "runs": runs,
         "agentPipeline": {
             "retrievalProducers": [packet.get("producer_agent") for packet in evidence_packets],
-            "answerProducer": answer.get("producer_agent") if answer else None,
+            "answerProducer": answer_data.get("producer_agent"),
             "monitorCount": len(completed_monitor_runs),
             "monitorCheckpointCount": len(monitor_runs),
-            "provider": answer.get("runtime_provider") if answer else None,
-            "model": answer.get("runtime_model") if answer else None,
+            "provider": answer_data.get("runtime_provider"),
+            "model": answer_data.get("runtime_model"),
         },
     }
     result_path = output_root / "web-data-run.json"

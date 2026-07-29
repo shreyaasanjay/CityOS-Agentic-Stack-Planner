@@ -18,7 +18,17 @@ interface VerificationStatus {
 }
 
 async function readJson<T>(response: Response): Promise<T> {
-  const payload = await response.json() as T & { error?: string }
+const body = await response.text()
+  if (!body.trim()) {
+    throw new Error('The local workflow service returned an empty response. Please try again.')
+  }
+
+  let payload: T & { error?: string }
+  try {
+    payload = JSON.parse(body) as T & { error?: string }
+  } catch {
+    throw new Error('The local workflow service returned an invalid response. Please try again.')
+  }
   if (!response.ok) {
     throw new Error(payload.error || 'The local workflow request failed.')
   }
@@ -64,6 +74,9 @@ const httpQueryApi: QueryApi = {
       throw new Error('Add an OpenAI API key in Connection setup before submitting an LLM request.')
     }
 
+    const verificationKey = req.tracefixApiKey?.trim()
+      || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : '')
+    const cityosAgentKey = req.cityosAgentApiKey?.trim() || verificationKey
     report(options, 'planning')
     const plan = await postJson<QueryResult>('/api/tellme/query', req, options?.signal)
     if (!plan.workflow?.requiresVerification) return plan
@@ -140,8 +153,17 @@ const httpQueryApi: QueryApi = {
     }, options?.signal)
     report(options, 'answering', verification.runId)
     return postJson<QueryResult>('/api/tellme/answer', {
-      query: req.query, mirrorApiUrl: req.mirrorApiUrl, model: req.tracefixModel,
-      timestamp: req.timestamp, recordingOverride: { recordingId },
+      query: req.query,
+      mirrorApiUrl: req.mirrorApiUrl,
+      agentProvider: req.cityosAgentProvider,
+      agentModel: req.cityosAgentModel,
+      agentApiKey: req.cityosAgentApiKey?.trim()
+        || req.tracefixApiKey?.trim()
+        || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : ''),
+      model: req.tracefixModel,
+      language: req.language,
+      timestamp: req.timestamp,
+      recordingOverride: { recordingId },
     }, options?.signal)
   },
 

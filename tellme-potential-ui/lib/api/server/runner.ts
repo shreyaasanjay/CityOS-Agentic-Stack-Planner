@@ -36,6 +36,20 @@ export async function runnerJson(
     cache: 'no-store',
     signal: AbortSignal.timeout(timeoutMs),
   })
-  const payload = await response.json() as JsonObject
+const body = await response.text()
+  if (!body.trim()) {
+    throw new Error(`TraceFix returned an empty response for ${path}.`)
+  }
+
+  let payload: JsonObject
+  try {
+    const parsed: unknown = JSON.parse(body)
+    if (!asObject(parsed)) {
+      throw new Error("The response was not a JSON object.")
+    }
+    payload = parsed as JsonObject
+  } catch {
+    throw new Error(`TraceFix returned an invalid response for ${path}.`)
+  }
   return { response, payload }
 }

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { asObject, asString, runnerJson } from '@/lib/api/server/runner'
 import type { Agent, QueryRequest, QueryResult } from '@/lib/api/types'
-import type { LanguageMode } from '@/lib/i18n'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -40,9 +39,7 @@ function safeResult(
   envelope: JsonObject,
   requestedMode: QueryRequest['mode'],
   requestedModel: string,
-  language: LanguageMode,
 ): QueryResult {
-  const copy = PLANNER_COPY[language]
   const data = asObject(envelope.data)
   const route = asObject(data.route_decision)
   const privacy = asObject(data.privacy_guardrail)
@@ -53,27 +50,27 @@ function safeResult(
 
   const answer = asString(data.chat_answer)
     || (privacyStatus === 'blocked' || status === 'not_answerable'
-      ? copy.blocked
+      ? 'This request could not proceed because it did not pass the privacy guardrail.'
       : requiresTracefix
-        ? copy.ready
-        : copy.processed)
+        ? 'Your request passed the privacy check and is ready for verification. A data-backed answer has not been generated yet.'
+        : 'Your request was processed within the configured privacy boundary.')
 
   const agents: Agent[] = [
     {
       id: 'tellme',
-      name: copy.plannerName,
-      type: copy.plannerType,
-      role: copy.plannerRole,
-      status: privacyStatus === 'passed' ? copy.privacyPassed : copy.reviewComplete,
+      name: 'TeLLMe planner',
+      type: 'Planning service',
+      role: 'Scoped the request and applied privacy rules.',
+      status: privacyStatus === 'passed' ? 'Privacy check passed' : 'Review complete',
     },
   ]
   if (requiresTracefix) {
     agents.push({
       id: 'tracefix',
-      name: copy.tracefixName,
-      type: copy.tracefixType,
-      role: copy.tracefixRole,
-      status: copy.verificationRequired,
+      name: 'TraceFix verifier',
+      type: 'Verification service',
+      role: 'Will verify the generated task before a data-backed answer is returned.',
+      status: 'Verification required',
     })
   }
 
@@ -82,13 +79,13 @@ function safeResult(
     answer,
     keyPoints: [
       privacyStatus === 'passed'
-        ? copy.passedPoint
+        ? 'The request passed the privacy guardrail.'
         : privacyStatus === 'blocked'
-          ? copy.blockedPoint
-          : copy.checkedPoint,
+          ? 'The privacy guardrail stopped this request.'
+          : 'The request was checked against the privacy guardrail.',
       requiresTracefix
-        ? copy.notGeneratedPoint
-        : copy.completedPoint,
+        ? 'A verified smart-room answer has not been generated yet.'
+        : 'TeLLMe completed the available planning step.',
     ],
     confidence: asConfidence(answerPacket.confidence),
     agents,
@@ -123,7 +120,6 @@ export async function POST(request: NextRequest) {
   }
   const mode: QueryRequest['mode'] = body.mode === 'deterministic' ? 'deterministic' : 'llm'
   const model = body.model?.trim() || 'gpt-4.1-mini'
-  const language = normalizedLanguage(body.language)
 
   try {
     const { response: upstream, payload: envelope } = await runnerJson('/api/tellme/query', {

@@ -191,6 +191,8 @@ function aggregateAnswer(
 }
 
 function webRunFailure(webRun: JsonObject): string {
+  const upstreamError = asString(webRun.error)
+  if (upstreamError) return upstreamError
   const direct = asArray(webRun.errors).map(asString).find(Boolean)
   if (direct) return direct
   for (const run of asArray(webRun.runs).map(asObject)) {
@@ -199,7 +201,7 @@ function webRunFailure(webRun: JsonObject): string {
   }
   return 'The generated smart-room agent did not produce an answer.'
 }
-function selectionResult(webRun: JsonObject, query: string, model: string): QueryResult {
+function selectionResult(webRun: JsonObject, model: string, language: LanguageMode): QueryResult {
   const answer = asObject(webRun.answer)
   const fallbackPrompt = language === 'es'
     ? 'Elige la grabación que mejor coincida con tu solicitud.'
