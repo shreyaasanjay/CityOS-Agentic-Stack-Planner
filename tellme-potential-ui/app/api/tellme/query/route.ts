@@ -1,78 +1,34 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 import { asObject, asString, runnerJson } from '@/lib/api/server/runner'
 import type { Agent, QueryRequest, QueryResult } from '@/lib/api/types'
-import type { LanguageMode } from '@/lib/i18n'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 type JsonObject = Record<string, unknown>
 
-const PLANNER_COPY = {
-  en: {
-    blocked: 'This request could not proceed because it did not pass the privacy guardrail.',
-    ready: 'Your request passed the privacy check and is ready for verification. A data-backed answer has not been generated yet.',
-    processed: 'Your request was processed within the configured privacy boundary.',
-    plannerName: 'TeLLMe planner',
-    plannerType: 'Planning service',
-    plannerRole: 'Scoped the request and applied privacy rules.',
-    privacyPassed: 'Privacy check passed',
-    reviewComplete: 'Review complete',
-    tracefixName: 'TraceFix verifier',
-    tracefixType: 'Verification service',
-    tracefixRole: 'Will verify the generated task before a data-backed answer is returned.',
-    verificationRequired: 'Verification required',
-    passedPoint: 'The request passed the privacy guardrail.',
-    blockedPoint: 'The privacy guardrail stopped this request.',
-    checkedPoint: 'The request was checked against the privacy guardrail.',
-    notGeneratedPoint: 'A verified smart-room answer has not been generated yet.',
-    completedPoint: 'TeLLMe completed the available planning step.',
-  },
-  es: {
-    blocked: 'Esta solicitud no pudo continuar porque no superó el control de privacidad.',
-    ready: 'La solicitud superó el control de privacidad y está lista para verificación. Aún no se ha generado una respuesta basada en datos.',
-    processed: 'La solicitud se procesó dentro del límite de privacidad configurado.',
-    plannerName: 'Planificador TeLLMe',
-    plannerType: 'Servicio de planificación',
-    plannerRole: 'Limitó la solicitud y aplicó las reglas de privacidad.',
-    privacyPassed: 'Control de privacidad aprobado',
-    reviewComplete: 'Revisión completa',
-    tracefixName: 'Verificador TraceFix',
-    tracefixType: 'Servicio de verificación',
-    tracefixRole: 'Verificará la tarea antes de devolver una respuesta basada en datos.',
-    verificationRequired: 'Verificación necesaria',
-    passedPoint: 'La solicitud superó el control de privacidad.',
-    blockedPoint: 'El control de privacidad detuvo esta solicitud.',
-    checkedPoint: 'La solicitud fue revisada según el control de privacidad.',
-    notGeneratedPoint: 'Aún no se ha generado una respuesta verificada de la sala inteligente.',
-    completedPoint: 'TeLLMe completó el paso de planificación disponible.',
-  },
-  hi: {
-    blocked: 'यह अनुरोध गोपनीयता जांच पास नहीं कर सका, इसलिए आगे नहीं बढ़ा।',
-    ready: 'अनुरोध ने गोपनीयता जांच पास कर ली है और सत्यापन के लिए तैयार है। डेटा-आधारित जवाब अभी नहीं बना है।',
-    processed: 'अनुरोध को तय गोपनीयता सीमा के अंदर संसाधित किया गया।',
-    plannerName: 'TeLLMe योजनाकार',
-    plannerType: 'योजना सेवा',
-    plannerRole: 'अनुरोध सीमित किया और गोपनीयता नियम लागू किए।',
-    privacyPassed: 'गोपनीयता जांच पास',
-    reviewComplete: 'समीक्षा पूरी',
-    tracefixName: 'TraceFix सत्यापक',
-    tracefixType: 'सत्यापन सेवा',
-    tracefixRole: 'डेटा-आधारित जवाब से पहले बनाए गए कार्य को सत्यापित करेगा।',
-    verificationRequired: 'सत्यापन आवश्यक',
-    passedPoint: 'अनुरोध ने गोपनीयता जांच पास की।',
-    blockedPoint: 'गोपनीयता जांच ने यह अनुरोध रोक दिया।',
-    checkedPoint: 'अनुरोध की गोपनीयता नियमों के अनुसार जांच हुई।',
-    notGeneratedPoint: 'सत्यापित स्मार्ट रूम जवाब अभी नहीं बना है।',
-    completedPoint: 'TeLLMe ने उपलब्ध योजना चरण पूरा किया।',
-  },
+const EXPLICIT_DATE = /\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:,?\s+\d{2,4})?)\b/i
+const RELATIVE_DATE = /\b(?:today|yesterday|tomorrow|last\s+(?:night|week|month)|this\s+(?:morning|afternoon|evening|week)|on\s+\w+day)\b/i
+
+function needsRecordingDate(query: string, timestamp?: string) {
+  return !timestamp?.trim() && !EXPLICIT_DATE.test(query) && !RELATIVE_DATE.test(query)
 }
 
-function normalizedLanguage(language: QueryRequest['language'] | undefined): LanguageMode {
-  return language === 'es' || language === 'hi' ? language : 'en'
+function dateFollowUp(query: string, model: string): QueryResult {
+  return {
+    id: `tellme_date_${Date.now()}`,
+    answer: 'Which date should I check? I need a date before I can choose the exact smart-room recording for this request.',
+    keyPoints: ['No recording was opened.', 'Reply with a date, for example: July 21, 2026.'],
+    confidence: null,
+    agents: [{ id: 'tellme', name: 'TeLLMe planner', type: 'Planning service', role: 'Requested the missing recording date before retrieval.', status: 'Waiting for date' }],
+    evidence: [],
+    guidelines: [],
+    model,
+    workflow: { requiresVerification: false },
+    createdAt: new Date().toISOString(),
+  }
 }
-
 function asConfidence(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(0, Math.min(1, value))
@@ -83,9 +39,7 @@ function safeResult(
   envelope: JsonObject,
   requestedMode: QueryRequest['mode'],
   requestedModel: string,
-  language: LanguageMode,
 ): QueryResult {
-  const copy = PLANNER_COPY[language]
   const data = asObject(envelope.data)
   const route = asObject(data.route_decision)
   const privacy = asObject(data.privacy_guardrail)
@@ -96,27 +50,27 @@ function safeResult(
 
   const answer = asString(data.chat_answer)
     || (privacyStatus === 'blocked' || status === 'not_answerable'
-      ? copy.blocked
+      ? 'This request could not proceed because it did not pass the privacy guardrail.'
       : requiresTracefix
-        ? copy.ready
-        : copy.processed)
+        ? 'Your request passed the privacy check and is ready for verification. A data-backed answer has not been generated yet.'
+        : 'Your request was processed within the configured privacy boundary.')
 
   const agents: Agent[] = [
     {
       id: 'tellme',
-      name: copy.plannerName,
-      type: copy.plannerType,
-      role: copy.plannerRole,
-      status: privacyStatus === 'passed' ? copy.privacyPassed : copy.reviewComplete,
+      name: 'TeLLMe planner',
+      type: 'Planning service',
+      role: 'Scoped the request and applied privacy rules.',
+      status: privacyStatus === 'passed' ? 'Privacy check passed' : 'Review complete',
     },
   ]
   if (requiresTracefix) {
     agents.push({
       id: 'tracefix',
-      name: copy.tracefixName,
-      type: copy.tracefixType,
-      role: copy.tracefixRole,
-      status: copy.verificationRequired,
+      name: 'TraceFix verifier',
+      type: 'Verification service',
+      role: 'Will verify the generated task before a data-backed answer is returned.',
+      status: 'Verification required',
     })
   }
 
@@ -125,13 +79,13 @@ function safeResult(
     answer,
     keyPoints: [
       privacyStatus === 'passed'
-        ? copy.passedPoint
+        ? 'The request passed the privacy guardrail.'
         : privacyStatus === 'blocked'
-          ? copy.blockedPoint
-          : copy.checkedPoint,
+          ? 'The privacy guardrail stopped this request.'
+          : 'The request was checked against the privacy guardrail.',
       requiresTracefix
-        ? copy.notGeneratedPoint
-        : copy.completedPoint,
+        ? 'A verified smart-room answer has not been generated yet.'
+        : 'TeLLMe completed the available planning step.',
     ],
     confidence: asConfidence(answerPacket.confidence),
     agents,
@@ -143,7 +97,7 @@ function safeResult(
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   let body: QueryRequest
   try {
     body = await request.json() as QueryRequest
@@ -155,16 +109,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Enter a question before submitting.' }, { status: 400 })
   }
 
+  const pendingQuery = request.cookies.get('tellme_pending_recording_question')?.value || ''
+  const dateReply = EXPLICIT_DATE.test(body.query) || RELATIVE_DATE.test(body.query) || Boolean(body.timestamp?.trim())
+  const effectiveQuery = pendingQuery && dateReply ? `${pendingQuery} on ${body.query}` : body.query
+
+  if (needsRecordingDate(effectiveQuery, body.timestamp)) {
+    const response = NextResponse.json(dateFollowUp(effectiveQuery, body.model?.trim() || 'TeLLMe'), { status: 200 })
+    response.cookies.set('tellme_pending_recording_question', effectiveQuery, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 900 })
+    return response
+  }
   const mode: QueryRequest['mode'] = body.mode === 'deterministic' ? 'deterministic' : 'llm'
   const model = body.model?.trim() || 'gpt-4.1-mini'
-  const language = normalizedLanguage(body.language)
 
   try {
     const { response: upstream, payload: envelope } = await runnerJson('/api/tellme/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        query: body.query.trim(),
+        query: effectiveQuery.trim(),
         space_id: body.spaceId?.trim() || 'smart_room_1',
         timestamp: body.timestamp?.trim() || null,
         mode,
@@ -181,7 +143,9 @@ export async function POST(request: Request) {
         { status: upstream.status >= 400 ? upstream.status : 502 },
       )
     }
-    return NextResponse.json(safeResult(envelope, mode, model, language), { status: 201 })
+    const response = NextResponse.json(safeResult(envelope, mode, model), { status: 201 })
+    response.cookies.delete('tellme_pending_recording_question')
+    return response
   } catch {
     return NextResponse.json(
       { error: 'The local TeLLMe service is unavailable.' },

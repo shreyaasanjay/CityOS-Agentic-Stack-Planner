@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import mimetypes
 import re
 import shlex
@@ -24,7 +25,7 @@ from urllib.parse import quote, urlencode, urlparse, urlunparse
 from tracefix.runtime.cityos_agent_harness import CityOSAgentHarness, CityOSHarnessConfig
 from tracefix.runtime.cityos_docker_harness import CityOSDockerApp, load_manifest, manifest_apps
 
-_DEFAULT_SOURCE_URL = "https://smartroom-mirror.vercel.app/api/v1"
+_DEFAULT_SOURCE_URL = "http://172.16.60.239:3000/api/v1"
 _DEFAULT_MAX_BYTES = 50 * 1024 * 1024
 _SMARTROOM_MODELS = ("action-hmdb", "action", "yolo26l", "yolo26n-pose")
 _ACTIVITY_LABEL_KEYS = {
@@ -478,7 +479,7 @@ def _recording_option(recording: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _recording_options(recordings: list[dict[str, Any]], limit: int = 12) -> list[dict[str, Any]]:
+def _recording_options(recordings: list[dict[str, Any]], limit: int = 100) -> list[dict[str, Any]]:
     return [_recording_option(recording) for recording in recordings[:limit]]
 
 
@@ -1329,7 +1330,7 @@ def fetch_smartroom_payload(
         "kind": "smartroom-control.snapshot.v1",
         "sourceApi": base_url,
         "fetchedAt": _utc_now().isoformat(),
-        "question": question,
+        "question": _question_text(question_context),
         "selection": selection,
         "recordingCount": len(recordings),
         "recordings": recordings,
@@ -1376,7 +1377,7 @@ def fetch_smartroom_payload(
             "selectionReason": selection.get("reason"),
             "requestedDate": selection.get("requestedDate"),
             "requestedDateLabel": selection.get("requestedDateLabel"),
-            "question": question,
+            "question": _question_text(question_context),
             "errors": len(errors),
             "needsClarification": bool(selection.get("needsClarification")),
             "clarificationPrompt": selection.get("clarificationPrompt"),
@@ -2005,6 +2006,45 @@ def write_web_payload(payload: dict[str, Any], output_root: Path) -> dict[str, A
     return metadata
 
 
+
+def _write_agent_request(
+    *,
+    output_root: Path,
+    source_url: str,
+    source_mode: str,
+    question_context: Any | None,
+    raw_data_json: str | None,
+    recording_override: Any | None,
+) -> tuple[Path, dict[str, Any]]:
+    """The harness transports instructions only; generated agents own retrieval and answers."""
+    source_dir = output_root / "source_data"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    request = {
+        "sourceUrl": source_url,
+        "sourceMode": source_mode,
+        "question": _question_text(question_context),
+        "rawDataJson": raw_data_json or "",
+        "recordingOverride": _normalize_recording_override(recording_override),
+        "requestedAt": _utc_now().isoformat(),
+    }
+    path = source_dir / f"{_utc_now().strftime('%Y%m%d-%H%M%S-%f')}_agent_request.json"
+    path.write_text(json.dumps(request, indent=2) + "\n", encoding="utf-8")
+    return path, {"url": source_url, "sourceKind": "agent-owned", "payloadPath": str(path), "metadataPath": None, "sizeBytes": path.stat().st_size}
+
+
+def _answer_from_generated_runs(runs: list[dict[str, Any]]) -> Any:
+    for run in reversed(runs):
+        if (run.get("app") or {}).get("kind") == "monitor":
+            continue
+        for record in reversed(run.get("handlerRecords") or []):
+            try:
+                output = json.loads(Path(record).read_text(encoding="utf-8")).get("handler", {}).get("output", "")
+                value = json.loads(output.strip().splitlines()[-1])
+                return value.get("answer", value) if isinstance(value, dict) else value
+            except (OSError, ValueError, json.JSONDecodeError, IndexError):
+                continue
+    return None
+
 def _resolve_app_path(app: CityOSDockerApp, manifest_path: Path) -> Path:
     path = app.path.expanduser()
     return path.resolve() if path.is_absolute() else (manifest_path.parent / path).resolve()
@@ -2020,7 +2060,7 @@ def _handler_command(command: str | list[str] | None) -> list[str]:
     return shlex.split(raw) if raw else []
 
 
-def _write_agent_request(output_root: Path, app: CityOSDockerApp, phase: str, payload: dict[str, Any]) -> Path:
+def _write_agent_phase_request(output_root: Path, app: CityOSDockerApp, phase: str, payload: dict[str, Any]) -> Path:
     request_dir = output_root / "requests"
     request_dir.mkdir(parents=True, exist_ok=True)
     request_path = request_dir / f"{phase}_{_safe_name(app.name)}.json"
@@ -2072,7 +2112,7 @@ async def _run_app_phase(
             output_dir=output_dir,
             ready_dir=output_root / "ready",
             startup_cmd=[],
-            handler_cmd=_handler_command(handler_command),
+            handler_cmd=_handler_command(handler_command) or [sys.executable, str(app_path / "generated_handler.py")],
             handler_timeout=float(handler_timeout_seconds),
             verbose=False,
             task_id="",
@@ -2209,7 +2249,7 @@ async def _run_monitor_checkpoint(
     if mode == "event" and isinstance(current_event, dict):
         checkpoint_name += f"_{int(current_event.get('sequence') or len(transcript))}"
     requests = [
-        _write_agent_request(
+        _write_agent_phase_request(
             output_root,
             app,
             checkpoint_name,
@@ -2299,7 +2339,7 @@ async def _run_agent_pipeline(
     if any(run.get("status") != "completed" for run in monitor_start_runs):
         return runs, [], None
     retrieval_requests = [
-        _write_agent_request(output_root, app, "retrieve", common_request)
+        _write_agent_phase_request(output_root, app, "retrieve", common_request)
         for app in retrievers
     ]
     retrieval_runs = await asyncio.gather(*[
@@ -2344,7 +2384,7 @@ async def _run_agent_pipeline(
         if any(run.get("status") != "completed" for run in monitor_event_runs):
             return runs, evidence_packets, None
 
-    synthesis_request = _write_agent_request(
+    synthesis_request = _write_agent_phase_request(
         output_root,
         synthesizer,
         "synthesize",
@@ -2411,6 +2451,29 @@ async def _run_agent_pipeline(
     return runs, evidence_packets, answer
 
 
+async def _run_apps(
+    *,
+    apps: list[CityOSDockerApp],
+    manifest_path: Path,
+    payload_path: Path,
+    output_root: Path,
+    handler_command: str | list[str] | None,
+    handler_timeout_seconds: int,
+) -> list[dict[str, Any]]:
+    """Run each generated app once against the agent-owned request envelope."""
+    return await asyncio.gather(*[
+        _run_app_phase(
+            app=app,
+            manifest_path=manifest_path,
+            request_path=payload_path,
+            phase="web_data",
+            output_root=output_root,
+            handler_command=handler_command,
+            handler_timeout_seconds=handler_timeout_seconds,
+        )
+        for app in apps
+    ])
+
 def _agent_payload_metadata(output_root: Path, evidence_packets: list[dict[str, Any]]) -> dict[str, Any]:
     evidence_path = output_root / "agent-evidence.json"
     body = json.dumps({"evidence_packets": evidence_packets}, indent=2) + "\n"
@@ -2462,8 +2525,8 @@ def run_web_data_apps(
     question_context: Any | None = None,
     raw_data_json: str | None = None,
     recording_override: Any | None = None,
-    agent_provider: str = "deterministic",
-    agent_model: str = "",
+    agent_provider: str = "local",
+    agent_model: str = "gemma3:4b",
     agent_api_key: str = "",
 ) -> dict[str, Any]:
     manifest_path = manifest_path.expanduser().resolve()
@@ -2480,30 +2543,67 @@ def run_web_data_apps(
     output_root.mkdir(parents=True, exist_ok=True)
 
     started_at = _utc_now().isoformat()
-    question = _question_text(question_context)
-    runs, evidence_packets, answer = asyncio.run(_run_agent_pipeline(
-        apps=apps,
-        manifest_path=manifest_path,
+    payload = fetch_source_payload(
+        source_url,
         output_root=output_root,
-        handler_command=handler_command,
-        handler_timeout_seconds=handler_timeout_seconds,
-        source_url=source_url,
         source_mode=source_mode,
         timeout_seconds=timeout_seconds,
         max_bytes=max_bytes,
-        question=question,
-        raw_data_json=str(raw_data_json or ""),
+        question_context=question_context,
+        raw_data_json=raw_data_json,
         recording_override=recording_override,
-        agent_provider=str(agent_provider or "deterministic").strip().lower(),
-        agent_model=str(agent_model or "").strip(),
-        agent_api_key=str(agent_api_key or "").strip(),
-    ))
-    payload_metadata = _agent_payload_metadata(output_root, evidence_packets)
-    answer_path = None
-    if answer is not None:
-        answer_file = output_root / "smartroom-answer.json"
-        answer_file.write_text(json.dumps(answer, indent=2) + "\n", encoding="utf-8")
-        answer_path = str(answer_file)
+    )
+    source_answer = payload.get("answer")
+    needs_recording_choice = (
+        isinstance(source_answer, dict)
+        and source_answer.get("needsClarification") is True
+    )
+    # The preflight uses the server's recording index only. Once an exact
+    # recording is selected, hand an instruction envelope to the generated
+    # agent so it owns retrieval and analysis of the chosen data.
+    if needs_recording_choice:
+        payload_metadata = write_web_payload(payload, output_root)
+        payload_path = Path(str(payload_metadata["payloadPath"]))
+    else:
+        payload_path, payload_metadata = _write_agent_request(
+            output_root=output_root,
+            source_url=source_url,
+            source_mode=source_mode,
+            question_context=question_context,
+            raw_data_json=raw_data_json,
+            recording_override=recording_override,
+        )
+    # A selection is returned directly rather than allowing a generated app to
+    # overwrite it with an answer from incomplete context.
+    if needs_recording_choice:
+        runs = []
+        answer = source_answer
+    else:
+        runs, evidence_packets, answer = asyncio.run(_run_agent_pipeline(
+            apps=apps,
+            manifest_path=manifest_path,
+            output_root=output_root,
+            handler_command=handler_command,
+            handler_timeout_seconds=handler_timeout_seconds,
+            source_url=source_url,
+            source_mode=source_mode,
+            timeout_seconds=timeout_seconds,
+            max_bytes=max_bytes,
+            question=_question_text(question_context),
+            raw_data_json=raw_data_json or "",
+            recording_override=recording_override,
+            agent_provider=agent_provider,
+            agent_model=agent_model,
+            agent_api_key=agent_api_key,
+        ))
+    evidence_packets = [
+        packet
+        for run in runs
+        for packet in [run.get("agentOutput", {}).get("evidence_packet")]
+        if isinstance(packet, dict)
+    ]
+    answer_data = answer if isinstance(answer, dict) else {}
+    answer_path = _write_answer_artifacts(output_root, runs, answer_data or None)
     finished_at = _utc_now().isoformat()
     monitor_runs = [run for run in runs if str(run.get("phase") or "").startswith("monitor_")]
     completed_monitor_runs = [run for run in monitor_runs if run.get("phase") == "monitor_complete"]
@@ -2513,13 +2613,13 @@ def run_web_data_apps(
         for run in monitor_runs
     )
     result = {
-        "ok": bool(runs) and answer is not None
-        and all(run.get("status") == "completed" for run in runs)
-        and monitors_valid,
-        "sourceUrl": payload_metadata.get("url") or source_url,
-        "sourceKind": payload_metadata.get("sourceKind") or "unknown",
+        "ok": needs_recording_choice or (
+            bool(runs) and all(run.get("status") == "completed" for run in runs)
+        ),
+        "sourceUrl": payload.get("url") or source_url,
+        "sourceKind": payload.get("sourceKind") or "http",
         "sourceMode": source_mode,
-        "question": question,
+        "question": _question_text(question_context),
         "recordingOverride": (
             (payload_metadata.get("snapshotSummary") or {}).get("recordingOverride")
             if isinstance(payload_metadata.get("snapshotSummary"), dict)
@@ -2535,11 +2635,11 @@ def run_web_data_apps(
         "runs": runs,
         "agentPipeline": {
             "retrievalProducers": [packet.get("producer_agent") for packet in evidence_packets],
-            "answerProducer": answer.get("producer_agent") if answer else None,
+            "answerProducer": answer_data.get("producer_agent"),
             "monitorCount": len(completed_monitor_runs),
             "monitorCheckpointCount": len(monitor_runs),
-            "provider": answer.get("runtime_provider") if answer else None,
-            "model": answer.get("runtime_model") if answer else None,
+            "provider": answer_data.get("runtime_provider"),
+            "model": answer_data.get("runtime_model"),
         },
     }
     result_path = output_root / "web-data-run.json"

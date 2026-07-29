@@ -18,7 +18,17 @@ interface VerificationStatus {
 }
 
 async function readJson<T>(response: Response): Promise<T> {
-  const payload = await response.json() as T & { error?: string }
+const body = await response.text()
+  if (!body.trim()) {
+    throw new Error('The local workflow service returned an empty response. Please try again.')
+  }
+
+  let payload: T & { error?: string }
+  try {
+    payload = JSON.parse(body) as T & { error?: string }
+  } catch {
+    throw new Error('The local workflow service returned an invalid response. Please try again.')
+  }
   if (!response.ok) {
     throw new Error(payload.error || 'The local workflow request failed.')
   }
@@ -64,19 +74,20 @@ const httpQueryApi: QueryApi = {
       throw new Error('Add an OpenAI API key in Connection setup before submitting an LLM request.')
     }
 
+    const verificationKey = req.tracefixApiKey?.trim()
+      || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : '')
+    const cityosAgentKey = req.cityosAgentApiKey?.trim() || verificationKey
     report(options, 'planning')
     const plan = await postJson<QueryResult>('/api/tellme/query', req, options?.signal)
     if (!plan.workflow?.requiresVerification) return plan
 
-    const verificationKey = req.tracefixApiKey?.trim()
-      || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : '')
-    if (req.tracefixProvider !== 'local' && !verificationKey) {
-      throw new Error('Add a TraceFix API key in Connection setup before running verification.')
-    }
-    const cityosAgentKey = req.cityosAgentApiKey?.trim() || ''
-    if (req.cityosAgentProvider !== 'local' && !cityosAgentKey) {
-      throw new Error('Add a CityOS agent API key in TraceFix setup before running the generated agents.')
-    }
+    const recordingPreflight = await postJson<{ needsRecordingSelection: boolean; result?: QueryResult }>('/api/tellme/recordings', {
+      query: req.query,
+      mirrorApiUrl: req.mirrorApiUrl,
+      model: req.tracefixModel,
+      timestamp: req.timestamp,
+    }, options?.signal)
+    if (recordingPreflight.needsRecordingSelection && recordingPreflight.result) return recordingPreflight.result
 
     report(options, 'verifying')
     const verification = await postJson<VerificationStart>('/api/tellme/verify', {
@@ -100,7 +111,12 @@ const httpQueryApi: QueryApi = {
     if (Date.now() >= deadline) throw new Error('TraceFix verification timed out.')
 
     report(options, 'synthesizing', verification.runId)
-    await postJson<{ ok: true }>('/api/tellme/synthesize', {}, options?.signal)
+    await postJson<{ ok: true }>('/api/tellme/synthesize', {
+      provider: req.tracefixProvider,
+      model: req.tracefixModel,
+      apiKey: req.tracefixApiKey?.trim()
+        || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : ''),
+    }, options?.signal)
 
     report(options, 'answering', verification.runId)
     return postJson<QueryResult>('/api/tellme/answer', {
@@ -115,17 +131,39 @@ const httpQueryApi: QueryApi = {
   },
 
   async selectRecording(req: QueryRequest, recordingId: string, options?: QuerySubmitOptions): Promise<QueryResult> {
-    report(options, 'answering')
+    report(options, 'verifying')
+    const verification = await postJson<VerificationStart>('/api/tellme/verify', {
+      provider: req.tracefixProvider,
+      model: req.tracefixModel,
+      apiKey: req.tracefixApiKey?.trim() || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : ''),
+    }, options?.signal)
+    const deadline = Date.now() + 30 * 60 * 1000
+    while (Date.now() < deadline) {
+      await wait(1200, options?.signal)
+      const response = await fetch(`/api/tellme/verify/${verification.runId}`, { cache: 'no-store', signal: options?.signal })
+      const status = await readJson<VerificationStatus>(response)
+      if (status.failed) throw new Error('TraceFix could not verify this request.')
+      if (status.completed) break
+    }
+    if (Date.now() >= deadline) throw new Error('TraceFix verification timed out.')
+    report(options, 'synthesizing', verification.runId)
+    await postJson<{ ok: true }>('/api/tellme/synthesize', {
+      provider: req.tracefixProvider, model: req.tracefixModel,
+      apiKey: req.tracefixApiKey?.trim() || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : ''),
+    }, options?.signal)
+    report(options, 'answering', verification.runId)
     return postJson<QueryResult>('/api/tellme/answer', {
       query: req.query,
       mirrorApiUrl: req.mirrorApiUrl,
-      model: req.tracefixModel,
-      timestamp: req.timestamp,
-      recordingOverride: { recordingId },
-      language: req.language,
       agentProvider: req.cityosAgentProvider,
       agentModel: req.cityosAgentModel,
-      agentApiKey: req.cityosAgentApiKey,
+      agentApiKey: req.cityosAgentApiKey?.trim()
+        || req.tracefixApiKey?.trim()
+        || (req.tracefixProvider === 'openai' ? req.openaiApiKey?.trim() : ''),
+      model: req.tracefixModel,
+      language: req.language,
+      timestamp: req.timestamp,
+      recordingOverride: { recordingId },
     }, options?.signal)
   },
 

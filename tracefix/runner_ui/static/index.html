@@ -29,7 +29,7 @@
             <div class="brand-mark">TF</div>
             <div class="brand-copy">
               <h1>Smart Room Application Planner</h1>
-              <p>TeLLMe intent to verified TraceFix plan to CityOS artifacts</p>
+              <p>TeLLMe intent to verified TraceFix plan to agent artifacts</p>
               <p id="uiBuildStamp" class="build-stamp">UI build loading...</p>
             </div>
           </div>
@@ -42,7 +42,7 @@
         <div class="workflow-switch" role="group" aria-label="Workflow">
           <button class="mode-button active" type="button" data-workflow="tellme">TeLLMe</button>
           <button class="mode-button" type="button" data-workflow="planner">TraceFix</button>
-          <button class="mode-button" type="button" data-workflow="synth">CityOS Synthesizer</button>
+          <button class="mode-button" type="button" data-workflow="synth">Agent Synthesizer</button>
         </div>
 
         <form id="tellmeForm" class="run-form">
@@ -340,7 +340,7 @@
           <section class="sidebar-section action-section">
             <h2>Actions</h2>
             <div class="section-body">
-              <button id="synthGenerate" class="primary-button" type="button">Generate CityOS Artifacts</button>
+              <button id="synthGenerate" class="primary-button" type="button">Generate Agents</button>
               <button id="synthBuildCityOS" class="secondary-button" type="button" disabled>Build In CityOS</button>
               <button id="synthRunWebData" class="secondary-button" type="button" disabled>Run Web Data Apps</button>
               <button id="synthViewTellMeAnswer" class="secondary-button" type="button" disabled>View Answer In TeLLMe</button>
@@ -489,7 +489,7 @@
 
         <section id="synthPanel" class="synth-panel hidden">
           <div class="panel-heading">
-            <h3>CityOS Synthesizer</h3>
+            <h3>Agent Synthesizer</h3>
             <span id="synthStatus">Select a verified workspace</span>
           </div>
           <div class="synth-grid">
@@ -514,7 +514,7 @@
             <h3>Synthesis Output</h3>
             <span id="synthOutputStatus">Idle</span>
           </div>
-          <section class="synth-result-strip" aria-label="CityOS synthesis results">
+          <section class="synth-result-strip" aria-label="agent synthesis results">
             <div>
               <span>Apps</span>
               <strong id="synthAppCount">0</strong>

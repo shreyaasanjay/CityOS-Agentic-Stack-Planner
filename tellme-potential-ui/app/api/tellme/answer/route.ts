@@ -188,17 +188,29 @@ function aggregateAnswer(
     return copy.activityMany(summary)
   }
 
+  const backendAnswer = safeAnswerText(
+    asString(answer.answer) || asString(answer.chat_answer) || asString(answer.chatAnswer),
+  )
+  if (backendAnswer) return backendAnswer
+
   const backendText = cameras.length === 0 ? safeAnswerText(asString(answer.text)) : ''
   if (backendText) return backendText
 
   return copy.unavailable
 }
 
-function selectionResult(
-  webRun: JsonObject,
-  model: string,
-  language: LanguageMode,
-): QueryResult {
+function webRunFailure(webRun: JsonObject): string {
+  const upstreamError = asString(webRun.error)
+  if (upstreamError) return upstreamError
+  const direct = asArray(webRun.errors).map(asString).find(Boolean)
+  if (direct) return direct
+  for (const run of asArray(webRun.runs).map(asObject)) {
+    const error = asString(run.error)
+    if (error) return `Generated ${asString(asObject(run.app).name) || 'agent'} failed: ${error}`
+  }
+  return 'The generated smart-room agent did not produce an answer.'
+}
+function selectionResult(webRun: JsonObject, model: string, language: LanguageMode): QueryResult {
   const answer = asObject(webRun.answer)
   const fallbackPrompt = language === 'es'
     ? 'Elige la grabación que mejor coincida con tu solicitud.'
@@ -359,7 +371,7 @@ export async function POST(request: Request) {
       }),
     }, 180_000)
     if (!webRun.response.ok || webRun.payload.ok === false) {
-      return NextResponse.json({ error: 'The smart-room service could not produce an answer.' }, { status: 502 })
+      return NextResponse.json({ error: webRunFailure(webRun.payload) }, { status: 502 })
     }
     if (asObject(webRun.payload.answer).needsClarification === true) {
       return NextResponse.json(

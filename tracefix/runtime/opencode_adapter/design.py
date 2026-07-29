@@ -1555,7 +1555,14 @@ async def run_design(
     fast_path_diagnostics = [
         f"Single-agent fast path considered: {fast_path_decision.reason}"
     ]
-    if fast_path_decision.eligible and not task_spec_payload:
+    # A structured TeLLMe request has already been deterministically routed and
+    # screened by ``assess_single_agent_fast_path``. Do not send that same
+    # request to model-backed attribute extraction merely because the caller
+    # also supplied its parsed task spec: otherwise a missing API key or model
+    # tool failure prevents formal verification from starting.
+    if fast_path_decision.eligible and (
+        not task_spec_payload or fast_path_decision.structured_input
+    ):
         try:
             fast_path_ir_started_ms = time.monotonic() * 1000.0
             fast_path_diagnostics.extend(

@@ -377,9 +377,7 @@ export default function Page() {
       status: 'loading',
       visibleAnswer: '',
       errorMessage: undefined,
-      startedAt: Date.now(),
-      responseMs: undefined,
-      progressStage: 'answering',
+      progressStage: 'verifying',
     }))
     try {
       const result = await queryApi.selectRecording({
@@ -410,6 +408,7 @@ export default function Page() {
         setIsLoading(false)
       }
     } catch (error) {
+      if (controller.signal.aborted) return
       updateTurn(turn.id, (current) => ({
         ...current,
         status: 'error',

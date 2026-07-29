@@ -264,10 +264,15 @@ class TellMeBridge:
         tellme = state.get("tellme") if isinstance(state.get("tellme"), dict) else None
         if tellme is None:
             return
-        answer = result.get("answer") if isinstance(result.get("answer"), dict) else None
+        raw_answer = result.get("answer")
+        answer = raw_answer if isinstance(raw_answer, dict) else (
+            {"text": str(raw_answer), "chatAnswer": str(raw_answer)}
+            if raw_answer is not None else None
+        )
         if answer is not None:
-            tellme["answer_summary"] = answer.get("text") or ""
-            chat_answer = answer.get("chatAnswer") or answer.get("chat_answer") or ""
+            generated_text = answer.get("answer") if isinstance(answer.get("answer"), str) else ""
+            tellme["answer_summary"] = answer.get("text") or answer.get("chatAnswer") or answer.get("chat_answer") or generated_text
+            chat_answer = answer.get("chatAnswer") or answer.get("chat_answer") or answer.get("text") or generated_text
             if chat_answer:
                 tellme["chat_answer"] = chat_answer
             tellme["web_data_answer"] = answer

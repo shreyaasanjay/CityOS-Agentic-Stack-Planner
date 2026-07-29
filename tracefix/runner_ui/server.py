@@ -509,6 +509,9 @@ def _parse_workspace_from_line(root: Path, line: str) -> Path | None:
     if not match:
         match = re.search(r"Workspace:\s*(.+)$", line)
     if not match:
+        # Record the initial workspace before the LLM/OpenCode phase starts.
+        match = re.search(r"initialized custom workspace at\s+(.+)$", line, re.IGNORECASE)
+    if not match:
         match = re.search(r"Session saved to:\s*(.+session\.json)$", line)
         if match:
             candidate = Path(match.group(1).strip()).parent
@@ -674,6 +677,71 @@ def _synth_apps_dir(payload: dict[str, Any], workspace: Path) -> Path:
         return (Path(raw_cityos).expanduser() / "apps").resolve()
     return (workspace / "output" / "cityos_synthesis").resolve()
 
+
+def _saved_synthesis_result(workspace: Path, root: Path) -> dict[str, Any] | None:
+    """Restore the newest CityOS manifest that belongs to this workspace."""
+    directories = [workspace / "output" / "cityos_synthesis"]
+    cityos_root = _default_cityos_root()
+    if cityos_root is not None:
+        directories.append(cityos_root / "apps")
+    matches: list[tuple[float, Path, dict[str, Any]]] = []
+    for directory in directories:
+        if not directory.is_dir():
+            continue
+        for manifest_path in directory.glob("*-synthesis.json"):
+            manifest = _read_json(manifest_path)
+            if not isinstance(manifest, dict):
+                continue
+            raw_workspace = str(manifest.get("workspace") or "").strip()
+            try:
+                belongs_to_workspace = raw_workspace and Path(raw_workspace).resolve() == workspace.resolve()
+            except OSError:
+                belongs_to_workspace = False
+            if belongs_to_workspace:
+                matches.append((manifest_path.stat().st_mtime, manifest_path, manifest))
+    if not matches:
+        return None
+    _, manifest_path, manifest = max(matches, key=lambda item: item[0])
+    apps = manifest.get("apps") if isinstance(manifest.get("apps"), list) else []
+    return {
+        "workspace": str(workspace),
+        "planPath": str(manifest.get("plan_path") or ""),
+        "appsDir": str(manifest.get("apps_dir") or manifest_path.parent),
+        "manifestPath": str(manifest_path),
+        "outputDir": str(manifest.get("apps_dir") or manifest_path.parent),
+        "apps": [
+            {
+                "name": str(app.get("name") or ""),
+                "kind": str(app.get("kind") or "app"),
+                "agent": app.get("agent"),
+                "path": str(app.get("path") or ""),
+                "buildCommand": str(app.get("build_command") or ""),
+            }
+            for app in apps if isinstance(app, dict)
+        ],
+    }
+
+def _saved_handlers_use_current_smartroom_contract(saved: dict[str, Any]) -> bool:
+    """Require the current answer handler; keep a compatible monitor to avoid needless LLM refreshes."""
+    apps = saved.get("apps") if isinstance(saved.get("apps"), list) else []
+    found_agent = False
+    for app in apps:
+        if not isinstance(app, dict):
+            continue
+        source = safe_read_text(Path(str(app.get("path") or "")) / "generated_handler.py")
+        marker = source[:80]
+        handler_protocol_ready = marker.startswith("# tracefix-handler-template: smartroom-v8") or (
+            marker.startswith("# tracefix-handler-template: smartroom-v7")
+            and 'result.setdefault("ok", True)' in source
+        )
+        if str(app.get("kind") or "") == "agent":
+            if not handler_protocol_ready:
+                return False
+            found_agent = True
+        elif str(app.get("kind") or "") == "monitor":
+            if not (handler_protocol_ready or marker.startswith("# tracefix-handler-template: smartroom-v6")):
+                return False
+    return found_agent
 
 def _synth_file_requirements(workspace: Path) -> list[dict[str, Any]]:
     spec = _spec_dir(workspace)
@@ -895,12 +963,23 @@ def _run_cityos_synthesis(root: Path, payload: dict[str, Any]) -> dict[str, Any]
     apps_dir = _synth_apps_dir(payload, workspace)
     package_name = str(payload.get("packageName") or "").strip() or None
     overwrite = bool(payload.get("overwrite"))
+    # Reused workflows already have a manifest and app directories. Returning
+    # that manifest avoids regenerating the same packages; callers may set
+    # overwrite to intentionally regenerate them.
+    if not overwrite and package_name is None and not payload.get("appsDir") and not payload.get("cityosRoot"):
+        saved = _saved_synthesis_result(workspace, root)
+        if saved is not None and _saved_handlers_use_current_smartroom_contract(saved):
+            return saved
+        if saved is not None:
+            overwrite = True
     try:
         result = synthesize_cityos_apps(
             workspace,
             apps_dir=apps_dir,
             package_name=package_name,
             overwrite=overwrite,
+            codegen_model=str(payload.get("codegenModel") or payload.get("model") or "z-ai/glm-5.2"),
+            codegen_api_key=str(payload.get("openrouterKey") or payload.get("codegenApiKey") or os.getenv("OPENROUTER_API_KEY") or ""),
         )
     except Exception as exc:
         append_stage(
@@ -1024,10 +1103,36 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         question_context=question_context,
         raw_data_json=raw_data_json,
         recording_override=recording_override,
-        agent_provider=str(payload.get("agentProvider") or payload.get("agent_provider") or "deterministic"),
-        agent_model=str(payload.get("agentModel") or payload.get("agent_model") or ""),
-        agent_api_key=_clean_key(payload.get("agentApiKey") or payload.get("agent_api_key")),
+        agent_provider=str(payload.get("agentProvider") or payload.get("agent_provider") or "local").strip(),
+        agent_model=str(payload.get("agentModel") or payload.get("agent_model") or "gemma3:4b").strip(),
+        agent_api_key=str(payload.get("agentApiKey") or payload.get("agent_api_key") or "").strip(),
     )
+def _recording_preflight(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    """Find candidate recordings before verification or agent synthesis."""
+    from tracefix.runtime.web_data_harness import default_web_data_url, fetch_source_payload
+
+    source_url = str(payload.get("sourceUrl") or payload.get("webDataUrl") or default_web_data_url()).strip()
+    question = str(payload.get("question") or payload.get("query") or "").strip()
+    timestamp = str(payload.get("timestamp") or "").strip()
+    if timestamp:
+        question = f"{question} at {timestamp}".strip()
+    output_root = root / ".tracefix-ui" / "recording-preflight" / datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+    result = fetch_source_payload(
+        source_url,
+        output_root=output_root,
+        source_mode=str(payload.get("sourceMode") or "auto"),
+        timeout_seconds=_bounded_int(payload.get("timeoutSeconds"), 30, minimum=2, maximum=600),
+        question_context=question,
+        raw_data_json=str(payload.get("rawDataJson") or ""),
+        recording_override=payload.get("recordingOverride"),
+    )
+    answer = result.get("answer") if isinstance(result.get("answer"), dict) else {}
+    return {
+        "ok": True,
+        "needsClarification": answer.get("needsClarification") is True,
+        "answer": answer,
+    }
+
 def _open_local_path(path: Path) -> None:
     if not path.exists():
         raise FileNotFoundError(f"Path does not exist: {path}")
@@ -1658,6 +1763,61 @@ def _missing_provider_packages(provider: str) -> list[str]:
     return []
 
 
+def _smart_room_workflow_cache_path(root: Path) -> Path:
+    path = root / ".tracefix-ui" / "workflow-cache" / "smart-room-recording-retrieval.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _is_reusable_smart_room_workspace(workspace: Path) -> bool:
+    if not workspace.is_dir() or not workspace.name.startswith("tellme_structured_smart_room_application_"):
+        return False
+    summary = _read_json(workspace / "spec" / "summary.json")
+    tlc_passed = isinstance(summary, dict) and summary.get("tlc_passed") is True
+    return tlc_passed and (workspace / "spec" / "cityos_module_plan.json").is_file()
+
+
+def _remember_smart_room_workflow(root: Path, workspace: Path) -> None:
+    if not _is_reusable_smart_room_workspace(workspace):
+        return
+    _smart_room_workflow_cache_path(root).write_text(json.dumps({
+        "workflow": "smart-room-recording-retrieval-v1",
+        "workspace": str(workspace.resolve()),
+        "verifiedAt": datetime.now(timezone.utc).isoformat(),
+    }, indent=2) + "\n", encoding="utf-8")
+
+
+def _reusable_smart_room_workspace(root: Path) -> Path | None:
+    cached = _read_json(_smart_room_workflow_cache_path(root))
+    if isinstance(cached, dict):
+        candidate = Path(str(cached.get("workspace") or "")).expanduser()
+        if _is_reusable_smart_room_workspace(candidate):
+            return candidate.resolve()
+    workspace_root = root / "workspace"
+    if workspace_root.is_dir():
+        candidates = sorted(workspace_root.glob("tellme_structured_smart_room_application_*"), key=lambda item: item.stat().st_mtime, reverse=True)
+        for candidate in candidates:
+            if _is_reusable_smart_room_workspace(candidate):
+                _remember_smart_room_workflow(root, candidate)
+                return candidate.resolve()
+    return None
+
+
+def _reuse_verified_smart_room_workflow(root: Path, payload: dict[str, Any], workspace: Path) -> RunState:
+    run_id = f"cached-{uuid.uuid4().hex[:8]}"
+    run = RunState(
+        id=run_id, root=root, command=[], env_keys={}, mode="design", provider=str(payload.get("provider") or "openrouter"),
+        model=str(payload.get("model") or ""), status="completed", ended_at=datetime.now().isoformat(timespec="seconds"), exit_code=0,
+        workspace=workspace,
+    )
+    run.usage.set_model(run.model)
+    run.publish({"type": "log", "line": f"Reused verified smart-room workflow from {workspace}. OpenCode and TLC were skipped."})
+    run.publish({"type": "artifacts", "artifacts": _artifact_snapshot(workspace)})
+    run.publish({"type": "status", "status": "completed", "exitCode": 0, "reusedWorkflow": True})
+    with RUNS_LOCK:
+        RUNS[run_id] = run
+    return run
+
 def _start_run(root: Path, payload: dict[str, Any]) -> RunState:
     mode = str(payload.get("mode", "pipeline"))
     provider = str(payload.get("provider", "openai"))
@@ -1874,6 +2034,8 @@ def _finish_run(run: RunState, exit_code: int) -> None:
         run.workspace = _find_workspace(run.experiment_dir)
     if run.workspace is not None:
         _tellme_bridge(run.root).record_tracefix_workspace(run.id, str(run.workspace))
+        if run.status == "completed":
+            _remember_smart_room_workflow(run.root, run.workspace)
     run.finalize_usage()
     run.publish({"type": "artifacts", "artifacts": _artifact_snapshot(run.workspace)})
     run.publish_usage()
@@ -1982,7 +2144,13 @@ class RunnerHandler(BaseHTTPRequestHandler):
             workspace_raw = str(tracefix.get("workspace") or "")
             summary = None
             if workspace_raw and Path(workspace_raw).exists():
-                summary = _synth_workspace_summary(Path(workspace_raw), root=self.root)
+                workspace_path = Path(workspace_raw)
+                summary = _synth_workspace_summary(workspace_path, root=self.root)
+                if not str(cityos.get("manifestPath") or "").strip():
+                    saved = _saved_synthesis_result(workspace_path, self.root)
+                    if saved:
+                        cityos = saved
+                        _tellme_bridge(self.root).record_cityos_result(saved)
             data = {"result": cityos, "workspace": summary}
             self._send_json(_api_envelope(
                 ok=bool(summary or cityos),
@@ -2021,7 +2189,7 @@ class RunnerHandler(BaseHTTPRequestHandler):
                 "workspaceType": workspace_type or "",
                 "cityosRoot": str(cityos_root) if cityos_root is not None else "",
                 "appsDir": str((cityos_root / "apps").resolve()) if cityos_root is not None else "",
-                "webDataUrl": "http://172.16.60.239:3000/api",
+                "webDataUrl": "http://172.16.60.239:3000/api/v1",
                 "workspaces": workspaces,
             })
             return
@@ -2057,7 +2225,7 @@ class RunnerHandler(BaseHTTPRequestHandler):
                 f"type={ws_summary.get('workspaceType')} ready={ws_summary.get('ready')}",
                 flush=True,
             )
-            self._send_json({"workspace": ws_summary})
+            self._send_json({"workspace": ws_summary, "synthesisResult": _saved_synthesis_result(workspace, self.root)})
             return
         if path == "/api/intermediary-plan":
             query = parse_qs(parsed.query)
@@ -2184,8 +2352,15 @@ class RunnerHandler(BaseHTTPRequestHandler):
                     "taskMode": "custom",
                     "customTask": task_text,
                 })
-                run = _start_run(self.root, run_payload)
+                cached_workspace = _reusable_smart_room_workspace(self.root)
+                run = (
+                    _reuse_verified_smart_room_workflow(self.root, run_payload, cached_workspace)
+                    if cached_workspace is not None
+                    else _start_run(self.root, run_payload)
+                )
                 bridge.record_tracefix_run(run.id)
+                if run.workspace is not None:
+                    bridge.record_tracefix_workspace(run.id, str(run.workspace))
             except Exception as exc:  # noqa: BLE001 - API must surface handoff failures
                 self._send_json(
                     _api_envelope(ok=False, errors=[f"{type(exc).__name__}: {exc}"]),
@@ -2277,6 +2452,18 @@ class RunnerHandler(BaseHTTPRequestHandler):
             try:
                 result = _run_cityos_docker_build(self.root, payload)
             except Exception as exc:  # noqa: BLE001 - local UI should surface clear errors
+                self._send_error(400, str(exc))
+                return
+            self._send_json(result)
+            return
+        if parsed.path == "/api/synth/recording-preflight":
+            payload = self._read_json_body()
+            if payload is None:
+                self._send_error(400, "Invalid JSON")
+                return
+            try:
+                result = _recording_preflight(self.root, payload)
+            except Exception as exc:  # noqa: BLE001
                 self._send_error(400, str(exc))
                 return
             self._send_json(result)
