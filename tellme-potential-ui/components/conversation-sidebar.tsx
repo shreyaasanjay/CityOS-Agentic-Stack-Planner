@@ -102,8 +102,10 @@ export function ConversationSidebar({
   const pinned = filtered.filter((conversation) => conversation.pinned)
   const recent = filtered.filter((conversation) => !conversation.pinned)
 
+  // Sticky under the 4rem header so the menu stays put however long the thread grows.
+  // The chat list below scrolls on its own.
   return (
-    <aside className="hidden w-80 shrink-0 border-r border-border bg-card/50 lg:flex lg:flex-col">
+    <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-80 shrink-0 border-r border-border bg-card/50 lg:flex lg:flex-col">
       <div className="flex flex-col gap-3 border-b border-border p-3">
         <button
           type="button"
