@@ -35,7 +35,11 @@ export async function POST(request: NextRequest) {
       )
     }
     return NextResponse.json({ ok: true })
-  } catch {
-    return NextResponse.json({ error: 'agent synthesis was unavailable.' }, { status: 502 })
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : ''
+    return NextResponse.json(
+      { error: reason ? `agent synthesis was unavailable: ${reason}` : 'agent synthesis was unavailable.' },
+      { status: 502 },
+    )
   }
 }
