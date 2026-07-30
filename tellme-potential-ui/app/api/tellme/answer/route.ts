@@ -124,6 +124,15 @@ function safeLabel(value: string) {
   return value.replace(/[^a-z0-9 _-]/gi, '').replace(/\s+/g, ' ').trim().slice(0, 40)
 }
 
+function safeRecordingTimestampLabel(value: string, maxLength: number) {
+  const text = value.replace(/\s+/g, ' ').trim()
+  if (!text || text.length > maxLength) return undefined
+  if (/https?:\/\/|[a-z]:\\|\/users\/|source_data|framepath|localpath|rec_\d|day_\d/i.test(text)) {
+    return undefined
+  }
+  return text
+}
+
 function safeAnswerText(value: string) {
   const text = value.replace(/\s+/g, ' ').trim()
   if (!text) return ''
@@ -219,6 +228,8 @@ function selectionResult(webRun: JsonObject, model: string, language: LanguageMo
     .map((candidate, index) => ({
       recordingId: asString(candidate.recordingId) || [asString(candidate.day), asString(candidate.rec)].filter(Boolean).join('/'),
       label: `${fallbackLabel} ${index + 1}`,
+      dateLabel: safeRecordingTimestampLabel(asString(candidate.dateLabel), 48),
+      timeLabel: safeRecordingTimestampLabel(asString(candidate.timeLabel), 24),
     }))
     .filter((candidate) => Boolean(candidate.recordingId))
   return {
@@ -319,6 +330,13 @@ export async function POST(request: Request) {
   try {
     sourceUrl = new URL(body.mirrorApiUrl || '')
     if (!['http:', 'https:'].includes(sourceUrl.protocol)) throw new Error('Unsupported protocol')
+    if (
+      sourceUrl.hostname === '172.16.60.239'
+      && sourceUrl.port === '3000'
+      && sourceUrl.pathname.replace(/\/+$/, '') === '/api'
+    ) {
+      sourceUrl.pathname = '/api/v1'
+    }
   } catch {
     return NextResponse.json({ error: 'Enter a valid smart-room API URL.' }, { status: 400 })
   }
@@ -338,7 +356,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         manifestPath,
         sourceUrl: sourceUrl.toString(),
-        sourceMode: 'auto',
+        sourceMode: 'smartroom',
         timeoutSeconds: 30,
         question: query,
         agentProvider,
