@@ -1390,12 +1390,13 @@ def fetch_smartroom_payload(
 def _extract_detection_summary(model: str, inference: dict[str, Any]) -> dict[str, Any]:
     detections = inference.get("detections") if isinstance(inference.get("detections"), dict) else {}
     timeline = detections.get("timeline") if isinstance(detections.get("timeline"), list) else []
-    counts = []
-    for point in timeline:
+    latest_count: int | None = None
+    for point in reversed(timeline):
         if not isinstance(point, dict):
             continue
         try:
-            counts.append(int(point.get("count") or 0))
+            latest_count = int(point.get("count") or 0)
+            break
         except (TypeError, ValueError):
             continue
     actions = detections.get("actions") if isinstance(detections.get("actions"), list) else []
@@ -1423,9 +1424,9 @@ def _extract_detection_summary(model: str, inference: dict[str, Any]) -> dict[st
     return {
         "status": detections.get("status"),
         "durationSec": detections.get("durationSec"),
-        "peakPeople": max(counts) if counts else None,
-        "lastPeople": counts[-1] if counts else None,
-        "samples": len(counts),
+        "peakPeople": None,
+        "lastPeople": latest_count,
+        "samples": len(timeline),
         "tracks": detections.get("tracks"),
         "actions": [str(item) for item in actions if str(item).strip()],
         "trackActions": {str(key): str(value) for key, value in track_actions.items()},
@@ -1844,41 +1845,33 @@ def _build_smartroom_chat_answer(
 ) -> str:
     if not cameras:
         return "I could not find any camera results in the latest smartroom recording yet."
-    camera_parts: list[str] = []
     latest_parts: list[str] = []
     activity_parts: list[str] = []
-    peak_values: list[int] = []
+    latest_values: list[int] = []
     for camera in cameras:
         name = _format_smartroom_camera_label(camera.get("camera") or "camera")
-        peak = camera.get("peakPeople")
         latest = camera.get("lastPeople")
-        if peak is not None:
-            try:
-                peak_int = int(peak)
-            except (TypeError, ValueError):
-                peak_int = None
-            if peak_int is not None:
-                peak_values.append(peak_int)
-                camera_parts.append(f"{name} peaked at {_person_count_label(peak_int)}")
         if latest is not None:
-            latest_parts.append(f"{name} most recently showed {_person_count_label(latest)}")
+            try:
+                latest_int = int(latest)
+            except (TypeError, ValueError):
+                latest_int = None
+            if latest_int is not None:
+                latest_values.append(latest_int)
+                latest_parts.append(f"{name} most recently showed {_person_count_label(latest_int)}")
         activities = camera.get("activities") or camera.get("actions") or []
         if isinstance(activities, list) and activities:
             activity_parts.append(f"{name}: {', '.join(str(item) for item in activities[:8])}")
-    if not camera_parts:
-        return "I found the latest smartroom recording, but it did not include enough occupancy data to summarize yet."
+    if not latest_parts:
+        return "I found the selected recording, but it did not include a usable latest occupancy reading."
 
     recording = " / ".join(part for part in [day, rec] if part)
     if requested_label:
         prefix = f"For {requested_label} ({recording}), " if recording else f"For {requested_label}, "
     else:
         prefix = f"For the latest recording ({recording}), " if recording else "For the latest recording, "
-    overall_peak = max(peak_values) if peak_values else None
-    summary = prefix + ", and ".join(camera_parts) + "."
-    if overall_peak is not None:
-        summary += f" Across the observed time window, the peak occupancy was {_person_count_label(overall_peak)} overall."
-    if latest_parts:
-        summary += " At the latest observed moment, " + ", and ".join(latest_parts) + "."
+    latest_value = max(latest_values)
+    summary = prefix + f"the latest available room-level reading showed {_person_count_label(latest_value)}."
     if activity_parts:
         summary += " Detected activities/poses included " + "; ".join(activity_parts) + "."
     if errors:
@@ -2243,6 +2236,8 @@ async def _run_monitor_checkpoint(
     mode: str,
     transcript: list[dict[str, Any]],
     current_event: dict[str, Any] | None = None,
+    single_agent_execution: bool = False,
+    state_transition: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Run active monitor apps at one protocol lifecycle checkpoint."""
     checkpoint_name = f"monitor_{mode}"
@@ -2258,6 +2253,8 @@ async def _run_monitor_checkpoint(
                 "monitor_mode": mode,
                 "communication_transcript": transcript,
                 "current_event": current_event,
+                "single_agent_execution": single_agent_execution,
+                "state_transition": state_transition,
                 "agent_provider": agent_provider,
                 "agent_model": agent_model,
             },
@@ -2301,6 +2298,38 @@ async def _run_agent_pipeline(
     monitor_apps = [app for app in apps if app.kind == "monitor"]
     if not monitor_apps:
         raise ValueError("Synthesis manifest must contain at least one runtime monitor app")
+    single_app: CityOSDockerApp | None = None
+    for candidate in agent_apps:
+        try:
+            plan_path = _resolve_app_path(candidate, manifest_path) / "tracefix_bundle" / "plan.json"
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            protocol = plan.get("protocol") if isinstance(plan.get("protocol"), dict) else {}
+            topology = protocol.get("topology") if isinstance(protocol.get("topology"), dict) else {}
+            planned = topology.get("agents") if isinstance(topology.get("agents"), list) else []
+            ids = {str(item.get("id") or item.get("name") or "") for item in planned if isinstance(item, dict)}
+            if len(ids) == 1 and not protocol.get("allowed_communication_edges") and str(candidate.agent or candidate.name) in ids:
+                single_app = candidate
+                break
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+    if single_app is not None:
+        runs: list[dict[str, Any]] = []
+        start = await _run_monitor_checkpoint(monitor_apps=monitor_apps, manifest_path=manifest_path, output_root=output_root, handler_command=handler_command, handler_timeout_seconds=handler_timeout_seconds, agent_provider=agent_provider, agent_model=agent_model, agent_api_key=agent_api_key, mode="start", transcript=[], single_agent_execution=True)
+        runs.extend(start)
+        request_path = _write_agent_phase_request(output_root, single_app, "single_agent", {"source_url": source_url, "source_mode": source_mode, "timeout_seconds": timeout_seconds, "max_bytes": max_bytes, "question": question, "raw_data_json": raw_data_json, "recording_override": recording_override, "agent_provider": agent_provider, "agent_model": agent_model})
+        single_run = await _run_app_phase(app=single_app, manifest_path=manifest_path, request_path=request_path, phase="single_agent", output_root=output_root, handler_command=handler_command, handler_timeout_seconds=handler_timeout_seconds, handler_environment={"TRACEFIX_RUNTIME_AGENT_API_KEY": agent_api_key} if agent_api_key else {})
+        runs.append(single_run)
+        evidence = single_run.get("agentOutput", {}).get("evidence_packet")
+        answer = single_run.get("agentOutput", {}).get("answer_packet")
+        if single_run.get("status") != "completed" or not isinstance(answer, dict):
+            return runs, [evidence] if isinstance(evidence, dict) else [], None
+        name = str(single_app.agent or single_app.name)
+        transition = {"agent": name, "from": f"{name}_start", "to": f"{name}_done", "status": "completed"}
+        complete = await _run_monitor_checkpoint(monitor_apps=monitor_apps, manifest_path=manifest_path, output_root=output_root, handler_command=handler_command, handler_timeout_seconds=handler_timeout_seconds, agent_provider=agent_provider, agent_model=agent_model, agent_api_key=agent_api_key, mode="complete", transcript=[], single_agent_execution=True, state_transition=transition)
+        runs.extend(complete)
+        if any(run.get("status") != "completed" for run in start + complete):
+            return runs, [evidence] if isinstance(evidence, dict) else [], None
+        return runs, [evidence] if isinstance(evidence, dict) else [], answer
     if len({app.name for app in agent_apps}) < 2:
         raise ValueError(
             "Synthesis manifest must contain distinct retrieval and answer agent apps; "

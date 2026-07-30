@@ -84,6 +84,8 @@ const httpQueryApi: QueryApi = {
     const recordingPreflight = await postJson<{ needsRecordingSelection: boolean; result?: QueryResult }>('/api/tellme/recordings', {
       query: req.query,
       mirrorApiUrl: req.mirrorApiUrl,
+      dataSource: req.dataSource,
+      carlaApiKey: req.carlaApiKey,
       model: req.tracefixModel,
       timestamp: req.timestamp,
     }, options?.signal)
@@ -122,6 +124,8 @@ const httpQueryApi: QueryApi = {
     return postJson<QueryResult>('/api/tellme/answer', {
       query: req.query,
       mirrorApiUrl: req.mirrorApiUrl,
+      dataSource: req.dataSource,
+      carlaApiKey: req.carlaApiKey,
       agentProvider: req.cityosAgentProvider,
       agentModel: req.cityosAgentModel,
       agentApiKey: cityosAgentKey,
@@ -155,6 +159,8 @@ const httpQueryApi: QueryApi = {
     return postJson<QueryResult>('/api/tellme/answer', {
       query: req.query,
       mirrorApiUrl: req.mirrorApiUrl,
+      dataSource: req.dataSource,
+      carlaApiKey: req.carlaApiKey,
       agentProvider: req.cityosAgentProvider,
       agentModel: req.cityosAgentModel,
       agentApiKey: req.cityosAgentApiKey?.trim()

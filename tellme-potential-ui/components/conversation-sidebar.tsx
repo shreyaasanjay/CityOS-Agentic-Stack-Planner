@@ -45,6 +45,8 @@ export interface RuntimeConfig {
   openaiApiKey: string
   spaceId: string
   mirrorApiUrl: string
+  dataSource: 'smartroom' | 'carla'
+  carlaApiKey: string
   timestamp: string
   tracefixProvider: 'openai' | 'anthropic' | 'openrouter' | 'local'
   tracefixModel: string
@@ -269,6 +271,16 @@ function ConnectionSetup({
         />
       </Field>
 
+      <Field label="Data source" icon={Link2}>
+        <select value={config.dataSource} onChange={(event) => {
+          const dataSource = event.target.value as RuntimeConfig['dataSource']
+          onChange({ ...config, dataSource, mirrorApiUrl: dataSource === 'carla' ? 'http://172.16.60.239:8420' : 'http://172.16.60.239:3000/api/v1' })
+        }} className="form-field">
+          <option value="smartroom">Smart-room recordings</option>
+          <option value="carla">CARLA city traces</option>
+        </select>
+      </Field>
+      {config.dataSource === 'carla' && <Field label="CARLA API key" icon={KeyRound}><ApiKeyInput name="carla-api-key" value={config.carlaApiKey} onValueChange={(value) => update('carlaApiKey', value)} placeholder="Paste CARLA server key" policy={originPolicy} /></Field>}
       <Field label={t('sidebar.mirrorUrl')} icon={Link2}>
         <input
           value={config.mirrorApiUrl}

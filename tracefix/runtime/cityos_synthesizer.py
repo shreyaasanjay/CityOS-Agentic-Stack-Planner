@@ -529,6 +529,13 @@ def _execution_agents(plan: dict[str, Any]) -> list[dict[str, Any]]:
     """
     agents = [dict(agent) for agent in plan.get("agents", []) if isinstance(agent, dict)]
     labels = [str(agent.get("name") or "").lower() for agent in agents]
+    protocol = plan.get("protocol") if isinstance(plan.get("protocol"), dict) else {}
+    topology = protocol.get("topology") if isinstance(protocol.get("topology"), dict) else {}
+    verified_agents = topology.get("agents") if isinstance(topology.get("agents"), list) else []
+    # Do not add an answer process to a verified single-agent protocol: doing so
+    # creates communication that the verifier did not authorize.
+    if len(verified_agents) == 1 and not protocol.get("allowed_communication_edges"):
+        return agents
 
     has_answer = any("answer" in label or "synth" in label for label in labels)
     if not has_answer:
