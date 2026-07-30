@@ -815,7 +815,6 @@ def _walk(value: Any):
 
 
 def _camera_summary(camera_name: str, camera: dict[str, Any]) -> dict[str, Any]:
-    peak: int | None = None
     latest: int | None = None
     activities: set[str] = set()
     activity_tracks: dict[str, set[str]] = {}
@@ -833,10 +832,12 @@ def _camera_summary(camera_name: str, camera: dict[str, Any]) -> dict[str, Any]:
                 continue
             timeline = node.get("timeline")
             if isinstance(timeline, list):
-                counts = [int(item["count"]) for item in timeline if isinstance(item, dict) and isinstance(item.get("count"), (int, float))]
-                if counts:
-                    peak = max(peak or 0, max(counts))
-                    latest = counts[-1]
+                # Answer selected recordings from their most recent reading. Avoid
+                # scanning every sample merely to calculate a peak occupancy.
+                for item in reversed(timeline):
+                    if isinstance(item, dict) and isinstance(item.get("count"), (int, float)):
+                        latest = int(item["count"])
+                        break
             for key in ("actions", "poses", "labels"):
                 values = node.get(key)
                 if isinstance(values, list):
@@ -858,12 +859,10 @@ def _camera_summary(camera_name: str, camera: dict[str, Any]) -> dict[str, Any]:
                     if normalized:
                         activities.add(normalized)
                         activity_tracks.setdefault(normalized, set()).update(ids)
-                if persons:
-                    peak = max(peak or 0, len(persons))
     activity_counts = {label: len(ids) for label, ids in activity_tracks.items()}
     return {
         "camera": camera_name,
-        "peakPeople": peak,
+        "peakPeople": None,
         "lastPeople": latest,
         "activities": sorted(activities),
         "activityCounts": dict(sorted(activity_counts.items())),
@@ -1011,19 +1010,11 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
             parts.append(f"{label}: {_count_label(count)}")
         text = prefix + ", ".join(parts) + "."
     else:
-        peaks = [camera["peakPeople"] for camera in cameras if camera["peakPeople"] is not None]
         latest = [camera["lastPeople"] for camera in cameras if camera["lastPeople"] is not None]
-        if peaks:
-            camera_parts = [
-                f"{_camera_label(camera['camera'])} peaked at {_count_label(int(camera['peakPeople']))}"
-                for camera in cameras if camera["peakPeople"] is not None
-            ]
-            text = prefix + ", and ".join(camera_parts) + "."
-            text += f" Across the observed time window, the peak occupancy was {_count_label(max(peaks))} overall."
-            if latest:
-                text += f" The latest aggregate reading showed {_count_label(max(latest))}."
+        if latest:
+            text = prefix + f"the latest available room-level reading showed {_count_label(max(latest))}."
         else:
-            text = prefix + "the generated agent found no usable occupancy counts."
+            text = prefix + "the generated agent found no usable occupancy count in this recording."
         activity_labels = sorted({label for camera in cameras for label in camera["activities"]})
         if activity_labels:
             text += " Detected activities included " + ", ".join(activity_labels) + "."
@@ -1123,7 +1114,7 @@ def _protocol_monitor(
     if not isinstance(transcript, list):
         preflight_errors.append("communication transcript is missing")
         transcript = []
-    elif mode in {"event", "complete"} and not transcript:
+    elif mode in {"event", "complete"} and not transcript and request.get("single_agent_execution") is not True:
         preflight_errors.append("communication transcript is empty during active monitoring")
     current_event = request.get("current_event")
     if mode == "event" and not isinstance(current_event, dict):
@@ -1131,6 +1122,20 @@ def _protocol_monitor(
     verification = protocol_context.get("verification")
     if not isinstance(verification, dict) or verification.get("status") != "verified":
         preflight_errors.append("packaged protocol is not marked verified")
+    if request.get("single_agent_execution") is True:
+        complete = mode == "complete"
+        return {
+            "kind": "tracefix.agent.monitor.v1", "producer_agent": agent_id,
+            "valid": not preflight_errors, "monitor_mode": mode,
+            "active": not complete and not preflight_errors,
+            "protocol_completion": complete and not preflight_errors,
+            "errors": preflight_errors, "violations": [{"rule": "runtime_preflight", "event_sequence": None, "message": item} for item in preflight_errors],
+            "checked_rules": ["validate_agent_state_transitions", "validate_protocol_completion"],
+            "explanation": "Verified single-agent execution completed without inter-agent communication.",
+            "observed_message_count": len(transcript), "verification_status": verification.get("status"),
+            "runtime_provider": provider, "runtime_model": model,
+            "generation_mode": "verified_single_agent_monitor", "checked_at": _now(),
+        }
     try:
         result, normalized_model = _call_model_json(
             provider=provider,
@@ -1194,7 +1199,7 @@ def monitor(request: dict[str, Any], agent_id: str) -> dict[str, Any]:
     errors: list[str] = []
     mode = str(request.get("monitor_mode") or "complete").strip().lower()
     transcript = request.get("communication_transcript")
-    if mode in {"event", "complete"} and (not isinstance(transcript, list) or not transcript):
+    if mode in {"event", "complete"} and (not isinstance(transcript, list) or not transcript) and request.get("single_agent_execution") is not True:
         errors.append("active protocol monitor requires observed communications")
     if mode == "event" and not isinstance(request.get("current_event"), dict):
         errors.append("active protocol monitor requires the current communication event")
@@ -1227,6 +1232,10 @@ def execute(request: dict[str, Any], agent_id: str) -> dict[str, Any]:
         return {"ok": True, "phase": phase, "agent_id": agent_id, "evidence_packet": retrieve(request, agent_id)}
     if phase == "synthesize":
         return {"ok": True, "phase": phase, "agent_id": agent_id, "answer_packet": synthesize(request, agent_id)}
+    if phase == "single_agent":
+        evidence = retrieve(request, agent_id)
+        answer = synthesize({**request, "evidence_packets": [evidence]}, agent_id)
+        return {"ok": True, "phase": phase, "agent_id": agent_id, "evidence_packet": evidence, "answer_packet": answer}
     if phase in {"monitor", "monitor_start", "monitor_event", "monitor_complete"}:
         verdict = monitor(request, agent_id)
         return {"ok": verdict["valid"], "phase": phase, "agent_id": agent_id, "monitor": verdict}

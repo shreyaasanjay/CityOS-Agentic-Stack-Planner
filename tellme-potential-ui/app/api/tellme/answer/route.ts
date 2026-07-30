@@ -149,14 +149,10 @@ function aggregateAnswer(
     || /\b(cuántas personas|cuantas personas|ocupación|ocupacion|ocupado|ocupada)\b/i.test(query)
     || /(कितने लोग|कितने व्यक्ति|उपस्थिति|लोगों की संख्या)/i.test(query)
   if (isOccupancyQuestion && cameras.length) {
-    const peaks = cameras.map((camera) => asNumber(camera.peakPeople)).filter((value): value is number => value !== null)
     const latest = cameras.map((camera) => asNumber(camera.lastPeople)).filter((value): value is number => value !== null)
-    if (peaks.length) {
-      const peak = Math.max(...peaks)
-      const latestValue = latest.length ? Math.max(...latest) : null
-      return latestValue === null
-        ? copy.occupancyPeak(peak)
-        : copy.occupancyLatest(peak, latestValue)
+    if (latest.length) {
+      const latestValue = Math.max(...latest)
+      return `The latest available reading in the selected recording showed ${latestValue} ${latestValue === 1 ? 'person' : 'people'}.`
     }
   }
 

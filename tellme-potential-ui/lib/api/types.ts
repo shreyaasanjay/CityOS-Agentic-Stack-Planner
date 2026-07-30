@@ -112,6 +112,8 @@ export interface QueryRequest {
   mode: 'llm' | 'deterministic'
   model: string
   mirrorApiUrl: string
+  dataSource?: 'smartroom' | 'carla'
+  carlaApiKey?: string
   openaiApiKey?: string
   tracefixProvider: 'openai' | 'anthropic' | 'openrouter' | 'local'
   tracefixModel: string
