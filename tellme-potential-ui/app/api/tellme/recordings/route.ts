@@ -33,7 +33,13 @@ export async function POST(request: Request) {
       }),
     }, 35_000)
     if (!preflight.response.ok || preflight.payload.ok !== true) {
-      return NextResponse.json({ error: 'The smart-room recording list could not be loaded.' }, { status: 502 })
+      const detail = asString(preflight.payload.error)
+        || asArray(preflight.payload.errors).map(asString).find(Boolean)
+        || ''
+      return NextResponse.json(
+        { error: `The smart-room recording list could not be loaded${detail ? `: ${detail}` : '.'}` },
+        { status: 502 },
+      )
     }
     if (preflight.payload.needsClarification !== true) return NextResponse.json({ needsRecordingSelection: false })
     const answer = asObject(preflight.payload.answer)
@@ -54,7 +60,11 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     }
     return NextResponse.json({ needsRecordingSelection: true, result })
-  } catch {
-    return NextResponse.json({ error: 'The smart-room recording list could not be loaded.' }, { status: 502 })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : ''
+    return NextResponse.json(
+      { error: `The smart-room recording list could not be loaded${detail ? `: ${detail}` : '.'}` },
+      { status: 502 },
+    )
   }
 }

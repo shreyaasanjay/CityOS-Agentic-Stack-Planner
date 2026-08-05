@@ -1448,6 +1448,9 @@ def _merge_occupancy_samples(cameras: list[dict[str, Any]]) -> list[dict[str, fl
             stamp, count = point.get("t"), point.get("count")
             if isinstance(stamp, (int, float)) and isinstance(count, (int, float)):
                 merged[float(stamp)] = max(merged.get(float(stamp), 0), int(count))
+    # The chart ends where observation ends. A wall camera's video can run past
+    # the last person-tracking coverage, but padding that stretch with zeros
+    # would assert an empty room nobody actually observed.
     return _downsample_series(merged)
 
 

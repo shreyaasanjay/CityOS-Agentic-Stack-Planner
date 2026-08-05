@@ -540,6 +540,19 @@ def test_occupancy_series_merges_cameras_by_highest_count():
     ]
 
 
+def test_occupancy_series_does_not_extend_beyond_observations():
+    # A wall camera's video runs to 3s but person tracking only covered the
+    # first second; the chart must stop there, not fabricate an empty room.
+    cameras = [
+        {"durationSec": 1.0, "occupancySamples": [{"t": 0.0, "count": 2}, {"t": 1.0, "count": 1}]},
+        {"durationSec": 3.0, "occupancySamples": []},
+    ]
+
+    merged = web_data_agent._merge_occupancy_samples(cameras)
+
+    assert merged[-1] == {"t": 1.0, "count": 1}
+
+
 def test_downsampling_drops_single_frame_jitter():
     # The detector's count flickers for one frame; that is noise, not someone who
     # entered and left the room between two frames, so it must not reach the chart.
