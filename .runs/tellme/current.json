@@ -1,8 +1,8 @@
 {
-  "run_id": "tellme_a66f76444c09",
+  "run_id": "tellme_2ee7c80236ea",
   "tellme": {
-    "query_id": "tellme_a66f76444c09",
-    "query": "How many people are in the room on August 5th?",
+    "query_id": "tellme_2ee7c80236ea",
+    "query": "What was the object in the recording on August 5th?",
     "timestamp": null,
     "mode": "llm",
     "model": "gpt-4.1-mini",
@@ -11,11 +11,11 @@
     "status": "needs_tracefix",
     "route_decision": {
       "route": "single_agent",
-      "intent": "historical_lookup",
-      "selected_agent": "occupancy_context_agent",
-      "selected_tool": "get_occupancy_context",
+      "intent": "general",
+      "selected_agent": "general_context_agent",
+      "selected_tool": "cityos_context_lookup",
       "required_tools": [
-        "get_occupancy_context"
+        "cityos_context_lookup"
       ],
       "rationale": "The query appears answerable with one focused CityOS-style context lookup.",
       "time_window": null,
@@ -41,9 +41,9 @@
       "harness_subtasks": [
         {
           "expected_modalities": [
-            "video"
+            "context"
           ],
-          "harness_name": "occupancy_context_harness",
+          "harness_name": "answer_synthesis_harness",
           "space_id": "smart_room_1",
           "time_window": null
         }
@@ -55,11 +55,9 @@
       "needs_temporal_consistency": false,
       "output_contract": {
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
-        "answer_type": "direct_answer",
+        "answer_type": "insufficient_evidence",
         "fallback_answer_type": "insufficient_evidence",
         "field_types": {
           "answer": "string",
@@ -74,7 +72,8 @@
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -89,18 +88,17 @@
         ]
       },
       "plan_type": "tracefix",
-      "query_id": "tellme_a66f76444c09",
+      "query_id": "tellme_2ee7c80236ea",
       "required_harnesses": [
-        "occupancy_context_harness"
+        "answer_synthesis_harness"
       ],
       "required_modalities": [
-        "video"
+        "context"
       ],
       "safety_caveats": [
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-        "No available sensor supports 'room_state' context for this space.",
         "Mock CityOS structured context may be incomplete.",
         "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
@@ -112,9 +110,7 @@
     },
     "execution_brief": {
       "allowed_claims": [
-        "bounded_count",
-        "presence_state",
-        "timestamped_event_summary"
+        "insufficient_evidence"
       ],
       "ambiguity": {
         "ambiguity_type": null,
@@ -125,18 +121,17 @@
       },
       "answer_packet_requirements": {
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
-        "answer_type": "direct_answer",
+        "answer_type": "insufficient_evidence",
         "fallback_answer_type": "insufficient_evidence",
         "forbidden_claims": [
           "raw_sensor_access",
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -152,7 +147,7 @@
       },
       "application_goal": {
         "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
-        "goal_type": "occupancy_count",
+        "goal_type": "unsupported",
         "non_goals": [
           "identify person",
           "face recognition",
@@ -160,18 +155,16 @@
           "infer cause or intent"
         ],
         "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
-        "user_intent": "occupancy_lookup"
+        "user_intent": "general_lookup"
       },
-      "brief_id": "brief_task_a66f76444c09",
+      "brief_id": "brief_task_2ee7c80236ea",
       "candidate_harnesses": [
-        "occupancy_context_harness",
         "answer_synthesis_harness"
       ],
       "caveats": [
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-        "No available sensor supports 'room_state' context for this space.",
         "Mock CityOS structured context may be incomplete.",
         "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
@@ -186,9 +179,7 @@
       ],
       "evidence_card_requirements": {
         "allowed_conclusion_types": [
-          "observed_state",
-          "bounded_count",
-          "presence_state"
+          "insufficient_evidence"
         ],
         "badge_requirements": [
           {
@@ -196,21 +187,15 @@
             "label_template": "{card_type}",
             "required": true,
             "source": "query_analysis"
-          },
-          {
-            "badge_id": "modality",
-            "label_template": "{modalities}",
-            "required": false,
-            "source": "harness_output"
           }
         ],
-        "card_type": "descriptive",
+        "card_type": "insufficient_evidence",
         "caveat_requirements": [
-          "Reflects structured context only; no causal interpretation."
+          "A stronger answer was not produced because the bounded evidence was insufficient."
         ],
-        "claim_target": "observed_room_state",
+        "claim_target": "insufficient_evidence",
         "confidence_requirements": {
-          "confidence_kind": "sensor_confidence",
+          "confidence_kind": "composite_confidence",
           "explanation_required": true,
           "label_bands": {
             "high": [
@@ -227,121 +212,83 @@
             ]
           },
           "minimum_threshold": null,
-          "required_inputs": [
-            "sensor_confidence",
-            "evidence_count"
-          ],
-          "scoring_method": "bounded_sensor_confidence"
+          "required_inputs": [],
+          "scoring_method": "none"
         },
-        "evidence_requirements": [
-          {
-            "accepted_packet_types": [
-              "occupancy_context_packet",
-              "room_state_packet",
-              "motion_context_packet",
-              "audio_context_packet"
-            ],
-            "evidence_type": "structured_context",
-            "include_evidence_refs": true,
-            "include_modality": true,
-            "include_time_window": true,
-            "minimum_count": 1,
-            "required": true
-          }
-        ],
+        "evidence_requirements": [],
         "fallback_card_type": "insufficient_evidence",
         "forbidden_conclusion_types": [
-          "causal_effect",
-          "statistical_significance",
-          "causal_graph_claim",
-          "raw_sensor_access",
-          "face_identity",
           "personal_identity",
+          "face_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference",
           "confirmed_injury",
-          "cause_or_intent_inference"
+          "cause_or_intent_inference",
+          "unsupported_behavioral_inference",
+          "raw_sensor_access",
+          "fabricated_confidence",
+          "guessing"
         ],
         "metric_requirements": [
           {
-            "description": "The value observed in the time window (e.g. occupancy count or state).",
-            "display_label": "Observed value",
-            "metric_id": "observed_value",
-            "required": true,
-            "source": "harness_output",
-            "source_field": "value",
-            "unavailable_behavior": "show_na",
-            "value_type": "category"
-          },
-          {
-            "description": "Bounded window the observation covers.",
-            "display_label": "Time window",
-            "metric_id": "time_window",
-            "required": true,
-            "source": "harness_output",
-            "source_field": "timestamp",
-            "unavailable_behavior": "show_na",
-            "value_type": "range"
-          },
-          {
-            "description": "Sensor modalities that contributed.",
-            "display_label": "Modalities used",
-            "metric_id": "modalities_used",
+            "description": "What the system could establish, if anything.",
+            "display_label": "What was determined",
+            "metric_id": "what_determined",
             "required": true,
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na",
-            "value_type": "category"
+            "value_type": "text"
           },
           {
-            "description": "Number of supporting context packets.",
-            "display_label": "Evidence count",
-            "metric_id": "evidence_count",
+            "description": "What evidence was missing or insufficient.",
+            "display_label": "Missing evidence",
+            "metric_id": "missing_evidence",
             "required": true,
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na",
-            "value_type": "integer"
+            "value_type": "text"
           },
           {
-            "description": "Fraction of modalities in agreement.",
-            "display_label": "Sensor agreement",
-            "metric_id": "sensor_agreement",
+            "description": "Which harness or modality failed, if safe to disclose.",
+            "display_label": "Failed harness/modality",
+            "metric_id": "failed_modality",
             "required": false,
-            "source": "aggregator",
+            "source": "tracefix_verification",
             "source_field": null,
-            "unavailable_behavior": "show_na",
-            "value_type": "percentage"
+            "unavailable_behavior": "omit",
+            "value_type": "text"
           }
         ],
-        "primary_question": "What did the structured context observe?",
+        "primary_question": "Could the system answer this from the available evidence?",
         "provenance_requirements": [
-          "List the harness/packet ids backing the observed value."
+          "List which expected packets were missing or empty."
         ],
         "summary_requirements": [
-          "State the observed value and its bounded time window in one sentence."
+          "State what could and could not be determined; do not fabricate confidence."
         ],
-        "title_template": "{primary_question}"
+        "title_template": "Insufficient evidence to answer confidently"
       },
       "evidence_plan": {
         "conflicting_evidence_checks": [],
         "minimum_sufficient_evidence": [
-          "occupancy_context_packet"
+          "general_context_packet"
         ],
         "primary_evidence": [
-          "occupancy_context_packet"
+          "general_context_packet"
         ],
         "supporting_evidence": []
       },
-      "executable": true,
+      "executable": false,
       "forbidden_claims": [
         "raw_sensor_access",
         "face_identity",
         "personal_identity",
         "medical_diagnosis",
-        "unsupported_behavioral_inference"
+        "unsupported_behavioral_inference",
+        "guessing"
       ],
-      "normalized_query": "how many people are in the room on august 5th?",
+      "normalized_query": "what was the object in the recording on august 5th?",
       "privacy_policy": {
         "forbidden_inferences": [
           "raw_sensor_access",
@@ -359,10 +306,10 @@
         "privacy_scope": "cityos_structured_context_only",
         "raw_sensor_access_allowed": false
       },
-      "query_id": "tellme_a66f76444c09",
-      "reasoning_summary": "Deterministic template proposal generated for query tellme_a66f76444c09.",
+      "query_id": "tellme_2ee7c80236ea",
+      "reasoning_summary": "Deterministic template proposal generated for query tellme_2ee7c80236ea.",
       "required_modalities": [
-        "video"
+        "context"
       ],
       "room_capability_context": {
         "available_context_apis": [
@@ -387,10 +334,10 @@
           "get_room_state",
           "get_speech_activity_context"
         ],
-        "coverage_gaps": [
-          "No available sensor supports 'room_state' context for this space."
+        "coverage_gaps": [],
+        "notes": [
+          "No primary sensor is available for this query; planning relies on general context."
         ],
-        "notes": [],
         "privacy_policy": {
           "forbidden_inferences": [
             "raw_sensor_access",
@@ -413,7 +360,7 @@
           "privacy_scope": "cityos_structured_context_only",
           "raw_sensor_access_allowed": false
         },
-        "query_id": "tellme_a66f76444c09",
+        "query_id": "tellme_2ee7c80236ea",
         "relevant_sensors": [
           {
             "allowed_api_names": [
@@ -440,8 +387,8 @@
               "Cannot verify events outside the doorway field of view."
             ],
             "modality": "video",
-            "reason": "Modality or supported context type matches the query requirements.",
-            "relevance": "primary",
+            "reason": "Not directly targeted but available for corroboration.",
+            "relevance": "supporting",
             "restricted_api_names": [
               "get_raw_video_reference"
             ],
@@ -478,8 +425,8 @@
               "Posture signals are candidate-level only."
             ],
             "modality": "video",
-            "reason": "Modality or supported context type matches the query requirements.",
-            "relevance": "primary",
+            "reason": "Not directly targeted but available for corroboration.",
+            "relevance": "supporting",
             "restricted_api_names": [
               "get_raw_video_reference"
             ],
@@ -585,9 +532,9 @@
       },
       "route": "single_agent",
       "space_id": "smart_room_1",
-      "task_category": "occupancy_count",
+      "task_category": "unsupported",
       "time_windows": [],
-      "user_query": "How many people are in the room on August 5th?",
+      "user_query": "What was the object in the recording on August 5th?",
       "validation_policy": {
         "bounded_time_windows_required": true,
         "llm_proposal_untrusted": true,
@@ -595,26 +542,27 @@
         "repairs": [],
         "schema_validation_required": true,
         "validation_status": "accepted",
-        "warnings": []
+        "warnings": [
+          "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
+        ]
       }
     },
     "tracefix_task_spec": {
-      "task_id": "task_a66f76444c09",
-      "query_id": "tellme_a66f76444c09",
-      "user_query": "How many people are in the room on August 5th?",
+      "task_id": "task_2ee7c80236ea",
+      "query_id": "tellme_2ee7c80236ea",
+      "user_query": "What was the object in the recording on August 5th?",
       "space_id": "smart_room_1",
-      "intent": "occupancy_lookup",
-      "tracefix_reason": "Preserve routing, privacy, and output verification.",
+      "intent": "general_lookup",
+      "tracefix_reason": "Needs a safe non-executable contract.",
       "required_capabilities": [
-        "occupancy_context",
         "answer_synthesis"
       ],
       "input_artifacts": [
         {
-          "artifact_id": "occupancy_context_packet",
+          "artifact_id": "general_context_packet",
           "artifact_type": "packet",
           "time_range": null,
-          "modality": "video",
+          "modality": null,
           "privacy_level": "structured_context_only"
         }
       ],
@@ -625,7 +573,7 @@
           "evidence_card"
         ],
         "require_evidence_refs": true,
-        "max_agents": 2,
+        "max_agents": 1,
         "privacy_scope": "cityos_structured_context_only",
         "identity_inference_allowed": false
       },
@@ -634,19 +582,18 @@
         "Return required fields only.",
         "Preserve privacy limits and caveats."
       ],
-      "output_contract_name": "direct_answer_v1",
+      "output_contract_name": "insufficient_evidence_v1",
       "route": "single_agent",
       "time_windows": [],
       "required_modalities": [
-        "video"
+        "context"
       ],
       "candidate_harnesses": [
-        "occupancy_context_harness",
         "answer_synthesis_harness"
       ],
       "application_goal": {
-        "goal_type": "occupancy_count",
-        "user_intent": "occupancy_lookup",
+        "goal_type": "unsupported",
+        "user_intent": "general_lookup",
         "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
         "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
         "non_goals": [
@@ -658,16 +605,16 @@
       },
       "evidence_plan": {
         "primary_evidence": [
-          "occupancy_context_packet"
+          "general_context_packet"
         ],
         "supporting_evidence": [],
         "minimum_sufficient_evidence": [
-          "occupancy_context_packet"
+          "general_context_packet"
         ],
         "conflicting_evidence_checks": []
       },
       "answer_packet_requirements": {
-        "answer_type": "direct_answer",
+        "answer_type": "insufficient_evidence",
         "required_fields": [
           "answer",
           "confidence",
@@ -677,16 +624,15 @@
           "limitations"
         ],
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
         "forbidden_claims": [
           "raw_sensor_access",
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -694,26 +640,23 @@
         "fallback_answer_type": "insufficient_evidence"
       },
       "evidence_card_contract": {
-        "card_type": "descriptive",
-        "primary_question": "What did the structured context observe?",
-        "title_template": "{primary_question}",
-        "claim_target": "observed_room_state",
+        "card_type": "insufficient_evidence",
+        "primary_question": "Could the system answer this from the available evidence?",
+        "title_template": "Insufficient evidence to answer confidently",
+        "claim_target": "insufficient_evidence",
         "allowed_conclusion_types": [
-          "observed_state",
-          "bounded_count",
-          "presence_state"
+          "insufficient_evidence"
         ],
         "forbidden_conclusion_types": [
-          "causal_effect",
-          "statistical_significance",
-          "causal_graph_claim",
-          "raw_sensor_access",
-          "face_identity",
           "personal_identity",
+          "face_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference",
           "confirmed_injury",
-          "cause_or_intent_inference"
+          "cause_or_intent_inference",
+          "unsupported_behavioral_inference",
+          "raw_sensor_access",
+          "fabricated_confidence",
+          "guessing"
         ],
         "badge_requirements": [
           {
@@ -721,75 +664,46 @@
             "label_template": "{card_type}",
             "source": "query_analysis",
             "required": true
-          },
-          {
-            "badge_id": "modality",
-            "label_template": "{modalities}",
-            "source": "harness_output",
-            "required": false
           }
         ],
         "metric_requirements": [
           {
-            "metric_id": "observed_value",
-            "display_label": "Observed value",
-            "description": "The value observed in the time window (e.g. occupancy count or state).",
+            "metric_id": "what_determined",
+            "display_label": "What was determined",
+            "description": "What the system could establish, if anything.",
             "required": true,
-            "value_type": "category",
-            "source": "harness_output",
-            "source_field": "value",
-            "unavailable_behavior": "show_na"
-          },
-          {
-            "metric_id": "time_window",
-            "display_label": "Time window",
-            "description": "Bounded window the observation covers.",
-            "required": true,
-            "value_type": "range",
-            "source": "harness_output",
-            "source_field": "timestamp",
-            "unavailable_behavior": "show_na"
-          },
-          {
-            "metric_id": "modalities_used",
-            "display_label": "Modalities used",
-            "description": "Sensor modalities that contributed.",
-            "required": true,
-            "value_type": "category",
+            "value_type": "text",
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na"
           },
           {
-            "metric_id": "evidence_count",
-            "display_label": "Evidence count",
-            "description": "Number of supporting context packets.",
+            "metric_id": "missing_evidence",
+            "display_label": "Missing evidence",
+            "description": "What evidence was missing or insufficient.",
             "required": true,
-            "value_type": "integer",
+            "value_type": "text",
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na"
           },
           {
-            "metric_id": "sensor_agreement",
-            "display_label": "Sensor agreement",
-            "description": "Fraction of modalities in agreement.",
+            "metric_id": "failed_modality",
+            "display_label": "Failed harness/modality",
+            "description": "Which harness or modality failed, if safe to disclose.",
             "required": false,
-            "value_type": "percentage",
-            "source": "aggregator",
+            "value_type": "text",
+            "source": "tracefix_verification",
             "source_field": null,
-            "unavailable_behavior": "show_na"
+            "unavailable_behavior": "omit"
           }
         ],
         "summary_requirements": [
-          "State the observed value and its bounded time window in one sentence."
+          "State what could and could not be determined; do not fabricate confidence."
         ],
         "confidence_requirements": {
-          "confidence_kind": "sensor_confidence",
-          "required_inputs": [
-            "sensor_confidence",
-            "evidence_count"
-          ],
+          "confidence_kind": "composite_confidence",
+          "required_inputs": [],
           "minimum_threshold": null,
           "label_bands": {
             "low": [
@@ -806,29 +720,14 @@
             ]
           },
           "explanation_required": true,
-          "scoring_method": "bounded_sensor_confidence"
+          "scoring_method": "none"
         },
-        "evidence_requirements": [
-          {
-            "evidence_type": "structured_context",
-            "required": true,
-            "minimum_count": 1,
-            "accepted_packet_types": [
-              "occupancy_context_packet",
-              "room_state_packet",
-              "motion_context_packet",
-              "audio_context_packet"
-            ],
-            "include_evidence_refs": true,
-            "include_time_window": true,
-            "include_modality": true
-          }
-        ],
+        "evidence_requirements": [],
         "caveat_requirements": [
-          "Reflects structured context only; no causal interpretation."
+          "A stronger answer was not produced because the bounded evidence was insufficient."
         ],
         "provenance_requirements": [
-          "List the harness/packet ids backing the observed value."
+          "List which expected packets were missing or empty."
         ],
         "fallback_card_type": "insufficient_evidence"
       },
@@ -849,19 +748,18 @@
           "privacy_scope": "string",
           "limitations": "array"
         },
-        "answer_type": "direct_answer",
+        "answer_type": "insufficient_evidence",
         "fallback_answer_type": "insufficient_evidence",
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
         "forbidden_claims": [
           "raw_sensor_access",
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -891,7 +789,9 @@
         "must_preserve_forbidden_claims": true,
         "validation_status": "accepted",
         "repairs": [],
-        "warnings": []
+        "warnings": [
+          "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
+        ]
       },
       "escalation_conditions": [
         "insufficient_evidence",
@@ -903,23 +803,21 @@
         "face_identity",
         "personal_identity",
         "medical_diagnosis",
-        "unsupported_behavioral_inference"
+        "unsupported_behavioral_inference",
+        "guessing"
       ],
       "allowed_claims": [
-        "bounded_count",
-        "presence_state",
-        "timestamped_event_summary"
+        "insufficient_evidence"
       ],
-      "reasoning_summary": "Deterministic template proposal generated for query tellme_a66f76444c09.",
-      "executable": true,
-      "reason": "occupancy_lookup",
+      "reasoning_summary": "Deterministic template proposal generated for query tellme_2ee7c80236ea.",
+      "executable": false,
+      "reason": "general_lookup",
       "target_tracefix_path": "TraceFix-main/",
       "status": "stub",
       "caveats": [
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-        "No available sensor supports 'room_state' context for this space.",
         "Mock CityOS structured context may be incomplete.",
         "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
@@ -933,19 +831,9 @@
         {
           "name": "answer_synthesis_harness",
           "role": "Synthesize a final answer packet with caveats and evidence references."
-        },
-        {
-          "name": "occupancy_context_harness",
-          "role": "Retrieve occupancy-oriented structured context."
         }
       ],
-      "channels": [
-        {
-          "from": "occupancy_context_harness",
-          "label": "occupancy_findings",
-          "to": "answer_synthesis_harness"
-        }
-      ],
+      "channels": [],
       "notes": [
         "Dry-run bundle only; do not invoke real TraceFix-main.",
         "This bundle is an inspectable artifact representing future integration inputs.",
@@ -955,11 +843,9 @@
       ],
       "output_contract": {
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
-        "answer_type": "direct_answer",
+        "answer_type": "insufficient_evidence",
         "fallback_answer_type": "insufficient_evidence",
         "field_types": {
           "answer": "string",
@@ -974,7 +860,8 @@
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -988,11 +875,11 @@
           "limitations"
         ]
       },
-      "query_id": "tellme_a66f76444c09",
+      "query_id": "tellme_2ee7c80236ea",
       "resources": [
         {
           "modalities": [
-            "video"
+            "context"
           ],
           "name": "cityos_structured_context",
           "space_id": "smart_room_1",
@@ -1001,24 +888,21 @@
         },
         {
           "name": "tellme_query_logs",
-          "query_id": "tellme_a66f76444c09",
+          "query_id": "tellme_2ee7c80236ea",
           "type": "local_query_run_directory"
         }
       ],
-      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\nHow many people are in the room on August 5th?\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- none specified\n\n## Required Modalities\n- video\n\n## Candidate Harnesses\n- answer_synthesis_harness\n- occupancy_context_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence or escalate when the structured context is inadequate.\n- goal_type: occupancy_count\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer packet with confidence and evidence refs.\n- user_intent: occupancy_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['occupancy_context_packet']\n- primary_evidence: ['occupancy_context_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['bounded_count', 'presence_state', 'timestamped_event_summary']\n- answer_type: direct_answer\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- bounded_count, presence_state, timestamped_event_summary\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
-      "task_id": "task_a66f76444c09",
+      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\nWhat was the object in the recording on August 5th?\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- none specified\n\n## Required Modalities\n- context\n\n## Candidate Harnesses\n- answer_synthesis_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence or escalate when the structured context is inadequate.\n- goal_type: unsupported\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer packet with confidence and evidence refs.\n- user_intent: general_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['general_context_packet']\n- primary_evidence: ['general_context_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['insufficient_evidence']\n- answer_type: insufficient_evidence\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference', 'guessing']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- insufficient_evidence\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference, guessing\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
+      "task_id": "task_2ee7c80236ea",
       "tool_manifest": {
         "answer_synthesis_harness": [
           "synthesize_answer_packet"
-        ],
-        "occupancy_context_harness": [
-          "get_occupancy_context"
         ]
       },
-      "user_query": "How many people are in the room on August 5th?"
+      "user_query": "What was the object in the recording on August 5th?"
     },
     "answer_packet": {
-      "query_id": "tellme_a66f76444c09",
+      "query_id": "tellme_2ee7c80236ea",
       "status": "needs_tracefix",
       "answer": "This query requires a future TraceFix multi-agent workflow and cannot be fully answered in V0.",
       "confidence": 0.0,
@@ -1033,11 +917,11 @@
       "selected_agent": null,
       "route_decision": {
         "route": "single_agent",
-        "intent": "historical_lookup",
-        "selected_agent": "occupancy_context_agent",
-        "selected_tool": "get_occupancy_context",
+        "intent": "general",
+        "selected_agent": "general_context_agent",
+        "selected_tool": "cityos_context_lookup",
         "required_tools": [
-          "get_occupancy_context"
+          "cityos_context_lookup"
         ],
         "rationale": "The query appears answerable with one focused CityOS-style context lookup.",
         "time_window": null,
@@ -1050,7 +934,7 @@
       },
       "agent_plan": {},
       "raw_outputs": {
-        "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_a66f76444c09",
+        "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_2ee7c80236ea",
         "logging_fallback_used": false,
         "llm_operational": {
           "agent_backend_mode": "llm",
@@ -1061,16 +945,16 @@
           "decomposition": {
             "model": "gpt-4.1-mini",
             "last_used": "primary",
-            "last_latency_ms": 25126.46,
+            "last_latency_ms": 18873.57,
             "fallback_reason": null,
             "primary_calls": 1,
             "fallback_calls": 0,
             "last_request": {
-              "request_start": "2026-08-05T17:30:18.511997+00:00",
-              "first_response_time": "2026-08-05T17:30:43.630294+00:00",
-              "request_end": "2026-08-05T17:30:43.638179+00:00",
-              "total_duration_ms": 25126.16,
-              "time_to_first_response_ms": 25118.31,
+              "request_start": "2026-08-05T17:41:56.179418+00:00",
+              "first_response_time": "2026-08-05T17:42:15.039475+00:00",
+              "request_end": "2026-08-05T17:42:15.052719+00:00",
+              "total_duration_ms": 18873.28,
+              "time_to_first_response_ms": 18860.11,
               "model": "gpt-4.1-mini",
               "provider": "https://api.openai.com/v1",
               "provider_name": "OpenAI",
@@ -1084,22 +968,21 @@
         },
         "agent_backend_mode": "llm",
         "tracefix_task_spec": {
-          "task_id": "task_a66f76444c09",
-          "query_id": "tellme_a66f76444c09",
-          "user_query": "How many people are in the room on August 5th?",
+          "task_id": "task_2ee7c80236ea",
+          "query_id": "tellme_2ee7c80236ea",
+          "user_query": "What was the object in the recording on August 5th?",
           "space_id": "smart_room_1",
-          "intent": "occupancy_lookup",
-          "tracefix_reason": "Preserve routing, privacy, and output verification.",
+          "intent": "general_lookup",
+          "tracefix_reason": "Needs a safe non-executable contract.",
           "required_capabilities": [
-            "occupancy_context",
             "answer_synthesis"
           ],
           "input_artifacts": [
             {
-              "artifact_id": "occupancy_context_packet",
+              "artifact_id": "general_context_packet",
               "artifact_type": "packet",
               "time_range": null,
-              "modality": "video",
+              "modality": null,
               "privacy_level": "structured_context_only"
             }
           ],
@@ -1110,7 +993,7 @@
               "evidence_card"
             ],
             "require_evidence_refs": true,
-            "max_agents": 2,
+            "max_agents": 1,
             "privacy_scope": "cityos_structured_context_only",
             "identity_inference_allowed": false
           },
@@ -1119,19 +1002,18 @@
             "Return required fields only.",
             "Preserve privacy limits and caveats."
           ],
-          "output_contract_name": "direct_answer_v1",
+          "output_contract_name": "insufficient_evidence_v1",
           "route": "single_agent",
           "time_windows": [],
           "required_modalities": [
-            "video"
+            "context"
           ],
           "candidate_harnesses": [
-            "occupancy_context_harness",
             "answer_synthesis_harness"
           ],
           "application_goal": {
-            "goal_type": "occupancy_count",
-            "user_intent": "occupancy_lookup",
+            "goal_type": "unsupported",
+            "user_intent": "general_lookup",
             "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
             "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
             "non_goals": [
@@ -1143,16 +1025,16 @@
           },
           "evidence_plan": {
             "primary_evidence": [
-              "occupancy_context_packet"
+              "general_context_packet"
             ],
             "supporting_evidence": [],
             "minimum_sufficient_evidence": [
-              "occupancy_context_packet"
+              "general_context_packet"
             ],
             "conflicting_evidence_checks": []
           },
           "answer_packet_requirements": {
-            "answer_type": "direct_answer",
+            "answer_type": "insufficient_evidence",
             "required_fields": [
               "answer",
               "confidence",
@@ -1162,16 +1044,15 @@
               "limitations"
             ],
             "allowed_claims": [
-              "bounded_count",
-              "presence_state",
-              "timestamped_event_summary"
+              "insufficient_evidence"
             ],
             "forbidden_claims": [
               "raw_sensor_access",
               "face_identity",
               "personal_identity",
               "medical_diagnosis",
-              "unsupported_behavioral_inference"
+              "unsupported_behavioral_inference",
+              "guessing"
             ],
             "must_include_confidence": true,
             "must_include_evidence_refs": true,
@@ -1179,26 +1060,23 @@
             "fallback_answer_type": "insufficient_evidence"
           },
           "evidence_card_contract": {
-            "card_type": "descriptive",
-            "primary_question": "What did the structured context observe?",
-            "title_template": "{primary_question}",
-            "claim_target": "observed_room_state",
+            "card_type": "insufficient_evidence",
+            "primary_question": "Could the system answer this from the available evidence?",
+            "title_template": "Insufficient evidence to answer confidently",
+            "claim_target": "insufficient_evidence",
             "allowed_conclusion_types": [
-              "observed_state",
-              "bounded_count",
-              "presence_state"
+              "insufficient_evidence"
             ],
             "forbidden_conclusion_types": [
-              "causal_effect",
-              "statistical_significance",
-              "causal_graph_claim",
-              "raw_sensor_access",
-              "face_identity",
               "personal_identity",
+              "face_identity",
               "medical_diagnosis",
-              "unsupported_behavioral_inference",
               "confirmed_injury",
-              "cause_or_intent_inference"
+              "cause_or_intent_inference",
+              "unsupported_behavioral_inference",
+              "raw_sensor_access",
+              "fabricated_confidence",
+              "guessing"
             ],
             "badge_requirements": [
               {
@@ -1206,75 +1084,46 @@
                 "label_template": "{card_type}",
                 "source": "query_analysis",
                 "required": true
-              },
-              {
-                "badge_id": "modality",
-                "label_template": "{modalities}",
-                "source": "harness_output",
-                "required": false
               }
             ],
             "metric_requirements": [
               {
-                "metric_id": "observed_value",
-                "display_label": "Observed value",
-                "description": "The value observed in the time window (e.g. occupancy count or state).",
+                "metric_id": "what_determined",
+                "display_label": "What was determined",
+                "description": "What the system could establish, if anything.",
                 "required": true,
-                "value_type": "category",
-                "source": "harness_output",
-                "source_field": "value",
-                "unavailable_behavior": "show_na"
-              },
-              {
-                "metric_id": "time_window",
-                "display_label": "Time window",
-                "description": "Bounded window the observation covers.",
-                "required": true,
-                "value_type": "range",
-                "source": "harness_output",
-                "source_field": "timestamp",
-                "unavailable_behavior": "show_na"
-              },
-              {
-                "metric_id": "modalities_used",
-                "display_label": "Modalities used",
-                "description": "Sensor modalities that contributed.",
-                "required": true,
-                "value_type": "category",
+                "value_type": "text",
                 "source": "aggregator",
                 "source_field": null,
                 "unavailable_behavior": "show_na"
               },
               {
-                "metric_id": "evidence_count",
-                "display_label": "Evidence count",
-                "description": "Number of supporting context packets.",
+                "metric_id": "missing_evidence",
+                "display_label": "Missing evidence",
+                "description": "What evidence was missing or insufficient.",
                 "required": true,
-                "value_type": "integer",
+                "value_type": "text",
                 "source": "aggregator",
                 "source_field": null,
                 "unavailable_behavior": "show_na"
               },
               {
-                "metric_id": "sensor_agreement",
-                "display_label": "Sensor agreement",
-                "description": "Fraction of modalities in agreement.",
+                "metric_id": "failed_modality",
+                "display_label": "Failed harness/modality",
+                "description": "Which harness or modality failed, if safe to disclose.",
                 "required": false,
-                "value_type": "percentage",
-                "source": "aggregator",
+                "value_type": "text",
+                "source": "tracefix_verification",
                 "source_field": null,
-                "unavailable_behavior": "show_na"
+                "unavailable_behavior": "omit"
               }
             ],
             "summary_requirements": [
-              "State the observed value and its bounded time window in one sentence."
+              "State what could and could not be determined; do not fabricate confidence."
             ],
             "confidence_requirements": {
-              "confidence_kind": "sensor_confidence",
-              "required_inputs": [
-                "sensor_confidence",
-                "evidence_count"
-              ],
+              "confidence_kind": "composite_confidence",
+              "required_inputs": [],
               "minimum_threshold": null,
               "label_bands": {
                 "low": [
@@ -1291,29 +1140,14 @@
                 ]
               },
               "explanation_required": true,
-              "scoring_method": "bounded_sensor_confidence"
+              "scoring_method": "none"
             },
-            "evidence_requirements": [
-              {
-                "evidence_type": "structured_context",
-                "required": true,
-                "minimum_count": 1,
-                "accepted_packet_types": [
-                  "occupancy_context_packet",
-                  "room_state_packet",
-                  "motion_context_packet",
-                  "audio_context_packet"
-                ],
-                "include_evidence_refs": true,
-                "include_time_window": true,
-                "include_modality": true
-              }
-            ],
+            "evidence_requirements": [],
             "caveat_requirements": [
-              "Reflects structured context only; no causal interpretation."
+              "A stronger answer was not produced because the bounded evidence was insufficient."
             ],
             "provenance_requirements": [
-              "List the harness/packet ids backing the observed value."
+              "List which expected packets were missing or empty."
             ],
             "fallback_card_type": "insufficient_evidence"
           },
@@ -1334,19 +1168,18 @@
               "privacy_scope": "string",
               "limitations": "array"
             },
-            "answer_type": "direct_answer",
+            "answer_type": "insufficient_evidence",
             "fallback_answer_type": "insufficient_evidence",
             "allowed_claims": [
-              "bounded_count",
-              "presence_state",
-              "timestamped_event_summary"
+              "insufficient_evidence"
             ],
             "forbidden_claims": [
               "raw_sensor_access",
               "face_identity",
               "personal_identity",
               "medical_diagnosis",
-              "unsupported_behavioral_inference"
+              "unsupported_behavioral_inference",
+              "guessing"
             ],
             "must_include_confidence": true,
             "must_include_evidence_refs": true,
@@ -1376,7 +1209,9 @@
             "must_preserve_forbidden_claims": true,
             "validation_status": "accepted",
             "repairs": [],
-            "warnings": []
+            "warnings": [
+              "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
+            ]
           },
           "escalation_conditions": [
             "insufficient_evidence",
@@ -1388,23 +1223,21 @@
             "face_identity",
             "personal_identity",
             "medical_diagnosis",
-            "unsupported_behavioral_inference"
+            "unsupported_behavioral_inference",
+            "guessing"
           ],
           "allowed_claims": [
-            "bounded_count",
-            "presence_state",
-            "timestamped_event_summary"
+            "insufficient_evidence"
           ],
-          "reasoning_summary": "Deterministic template proposal generated for query tellme_a66f76444c09.",
-          "executable": true,
-          "reason": "occupancy_lookup",
+          "reasoning_summary": "Deterministic template proposal generated for query tellme_2ee7c80236ea.",
+          "executable": false,
+          "reason": "general_lookup",
           "target_tracefix_path": "TraceFix-main/",
           "status": "stub",
           "caveats": [
             "This is a stub only; TraceFix-main is not invoked in V0.",
             "Real TraceFix multi-agent execution is not integrated yet.",
             "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-            "No available sensor supports 'room_state' context for this space.",
             "Mock CityOS structured context may be incomplete.",
             "Confidence must remain bounded by available evidence.",
             "Use CityOS structured context only.",
@@ -1414,37 +1247,35 @@
           ]
         },
         "tracefix_bundle_summary": {
-          "task_id": "task_a66f76444c09",
+          "task_id": "task_2ee7c80236ea",
           "agent_names": [
-            "answer_synthesis_harness",
-            "occupancy_context_harness"
+            "answer_synthesis_harness"
           ],
-          "channel_count": 1,
+          "channel_count": 0,
           "resource_count": 2
         },
         "evidence_card_preview": {
-          "card_type": "descriptive",
-          "metric_count": 5,
+          "card_type": "insufficient_evidence",
+          "metric_count": 3,
           "validation_status": "valid"
         }
       },
       "tracefix_task_spec": {
-        "task_id": "task_a66f76444c09",
-        "query_id": "tellme_a66f76444c09",
-        "user_query": "How many people are in the room on August 5th?",
+        "task_id": "task_2ee7c80236ea",
+        "query_id": "tellme_2ee7c80236ea",
+        "user_query": "What was the object in the recording on August 5th?",
         "space_id": "smart_room_1",
-        "intent": "occupancy_lookup",
-        "tracefix_reason": "Preserve routing, privacy, and output verification.",
+        "intent": "general_lookup",
+        "tracefix_reason": "Needs a safe non-executable contract.",
         "required_capabilities": [
-          "occupancy_context",
           "answer_synthesis"
         ],
         "input_artifacts": [
           {
-            "artifact_id": "occupancy_context_packet",
+            "artifact_id": "general_context_packet",
             "artifact_type": "packet",
             "time_range": null,
-            "modality": "video",
+            "modality": null,
             "privacy_level": "structured_context_only"
           }
         ],
@@ -1455,7 +1286,7 @@
             "evidence_card"
           ],
           "require_evidence_refs": true,
-          "max_agents": 2,
+          "max_agents": 1,
           "privacy_scope": "cityos_structured_context_only",
           "identity_inference_allowed": false
         },
@@ -1464,19 +1295,18 @@
           "Return required fields only.",
           "Preserve privacy limits and caveats."
         ],
-        "output_contract_name": "direct_answer_v1",
+        "output_contract_name": "insufficient_evidence_v1",
         "route": "single_agent",
         "time_windows": [],
         "required_modalities": [
-          "video"
+          "context"
         ],
         "candidate_harnesses": [
-          "occupancy_context_harness",
           "answer_synthesis_harness"
         ],
         "application_goal": {
-          "goal_type": "occupancy_count",
-          "user_intent": "occupancy_lookup",
+          "goal_type": "unsupported",
+          "user_intent": "general_lookup",
           "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
           "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
           "non_goals": [
@@ -1488,16 +1318,16 @@
         },
         "evidence_plan": {
           "primary_evidence": [
-            "occupancy_context_packet"
+            "general_context_packet"
           ],
           "supporting_evidence": [],
           "minimum_sufficient_evidence": [
-            "occupancy_context_packet"
+            "general_context_packet"
           ],
           "conflicting_evidence_checks": []
         },
         "answer_packet_requirements": {
-          "answer_type": "direct_answer",
+          "answer_type": "insufficient_evidence",
           "required_fields": [
             "answer",
             "confidence",
@@ -1507,16 +1337,15 @@
             "limitations"
           ],
           "allowed_claims": [
-            "bounded_count",
-            "presence_state",
-            "timestamped_event_summary"
+            "insufficient_evidence"
           ],
           "forbidden_claims": [
             "raw_sensor_access",
             "face_identity",
             "personal_identity",
             "medical_diagnosis",
-            "unsupported_behavioral_inference"
+            "unsupported_behavioral_inference",
+            "guessing"
           ],
           "must_include_confidence": true,
           "must_include_evidence_refs": true,
@@ -1524,26 +1353,23 @@
           "fallback_answer_type": "insufficient_evidence"
         },
         "evidence_card_contract": {
-          "card_type": "descriptive",
-          "primary_question": "What did the structured context observe?",
-          "title_template": "{primary_question}",
-          "claim_target": "observed_room_state",
+          "card_type": "insufficient_evidence",
+          "primary_question": "Could the system answer this from the available evidence?",
+          "title_template": "Insufficient evidence to answer confidently",
+          "claim_target": "insufficient_evidence",
           "allowed_conclusion_types": [
-            "observed_state",
-            "bounded_count",
-            "presence_state"
+            "insufficient_evidence"
           ],
           "forbidden_conclusion_types": [
-            "causal_effect",
-            "statistical_significance",
-            "causal_graph_claim",
-            "raw_sensor_access",
-            "face_identity",
             "personal_identity",
+            "face_identity",
             "medical_diagnosis",
-            "unsupported_behavioral_inference",
             "confirmed_injury",
-            "cause_or_intent_inference"
+            "cause_or_intent_inference",
+            "unsupported_behavioral_inference",
+            "raw_sensor_access",
+            "fabricated_confidence",
+            "guessing"
           ],
           "badge_requirements": [
             {
@@ -1551,75 +1377,46 @@
               "label_template": "{card_type}",
               "source": "query_analysis",
               "required": true
-            },
-            {
-              "badge_id": "modality",
-              "label_template": "{modalities}",
-              "source": "harness_output",
-              "required": false
             }
           ],
           "metric_requirements": [
             {
-              "metric_id": "observed_value",
-              "display_label": "Observed value",
-              "description": "The value observed in the time window (e.g. occupancy count or state).",
+              "metric_id": "what_determined",
+              "display_label": "What was determined",
+              "description": "What the system could establish, if anything.",
               "required": true,
-              "value_type": "category",
-              "source": "harness_output",
-              "source_field": "value",
-              "unavailable_behavior": "show_na"
-            },
-            {
-              "metric_id": "time_window",
-              "display_label": "Time window",
-              "description": "Bounded window the observation covers.",
-              "required": true,
-              "value_type": "range",
-              "source": "harness_output",
-              "source_field": "timestamp",
-              "unavailable_behavior": "show_na"
-            },
-            {
-              "metric_id": "modalities_used",
-              "display_label": "Modalities used",
-              "description": "Sensor modalities that contributed.",
-              "required": true,
-              "value_type": "category",
+              "value_type": "text",
               "source": "aggregator",
               "source_field": null,
               "unavailable_behavior": "show_na"
             },
             {
-              "metric_id": "evidence_count",
-              "display_label": "Evidence count",
-              "description": "Number of supporting context packets.",
+              "metric_id": "missing_evidence",
+              "display_label": "Missing evidence",
+              "description": "What evidence was missing or insufficient.",
               "required": true,
-              "value_type": "integer",
+              "value_type": "text",
               "source": "aggregator",
               "source_field": null,
               "unavailable_behavior": "show_na"
             },
             {
-              "metric_id": "sensor_agreement",
-              "display_label": "Sensor agreement",
-              "description": "Fraction of modalities in agreement.",
+              "metric_id": "failed_modality",
+              "display_label": "Failed harness/modality",
+              "description": "Which harness or modality failed, if safe to disclose.",
               "required": false,
-              "value_type": "percentage",
-              "source": "aggregator",
+              "value_type": "text",
+              "source": "tracefix_verification",
               "source_field": null,
-              "unavailable_behavior": "show_na"
+              "unavailable_behavior": "omit"
             }
           ],
           "summary_requirements": [
-            "State the observed value and its bounded time window in one sentence."
+            "State what could and could not be determined; do not fabricate confidence."
           ],
           "confidence_requirements": {
-            "confidence_kind": "sensor_confidence",
-            "required_inputs": [
-              "sensor_confidence",
-              "evidence_count"
-            ],
+            "confidence_kind": "composite_confidence",
+            "required_inputs": [],
             "minimum_threshold": null,
             "label_bands": {
               "low": [
@@ -1636,29 +1433,14 @@
               ]
             },
             "explanation_required": true,
-            "scoring_method": "bounded_sensor_confidence"
+            "scoring_method": "none"
           },
-          "evidence_requirements": [
-            {
-              "evidence_type": "structured_context",
-              "required": true,
-              "minimum_count": 1,
-              "accepted_packet_types": [
-                "occupancy_context_packet",
-                "room_state_packet",
-                "motion_context_packet",
-                "audio_context_packet"
-              ],
-              "include_evidence_refs": true,
-              "include_time_window": true,
-              "include_modality": true
-            }
-          ],
+          "evidence_requirements": [],
           "caveat_requirements": [
-            "Reflects structured context only; no causal interpretation."
+            "A stronger answer was not produced because the bounded evidence was insufficient."
           ],
           "provenance_requirements": [
-            "List the harness/packet ids backing the observed value."
+            "List which expected packets were missing or empty."
           ],
           "fallback_card_type": "insufficient_evidence"
         },
@@ -1679,19 +1461,18 @@
             "privacy_scope": "string",
             "limitations": "array"
           },
-          "answer_type": "direct_answer",
+          "answer_type": "insufficient_evidence",
           "fallback_answer_type": "insufficient_evidence",
           "allowed_claims": [
-            "bounded_count",
-            "presence_state",
-            "timestamped_event_summary"
+            "insufficient_evidence"
           ],
           "forbidden_claims": [
             "raw_sensor_access",
             "face_identity",
             "personal_identity",
             "medical_diagnosis",
-            "unsupported_behavioral_inference"
+            "unsupported_behavioral_inference",
+            "guessing"
           ],
           "must_include_confidence": true,
           "must_include_evidence_refs": true,
@@ -1721,7 +1502,9 @@
           "must_preserve_forbidden_claims": true,
           "validation_status": "accepted",
           "repairs": [],
-          "warnings": []
+          "warnings": [
+            "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
+          ]
         },
         "escalation_conditions": [
           "insufficient_evidence",
@@ -1733,23 +1516,21 @@
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
-        "reasoning_summary": "Deterministic template proposal generated for query tellme_a66f76444c09.",
-        "executable": true,
-        "reason": "occupancy_lookup",
+        "reasoning_summary": "Deterministic template proposal generated for query tellme_2ee7c80236ea.",
+        "executable": false,
+        "reason": "general_lookup",
         "target_tracefix_path": "TraceFix-main/",
         "status": "stub",
         "caveats": [
           "This is a stub only; TraceFix-main is not invoked in V0.",
           "Real TraceFix multi-agent execution is not integrated yet.",
           "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-          "No available sensor supports 'room_state' context for this space.",
           "Mock CityOS structured context may be incomplete.",
           "Confidence must remain bounded by available evidence.",
           "Use CityOS structured context only.",
@@ -1760,17 +1541,19 @@
       },
       "error_message": null
     },
-    "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_a66f76444c09",
-    "warnings": [],
-    "answer_summary": "On August 5, occupancy peaked at 2 people in the room, and the recording ended with 0 people in the room.",
-    "chat_answer": "On August 5, occupancy peaked at 2 people in the room, and the recording ended with 0 people in the room.",
+    "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_2ee7c80236ea",
+    "warnings": [
+      "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
+    ],
+    "answer_summary": "The available facts indicate a \"carry/hold (an object)\" activity was detected on August 5th, but the specific object involved is not identified or described in the supplied data.",
+    "chat_answer": "The available facts indicate a \"carry/hold (an object)\" activity was detected on August 5th, but the specific object involved is not identified or described in the supplied data.",
     "web_data_answer": {
-      "answer": "On August 5, occupancy peaked at 2 people in the room, and the recording ended with 0 people in the room.",
-      "text": "On August 5, occupancy peaked at 2 people in the room, and the recording ended with 0 people in the room.",
-      "chatAnswer": "On August 5, occupancy peaked at 2 people in the room, and the recording ended with 0 people in the room.",
-      "chat_answer": "On August 5, occupancy peaked at 2 people in the room, and the recording ended with 0 people in the room.",
+      "answer": "The available facts indicate a \"carry/hold (an object)\" activity was detected on August 5th, but the specific object involved is not identified or described in the supplied data.",
+      "text": "The available facts indicate a \"carry/hold (an object)\" activity was detected on August 5th, but the specific object involved is not identified or described in the supplied data.",
+      "chatAnswer": "The available facts indicate a \"carry/hold (an object)\" activity was detected on August 5th, but the specific object involved is not identified or described in the supplied data.",
+      "chat_answer": "The available facts indicate a \"carry/hold (an object)\" activity was detected on August 5th, but the specific object involved is not identified or described in the supplied data.",
       "producer_agent": "OCCUPANCY_ANALYZER",
-      "confidence": 0.9,
+      "confidence": 0.4,
       "evidence_refs": [
         "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-cam1",
         "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-cam2",
@@ -1780,7 +1563,10 @@
       ],
       "limitations": [
         "Counts are bounded by the available aggregate inference data.",
-        "The question does not specify a time, so both peak and final occupancy are provided."
+        "Cameras covering the same recording disagreed (values 0 to 2).",
+        "The object category or identity was not provided in the available inference data.",
+        "Activity labels are aggregate and do not specify what was carried or held.",
+        "Camera-level data disagreed on counts, which may affect detection reliability."
       ],
       "source_count": 426,
       "evidence_used_count": 5,
@@ -1791,18 +1577,1236 @@
       "cameras": [
         {
           "camera": "cam2-cam1",
-          "peakPeople": null,
-          "lastPeople": null,
-          "framesAnalyzed": 0,
+          "peakPeople": 6,
+          "lastPeople": 2,
+          "framesAnalyzed": 304,
           "durationSec": 61.774,
           "activities": [],
           "activityCounts": {},
           "activityCountMethods": {},
           "activityCountsUnion": {},
-          "occupancySamples": [],
+          "occupancySamples": [
+            {
+              "t": 0.0,
+              "count": 3
+            },
+            {
+              "t": 0.2,
+              "count": 3
+            },
+            {
+              "t": 0.41,
+              "count": 3
+            },
+            {
+              "t": 0.61,
+              "count": 3
+            },
+            {
+              "t": 0.81,
+              "count": 2
+            },
+            {
+              "t": 1.02,
+              "count": 1
+            },
+            {
+              "t": 1.22,
+              "count": 2
+            },
+            {
+              "t": 1.43,
+              "count": 2
+            },
+            {
+              "t": 1.63,
+              "count": 3
+            },
+            {
+              "t": 1.83,
+              "count": 3
+            },
+            {
+              "t": 2.04,
+              "count": 2
+            },
+            {
+              "t": 2.24,
+              "count": 2
+            },
+            {
+              "t": 2.44,
+              "count": 2
+            },
+            {
+              "t": 2.65,
+              "count": 1
+            },
+            {
+              "t": 2.85,
+              "count": 1
+            },
+            {
+              "t": 3.05,
+              "count": 2
+            },
+            {
+              "t": 3.26,
+              "count": 3
+            },
+            {
+              "t": 3.46,
+              "count": 3
+            },
+            {
+              "t": 3.66,
+              "count": 2
+            },
+            {
+              "t": 3.87,
+              "count": 3
+            },
+            {
+              "t": 4.07,
+              "count": 2
+            },
+            {
+              "t": 4.27,
+              "count": 4
+            },
+            {
+              "t": 4.48,
+              "count": 3
+            },
+            {
+              "t": 4.68,
+              "count": 3
+            },
+            {
+              "t": 4.88,
+              "count": 3
+            },
+            {
+              "t": 5.09,
+              "count": 3
+            },
+            {
+              "t": 5.29,
+              "count": 4
+            },
+            {
+              "t": 5.5,
+              "count": 3
+            },
+            {
+              "t": 5.7,
+              "count": 3
+            },
+            {
+              "t": 5.9,
+              "count": 3
+            },
+            {
+              "t": 6.11,
+              "count": 3
+            },
+            {
+              "t": 6.31,
+              "count": 3
+            },
+            {
+              "t": 6.51,
+              "count": 3
+            },
+            {
+              "t": 6.72,
+              "count": 2
+            },
+            {
+              "t": 6.92,
+              "count": 3
+            },
+            {
+              "t": 7.12,
+              "count": 3
+            },
+            {
+              "t": 7.33,
+              "count": 2
+            },
+            {
+              "t": 7.53,
+              "count": 2
+            },
+            {
+              "t": 7.73,
+              "count": 2
+            },
+            {
+              "t": 7.94,
+              "count": 3
+            },
+            {
+              "t": 8.14,
+              "count": 3
+            },
+            {
+              "t": 8.35,
+              "count": 3
+            },
+            {
+              "t": 8.55,
+              "count": 2
+            },
+            {
+              "t": 8.75,
+              "count": 2
+            },
+            {
+              "t": 8.96,
+              "count": 3
+            },
+            {
+              "t": 9.16,
+              "count": 3
+            },
+            {
+              "t": 9.36,
+              "count": 3
+            },
+            {
+              "t": 9.57,
+              "count": 2
+            },
+            {
+              "t": 9.77,
+              "count": 2
+            },
+            {
+              "t": 9.97,
+              "count": 3
+            },
+            {
+              "t": 10.18,
+              "count": 3
+            },
+            {
+              "t": 10.38,
+              "count": 3
+            },
+            {
+              "t": 10.58,
+              "count": 3
+            },
+            {
+              "t": 10.79,
+              "count": 3
+            },
+            {
+              "t": 10.99,
+              "count": 3
+            },
+            {
+              "t": 11.2,
+              "count": 1
+            },
+            {
+              "t": 11.4,
+              "count": 2
+            },
+            {
+              "t": 11.6,
+              "count": 2
+            },
+            {
+              "t": 11.8,
+              "count": 1
+            },
+            {
+              "t": 12.01,
+              "count": 2
+            },
+            {
+              "t": 12.21,
+              "count": 2
+            },
+            {
+              "t": 12.42,
+              "count": 2
+            },
+            {
+              "t": 12.62,
+              "count": 2
+            },
+            {
+              "t": 12.82,
+              "count": 2
+            },
+            {
+              "t": 13.03,
+              "count": 2
+            },
+            {
+              "t": 13.23,
+              "count": 2
+            },
+            {
+              "t": 13.43,
+              "count": 2
+            },
+            {
+              "t": 13.64,
+              "count": 2
+            },
+            {
+              "t": 13.84,
+              "count": 2
+            },
+            {
+              "t": 14.04,
+              "count": 2
+            },
+            {
+              "t": 14.25,
+              "count": 3
+            },
+            {
+              "t": 14.45,
+              "count": 3
+            },
+            {
+              "t": 14.65,
+              "count": 3
+            },
+            {
+              "t": 14.86,
+              "count": 2
+            },
+            {
+              "t": 15.06,
+              "count": 3
+            },
+            {
+              "t": 15.27,
+              "count": 3
+            },
+            {
+              "t": 15.47,
+              "count": 2
+            },
+            {
+              "t": 15.67,
+              "count": 2
+            },
+            {
+              "t": 15.88,
+              "count": 3
+            },
+            {
+              "t": 16.08,
+              "count": 3
+            },
+            {
+              "t": 16.28,
+              "count": 3
+            },
+            {
+              "t": 16.49,
+              "count": 2
+            },
+            {
+              "t": 16.69,
+              "count": 3
+            },
+            {
+              "t": 16.89,
+              "count": 3
+            },
+            {
+              "t": 17.1,
+              "count": 3
+            },
+            {
+              "t": 17.3,
+              "count": 3
+            },
+            {
+              "t": 17.5,
+              "count": 2
+            },
+            {
+              "t": 17.71,
+              "count": 2
+            },
+            {
+              "t": 17.91,
+              "count": 2
+            },
+            {
+              "t": 18.11,
+              "count": 2
+            },
+            {
+              "t": 18.32,
+              "count": 2
+            },
+            {
+              "t": 18.52,
+              "count": 3
+            },
+            {
+              "t": 18.73,
+              "count": 2
+            },
+            {
+              "t": 18.93,
+              "count": 2
+            },
+            {
+              "t": 19.13,
+              "count": 1
+            },
+            {
+              "t": 19.34,
+              "count": 3
+            },
+            {
+              "t": 19.54,
+              "count": 2
+            },
+            {
+              "t": 19.74,
+              "count": 1
+            },
+            {
+              "t": 19.95,
+              "count": 3
+            },
+            {
+              "t": 20.15,
+              "count": 2
+            },
+            {
+              "t": 20.35,
+              "count": 3
+            },
+            {
+              "t": 20.56,
+              "count": 3
+            },
+            {
+              "t": 20.76,
+              "count": 2
+            },
+            {
+              "t": 20.96,
+              "count": 3
+            },
+            {
+              "t": 21.17,
+              "count": 3
+            },
+            {
+              "t": 21.37,
+              "count": 3
+            },
+            {
+              "t": 21.57,
+              "count": 4
+            },
+            {
+              "t": 21.78,
+              "count": 3
+            },
+            {
+              "t": 21.98,
+              "count": 2
+            },
+            {
+              "t": 22.19,
+              "count": 2
+            },
+            {
+              "t": 22.39,
+              "count": 2
+            },
+            {
+              "t": 22.59,
+              "count": 2
+            },
+            {
+              "t": 22.8,
+              "count": 2
+            },
+            {
+              "t": 23.0,
+              "count": 2
+            },
+            {
+              "t": 23.2,
+              "count": 3
+            },
+            {
+              "t": 23.41,
+              "count": 3
+            },
+            {
+              "t": 23.61,
+              "count": 3
+            },
+            {
+              "t": 23.81,
+              "count": 2
+            },
+            {
+              "t": 24.02,
+              "count": 3
+            },
+            {
+              "t": 24.22,
+              "count": 3
+            },
+            {
+              "t": 24.43,
+              "count": 3
+            },
+            {
+              "t": 24.63,
+              "count": 3
+            },
+            {
+              "t": 24.83,
+              "count": 3
+            },
+            {
+              "t": 25.04,
+              "count": 2
+            },
+            {
+              "t": 25.24,
+              "count": 2
+            },
+            {
+              "t": 25.44,
+              "count": 2
+            },
+            {
+              "t": 25.65,
+              "count": 2
+            },
+            {
+              "t": 25.85,
+              "count": 2
+            },
+            {
+              "t": 26.05,
+              "count": 2
+            },
+            {
+              "t": 26.26,
+              "count": 2
+            },
+            {
+              "t": 26.46,
+              "count": 2
+            },
+            {
+              "t": 26.66,
+              "count": 3
+            },
+            {
+              "t": 26.87,
+              "count": 3
+            },
+            {
+              "t": 27.07,
+              "count": 3
+            },
+            {
+              "t": 27.27,
+              "count": 4
+            },
+            {
+              "t": 27.48,
+              "count": 3
+            },
+            {
+              "t": 27.68,
+              "count": 3
+            },
+            {
+              "t": 27.89,
+              "count": 3
+            },
+            {
+              "t": 28.09,
+              "count": 3
+            },
+            {
+              "t": 28.29,
+              "count": 3
+            },
+            {
+              "t": 28.5,
+              "count": 2
+            },
+            {
+              "t": 28.7,
+              "count": 2
+            },
+            {
+              "t": 28.9,
+              "count": 2
+            },
+            {
+              "t": 29.11,
+              "count": 2
+            },
+            {
+              "t": 29.31,
+              "count": 2
+            },
+            {
+              "t": 29.51,
+              "count": 2
+            },
+            {
+              "t": 29.72,
+              "count": 2
+            },
+            {
+              "t": 29.92,
+              "count": 2
+            },
+            {
+              "t": 30.12,
+              "count": 2
+            },
+            {
+              "t": 30.33,
+              "count": 2
+            },
+            {
+              "t": 30.53,
+              "count": 2
+            },
+            {
+              "t": 30.73,
+              "count": 2
+            },
+            {
+              "t": 30.94,
+              "count": 2
+            },
+            {
+              "t": 31.14,
+              "count": 2
+            },
+            {
+              "t": 31.34,
+              "count": 2
+            },
+            {
+              "t": 31.55,
+              "count": 4
+            },
+            {
+              "t": 31.75,
+              "count": 2
+            },
+            {
+              "t": 31.95,
+              "count": 2
+            },
+            {
+              "t": 32.16,
+              "count": 2
+            },
+            {
+              "t": 32.36,
+              "count": 2
+            },
+            {
+              "t": 32.57,
+              "count": 2
+            },
+            {
+              "t": 32.77,
+              "count": 2
+            },
+            {
+              "t": 32.97,
+              "count": 2
+            },
+            {
+              "t": 33.18,
+              "count": 2
+            },
+            {
+              "t": 33.38,
+              "count": 2
+            },
+            {
+              "t": 33.58,
+              "count": 2
+            },
+            {
+              "t": 33.79,
+              "count": 2
+            },
+            {
+              "t": 33.99,
+              "count": 2
+            },
+            {
+              "t": 34.19,
+              "count": 2
+            },
+            {
+              "t": 34.4,
+              "count": 2
+            },
+            {
+              "t": 34.6,
+              "count": 3
+            },
+            {
+              "t": 34.8,
+              "count": 2
+            },
+            {
+              "t": 35.01,
+              "count": 2
+            },
+            {
+              "t": 35.21,
+              "count": 3
+            },
+            {
+              "t": 35.42,
+              "count": 3
+            },
+            {
+              "t": 35.62,
+              "count": 2
+            },
+            {
+              "t": 35.82,
+              "count": 2
+            },
+            {
+              "t": 36.03,
+              "count": 2
+            },
+            {
+              "t": 36.23,
+              "count": 2
+            },
+            {
+              "t": 36.43,
+              "count": 2
+            },
+            {
+              "t": 36.64,
+              "count": 3
+            },
+            {
+              "t": 36.84,
+              "count": 3
+            },
+            {
+              "t": 37.04,
+              "count": 2
+            },
+            {
+              "t": 37.25,
+              "count": 3
+            },
+            {
+              "t": 37.45,
+              "count": 3
+            },
+            {
+              "t": 37.66,
+              "count": 2
+            },
+            {
+              "t": 37.86,
+              "count": 2
+            },
+            {
+              "t": 38.06,
+              "count": 2
+            },
+            {
+              "t": 38.27,
+              "count": 3
+            },
+            {
+              "t": 38.47,
+              "count": 3
+            },
+            {
+              "t": 38.67,
+              "count": 3
+            },
+            {
+              "t": 38.88,
+              "count": 3
+            },
+            {
+              "t": 39.08,
+              "count": 2
+            },
+            {
+              "t": 39.28,
+              "count": 3
+            },
+            {
+              "t": 39.49,
+              "count": 3
+            },
+            {
+              "t": 39.69,
+              "count": 3
+            },
+            {
+              "t": 39.89,
+              "count": 3
+            },
+            {
+              "t": 40.1,
+              "count": 3
+            },
+            {
+              "t": 40.3,
+              "count": 3
+            },
+            {
+              "t": 40.5,
+              "count": 4
+            },
+            {
+              "t": 40.71,
+              "count": 3
+            },
+            {
+              "t": 40.91,
+              "count": 3
+            },
+            {
+              "t": 41.12,
+              "count": 3
+            },
+            {
+              "t": 41.32,
+              "count": 5
+            },
+            {
+              "t": 41.52,
+              "count": 6
+            },
+            {
+              "t": 41.73,
+              "count": 2
+            },
+            {
+              "t": 41.93,
+              "count": 2
+            },
+            {
+              "t": 42.13,
+              "count": 3
+            },
+            {
+              "t": 42.34,
+              "count": 2
+            },
+            {
+              "t": 42.54,
+              "count": 1
+            },
+            {
+              "t": 42.74,
+              "count": 1
+            },
+            {
+              "t": 42.95,
+              "count": 2
+            },
+            {
+              "t": 43.15,
+              "count": 4
+            },
+            {
+              "t": 43.35,
+              "count": 2
+            },
+            {
+              "t": 43.56,
+              "count": 2
+            },
+            {
+              "t": 43.76,
+              "count": 2
+            },
+            {
+              "t": 43.96,
+              "count": 2
+            },
+            {
+              "t": 44.17,
+              "count": 2
+            },
+            {
+              "t": 44.37,
+              "count": 2
+            },
+            {
+              "t": 44.58,
+              "count": 3
+            },
+            {
+              "t": 44.78,
+              "count": 4
+            },
+            {
+              "t": 44.98,
+              "count": 3
+            },
+            {
+              "t": 45.19,
+              "count": 4
+            },
+            {
+              "t": 45.39,
+              "count": 4
+            },
+            {
+              "t": 45.59,
+              "count": 3
+            },
+            {
+              "t": 45.8,
+              "count": 4
+            },
+            {
+              "t": 46.0,
+              "count": 5
+            },
+            {
+              "t": 46.2,
+              "count": 3
+            },
+            {
+              "t": 46.41,
+              "count": 3
+            },
+            {
+              "t": 46.61,
+              "count": 4
+            },
+            {
+              "t": 46.81,
+              "count": 4
+            },
+            {
+              "t": 47.02,
+              "count": 3
+            },
+            {
+              "t": 47.22,
+              "count": 3
+            },
+            {
+              "t": 47.42,
+              "count": 4
+            },
+            {
+              "t": 47.63,
+              "count": 4
+            },
+            {
+              "t": 47.83,
+              "count": 4
+            },
+            {
+              "t": 48.03,
+              "count": 4
+            },
+            {
+              "t": 48.24,
+              "count": 5
+            },
+            {
+              "t": 48.44,
+              "count": 5
+            },
+            {
+              "t": 48.65,
+              "count": 4
+            },
+            {
+              "t": 48.85,
+              "count": 4
+            },
+            {
+              "t": 49.05,
+              "count": 4
+            },
+            {
+              "t": 49.26,
+              "count": 4
+            },
+            {
+              "t": 49.46,
+              "count": 3
+            },
+            {
+              "t": 49.66,
+              "count": 3
+            },
+            {
+              "t": 49.87,
+              "count": 2
+            },
+            {
+              "t": 50.07,
+              "count": 2
+            },
+            {
+              "t": 50.27,
+              "count": 2
+            },
+            {
+              "t": 50.48,
+              "count": 2
+            },
+            {
+              "t": 50.68,
+              "count": 2
+            },
+            {
+              "t": 50.88,
+              "count": 1
+            },
+            {
+              "t": 51.09,
+              "count": 3
+            },
+            {
+              "t": 51.29,
+              "count": 3
+            },
+            {
+              "t": 51.49,
+              "count": 3
+            },
+            {
+              "t": 51.7,
+              "count": 3
+            },
+            {
+              "t": 51.9,
+              "count": 3
+            },
+            {
+              "t": 52.11,
+              "count": 2
+            },
+            {
+              "t": 52.31,
+              "count": 2
+            },
+            {
+              "t": 52.51,
+              "count": 3
+            },
+            {
+              "t": 52.72,
+              "count": 1
+            },
+            {
+              "t": 52.92,
+              "count": 1
+            },
+            {
+              "t": 53.12,
+              "count": 1
+            },
+            {
+              "t": 53.33,
+              "count": 1
+            },
+            {
+              "t": 53.53,
+              "count": 3
+            },
+            {
+              "t": 53.73,
+              "count": 1
+            },
+            {
+              "t": 53.94,
+              "count": 3
+            },
+            {
+              "t": 54.14,
+              "count": 3
+            },
+            {
+              "t": 54.34,
+              "count": 3
+            },
+            {
+              "t": 54.55,
+              "count": 3
+            },
+            {
+              "t": 54.75,
+              "count": 2
+            },
+            {
+              "t": 54.95,
+              "count": 2
+            },
+            {
+              "t": 55.16,
+              "count": 3
+            },
+            {
+              "t": 55.36,
+              "count": 3
+            },
+            {
+              "t": 55.57,
+              "count": 3
+            },
+            {
+              "t": 55.77,
+              "count": 3
+            },
+            {
+              "t": 55.97,
+              "count": 2
+            },
+            {
+              "t": 56.18,
+              "count": 2
+            },
+            {
+              "t": 56.38,
+              "count": 2
+            },
+            {
+              "t": 56.58,
+              "count": 2
+            },
+            {
+              "t": 56.79,
+              "count": 2
+            },
+            {
+              "t": 56.99,
+              "count": 1
+            },
+            {
+              "t": 57.19,
+              "count": 3
+            },
+            {
+              "t": 57.4,
+              "count": 3
+            },
+            {
+              "t": 57.6,
+              "count": 3
+            },
+            {
+              "t": 57.8,
+              "count": 3
+            },
+            {
+              "t": 58.01,
+              "count": 2
+            },
+            {
+              "t": 58.21,
+              "count": 1
+            },
+            {
+              "t": 58.41,
+              "count": 0
+            },
+            {
+              "t": 58.62,
+              "count": 1
+            },
+            {
+              "t": 58.82,
+              "count": 1
+            },
+            {
+              "t": 59.03,
+              "count": 2
+            },
+            {
+              "t": 59.23,
+              "count": 1
+            },
+            {
+              "t": 59.43,
+              "count": 2
+            },
+            {
+              "t": 59.64,
+              "count": 2
+            },
+            {
+              "t": 59.84,
+              "count": 1
+            },
+            {
+              "t": 60.04,
+              "count": 3
+            },
+            {
+              "t": 60.25,
+              "count": 3
+            },
+            {
+              "t": 60.45,
+              "count": 2
+            },
+            {
+              "t": 60.65,
+              "count": 3
+            },
+            {
+              "t": 60.86,
+              "count": 2
+            },
+            {
+              "t": 61.06,
+              "count": 2
+            },
+            {
+              "t": 61.27,
+              "count": 2
+            },
+            {
+              "t": 61.47,
+              "count": 2
+            },
+            {
+              "t": 61.67,
+              "count": 2
+            }
+          ],
           "activityTrackIds": {},
           "endpoints": {
-            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam1/inference/geo"
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam1/inference/geo",
+            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam1/inference/yolo26m"
           },
           "pose": {
             "available": false
@@ -1810,18 +2814,432 @@
         },
         {
           "camera": "cam2-cam2",
-          "peakPeople": null,
-          "lastPeople": null,
-          "framesAnalyzed": 0,
+          "peakPeople": 5,
+          "lastPeople": 2,
+          "framesAnalyzed": 103,
           "durationSec": 20.6,
           "activities": [],
           "activityCounts": {},
           "activityCountMethods": {},
           "activityCountsUnion": {},
-          "occupancySamples": [],
+          "occupancySamples": [
+            {
+              "t": 0.0,
+              "count": 2
+            },
+            {
+              "t": 0.2,
+              "count": 1
+            },
+            {
+              "t": 0.4,
+              "count": 2
+            },
+            {
+              "t": 0.6,
+              "count": 2
+            },
+            {
+              "t": 0.8,
+              "count": 2
+            },
+            {
+              "t": 1.0,
+              "count": 3
+            },
+            {
+              "t": 1.2,
+              "count": 3
+            },
+            {
+              "t": 1.4,
+              "count": 3
+            },
+            {
+              "t": 1.6,
+              "count": 3
+            },
+            {
+              "t": 1.8,
+              "count": 3
+            },
+            {
+              "t": 2.0,
+              "count": 3
+            },
+            {
+              "t": 2.2,
+              "count": 3
+            },
+            {
+              "t": 2.4,
+              "count": 3
+            },
+            {
+              "t": 2.6,
+              "count": 3
+            },
+            {
+              "t": 2.8,
+              "count": 3
+            },
+            {
+              "t": 3.0,
+              "count": 4
+            },
+            {
+              "t": 3.2,
+              "count": 3
+            },
+            {
+              "t": 3.4,
+              "count": 3
+            },
+            {
+              "t": 3.6,
+              "count": 3
+            },
+            {
+              "t": 3.8,
+              "count": 3
+            },
+            {
+              "t": 4.0,
+              "count": 4
+            },
+            {
+              "t": 4.2,
+              "count": 2
+            },
+            {
+              "t": 4.4,
+              "count": 3
+            },
+            {
+              "t": 4.6,
+              "count": 3
+            },
+            {
+              "t": 4.8,
+              "count": 2
+            },
+            {
+              "t": 5.0,
+              "count": 2
+            },
+            {
+              "t": 5.2,
+              "count": 1
+            },
+            {
+              "t": 5.4,
+              "count": 2
+            },
+            {
+              "t": 5.6,
+              "count": 2
+            },
+            {
+              "t": 5.8,
+              "count": 3
+            },
+            {
+              "t": 6.0,
+              "count": 3
+            },
+            {
+              "t": 6.2,
+              "count": 3
+            },
+            {
+              "t": 6.4,
+              "count": 3
+            },
+            {
+              "t": 6.6,
+              "count": 4
+            },
+            {
+              "t": 6.8,
+              "count": 3
+            },
+            {
+              "t": 7.0,
+              "count": 3
+            },
+            {
+              "t": 7.2,
+              "count": 3
+            },
+            {
+              "t": 7.4,
+              "count": 3
+            },
+            {
+              "t": 7.6,
+              "count": 4
+            },
+            {
+              "t": 7.8,
+              "count": 3
+            },
+            {
+              "t": 8.0,
+              "count": 3
+            },
+            {
+              "t": 8.2,
+              "count": 3
+            },
+            {
+              "t": 8.4,
+              "count": 4
+            },
+            {
+              "t": 8.6,
+              "count": 3
+            },
+            {
+              "t": 8.8,
+              "count": 3
+            },
+            {
+              "t": 9.0,
+              "count": 2
+            },
+            {
+              "t": 9.2,
+              "count": 3
+            },
+            {
+              "t": 9.4,
+              "count": 3
+            },
+            {
+              "t": 9.6,
+              "count": 3
+            },
+            {
+              "t": 9.8,
+              "count": 3
+            },
+            {
+              "t": 10.0,
+              "count": 3
+            },
+            {
+              "t": 10.2,
+              "count": 3
+            },
+            {
+              "t": 10.4,
+              "count": 3
+            },
+            {
+              "t": 10.6,
+              "count": 4
+            },
+            {
+              "t": 10.8,
+              "count": 3
+            },
+            {
+              "t": 11.0,
+              "count": 3
+            },
+            {
+              "t": 11.2,
+              "count": 3
+            },
+            {
+              "t": 11.4,
+              "count": 3
+            },
+            {
+              "t": 11.6,
+              "count": 3
+            },
+            {
+              "t": 11.8,
+              "count": 3
+            },
+            {
+              "t": 12.0,
+              "count": 3
+            },
+            {
+              "t": 12.2,
+              "count": 3
+            },
+            {
+              "t": 12.4,
+              "count": 3
+            },
+            {
+              "t": 12.6,
+              "count": 3
+            },
+            {
+              "t": 12.8,
+              "count": 3
+            },
+            {
+              "t": 13.0,
+              "count": 3
+            },
+            {
+              "t": 13.2,
+              "count": 2
+            },
+            {
+              "t": 13.4,
+              "count": 2
+            },
+            {
+              "t": 13.6,
+              "count": 2
+            },
+            {
+              "t": 13.8,
+              "count": 2
+            },
+            {
+              "t": 14.0,
+              "count": 2
+            },
+            {
+              "t": 14.2,
+              "count": 3
+            },
+            {
+              "t": 14.4,
+              "count": 4
+            },
+            {
+              "t": 14.6,
+              "count": 5
+            },
+            {
+              "t": 14.8,
+              "count": 3
+            },
+            {
+              "t": 15.0,
+              "count": 3
+            },
+            {
+              "t": 15.2,
+              "count": 5
+            },
+            {
+              "t": 15.4,
+              "count": 4
+            },
+            {
+              "t": 15.6,
+              "count": 4
+            },
+            {
+              "t": 15.8,
+              "count": 3
+            },
+            {
+              "t": 16.0,
+              "count": 3
+            },
+            {
+              "t": 16.2,
+              "count": 2
+            },
+            {
+              "t": 16.4,
+              "count": 2
+            },
+            {
+              "t": 16.6,
+              "count": 1
+            },
+            {
+              "t": 16.8,
+              "count": 3
+            },
+            {
+              "t": 17.0,
+              "count": 3
+            },
+            {
+              "t": 17.2,
+              "count": 2
+            },
+            {
+              "t": 17.4,
+              "count": 2
+            },
+            {
+              "t": 17.6,
+              "count": 1
+            },
+            {
+              "t": 17.8,
+              "count": 2
+            },
+            {
+              "t": 18.0,
+              "count": 2
+            },
+            {
+              "t": 18.2,
+              "count": 1
+            },
+            {
+              "t": 18.4,
+              "count": 2
+            },
+            {
+              "t": 18.6,
+              "count": 1
+            },
+            {
+              "t": 18.8,
+              "count": 1
+            },
+            {
+              "t": 19.0,
+              "count": 3
+            },
+            {
+              "t": 19.2,
+              "count": 1
+            },
+            {
+              "t": 19.4,
+              "count": 2
+            },
+            {
+              "t": 19.6,
+              "count": 2
+            },
+            {
+              "t": 19.8,
+              "count": 2
+            },
+            {
+              "t": 20.0,
+              "count": 2
+            },
+            {
+              "t": 20.2,
+              "count": 2
+            },
+            {
+              "t": 20.4,
+              "count": 2
+            }
+          ],
           "activityTrackIds": {},
           "endpoints": {
-            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam2/inference/geo"
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam2/inference/geo",
+            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam2/inference/yolo26m"
           },
           "pose": {
             "available": false
@@ -1829,18 +3247,432 @@
         },
         {
           "camera": "cam2-cam3",
-          "peakPeople": null,
-          "lastPeople": null,
-          "framesAnalyzed": 0,
+          "peakPeople": 2,
+          "lastPeople": 0,
+          "framesAnalyzed": 103,
           "durationSec": 20.534,
           "activities": [],
           "activityCounts": {},
           "activityCountMethods": {},
           "activityCountsUnion": {},
-          "occupancySamples": [],
+          "occupancySamples": [
+            {
+              "t": 0.0,
+              "count": 0
+            },
+            {
+              "t": 0.2,
+              "count": 0
+            },
+            {
+              "t": 0.4,
+              "count": 0
+            },
+            {
+              "t": 0.6,
+              "count": 0
+            },
+            {
+              "t": 0.8,
+              "count": 0
+            },
+            {
+              "t": 1.0,
+              "count": 0
+            },
+            {
+              "t": 1.2,
+              "count": 0
+            },
+            {
+              "t": 1.4,
+              "count": 1
+            },
+            {
+              "t": 1.6,
+              "count": 1
+            },
+            {
+              "t": 1.8,
+              "count": 1
+            },
+            {
+              "t": 2.0,
+              "count": 1
+            },
+            {
+              "t": 2.2,
+              "count": 1
+            },
+            {
+              "t": 2.4,
+              "count": 1
+            },
+            {
+              "t": 2.6,
+              "count": 1
+            },
+            {
+              "t": 2.8,
+              "count": 1
+            },
+            {
+              "t": 3.0,
+              "count": 1
+            },
+            {
+              "t": 3.2,
+              "count": 1
+            },
+            {
+              "t": 3.4,
+              "count": 1
+            },
+            {
+              "t": 3.6,
+              "count": 1
+            },
+            {
+              "t": 3.8,
+              "count": 1
+            },
+            {
+              "t": 4.0,
+              "count": 1
+            },
+            {
+              "t": 4.2,
+              "count": 1
+            },
+            {
+              "t": 4.4,
+              "count": 1
+            },
+            {
+              "t": 4.6,
+              "count": 1
+            },
+            {
+              "t": 4.8,
+              "count": 1
+            },
+            {
+              "t": 5.0,
+              "count": 1
+            },
+            {
+              "t": 5.2,
+              "count": 1
+            },
+            {
+              "t": 5.4,
+              "count": 1
+            },
+            {
+              "t": 5.6,
+              "count": 1
+            },
+            {
+              "t": 5.8,
+              "count": 1
+            },
+            {
+              "t": 6.0,
+              "count": 2
+            },
+            {
+              "t": 6.2,
+              "count": 2
+            },
+            {
+              "t": 6.4,
+              "count": 2
+            },
+            {
+              "t": 6.6,
+              "count": 2
+            },
+            {
+              "t": 6.8,
+              "count": 2
+            },
+            {
+              "t": 7.0,
+              "count": 2
+            },
+            {
+              "t": 7.2,
+              "count": 2
+            },
+            {
+              "t": 7.4,
+              "count": 2
+            },
+            {
+              "t": 7.6,
+              "count": 2
+            },
+            {
+              "t": 7.8,
+              "count": 2
+            },
+            {
+              "t": 8.0,
+              "count": 2
+            },
+            {
+              "t": 8.2,
+              "count": 2
+            },
+            {
+              "t": 8.4,
+              "count": 2
+            },
+            {
+              "t": 8.6,
+              "count": 2
+            },
+            {
+              "t": 8.8,
+              "count": 2
+            },
+            {
+              "t": 9.0,
+              "count": 2
+            },
+            {
+              "t": 9.2,
+              "count": 2
+            },
+            {
+              "t": 9.4,
+              "count": 2
+            },
+            {
+              "t": 9.6,
+              "count": 2
+            },
+            {
+              "t": 9.8,
+              "count": 2
+            },
+            {
+              "t": 10.0,
+              "count": 2
+            },
+            {
+              "t": 10.2,
+              "count": 2
+            },
+            {
+              "t": 10.4,
+              "count": 2
+            },
+            {
+              "t": 10.6,
+              "count": 2
+            },
+            {
+              "t": 10.8,
+              "count": 2
+            },
+            {
+              "t": 11.0,
+              "count": 2
+            },
+            {
+              "t": 11.2,
+              "count": 2
+            },
+            {
+              "t": 11.4,
+              "count": 2
+            },
+            {
+              "t": 11.6,
+              "count": 2
+            },
+            {
+              "t": 11.8,
+              "count": 2
+            },
+            {
+              "t": 12.0,
+              "count": 2
+            },
+            {
+              "t": 12.2,
+              "count": 2
+            },
+            {
+              "t": 12.4,
+              "count": 2
+            },
+            {
+              "t": 12.6,
+              "count": 1
+            },
+            {
+              "t": 12.8,
+              "count": 1
+            },
+            {
+              "t": 13.0,
+              "count": 1
+            },
+            {
+              "t": 13.2,
+              "count": 1
+            },
+            {
+              "t": 13.4,
+              "count": 1
+            },
+            {
+              "t": 13.6,
+              "count": 2
+            },
+            {
+              "t": 13.8,
+              "count": 1
+            },
+            {
+              "t": 14.0,
+              "count": 1
+            },
+            {
+              "t": 14.2,
+              "count": 1
+            },
+            {
+              "t": 14.4,
+              "count": 1
+            },
+            {
+              "t": 14.6,
+              "count": 1
+            },
+            {
+              "t": 14.8,
+              "count": 1
+            },
+            {
+              "t": 15.0,
+              "count": 1
+            },
+            {
+              "t": 15.2,
+              "count": 1
+            },
+            {
+              "t": 15.4,
+              "count": 1
+            },
+            {
+              "t": 15.6,
+              "count": 1
+            },
+            {
+              "t": 15.8,
+              "count": 0
+            },
+            {
+              "t": 16.0,
+              "count": 0
+            },
+            {
+              "t": 16.2,
+              "count": 0
+            },
+            {
+              "t": 16.4,
+              "count": 0
+            },
+            {
+              "t": 16.6,
+              "count": 0
+            },
+            {
+              "t": 16.8,
+              "count": 1
+            },
+            {
+              "t": 17.0,
+              "count": 0
+            },
+            {
+              "t": 17.2,
+              "count": 0
+            },
+            {
+              "t": 17.4,
+              "count": 0
+            },
+            {
+              "t": 17.6,
+              "count": 0
+            },
+            {
+              "t": 17.8,
+              "count": 0
+            },
+            {
+              "t": 18.0,
+              "count": 0
+            },
+            {
+              "t": 18.2,
+              "count": 0
+            },
+            {
+              "t": 18.4,
+              "count": 0
+            },
+            {
+              "t": 18.6,
+              "count": 0
+            },
+            {
+              "t": 18.8,
+              "count": 0
+            },
+            {
+              "t": 19.0,
+              "count": 0
+            },
+            {
+              "t": 19.2,
+              "count": 0
+            },
+            {
+              "t": 19.4,
+              "count": 0
+            },
+            {
+              "t": 19.6,
+              "count": 0
+            },
+            {
+              "t": 19.8,
+              "count": 0
+            },
+            {
+              "t": 20.0,
+              "count": 0
+            },
+            {
+              "t": 20.2,
+              "count": 0
+            },
+            {
+              "t": 20.4,
+              "count": 0
+            }
+          ],
           "activityTrackIds": {},
           "endpoints": {
-            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam3/inference/geo"
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam3/inference/geo",
+            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam3/inference/yolo26m"
           },
           "pose": {
             "available": false
@@ -1848,18 +3680,428 @@
         },
         {
           "camera": "cam2-cam4",
-          "peakPeople": null,
-          "lastPeople": null,
-          "framesAnalyzed": 0,
+          "peakPeople": 2,
+          "lastPeople": 0,
+          "framesAnalyzed": 102,
           "durationSec": 20.3,
           "activities": [],
           "activityCounts": {},
           "activityCountMethods": {},
           "activityCountsUnion": {},
-          "occupancySamples": [],
+          "occupancySamples": [
+            {
+              "t": 0.0,
+              "count": 0
+            },
+            {
+              "t": 0.2,
+              "count": 0
+            },
+            {
+              "t": 0.4,
+              "count": 0
+            },
+            {
+              "t": 0.6,
+              "count": 0
+            },
+            {
+              "t": 0.8,
+              "count": 0
+            },
+            {
+              "t": 1.0,
+              "count": 1
+            },
+            {
+              "t": 1.2,
+              "count": 1
+            },
+            {
+              "t": 1.4,
+              "count": 1
+            },
+            {
+              "t": 1.6,
+              "count": 1
+            },
+            {
+              "t": 1.8,
+              "count": 1
+            },
+            {
+              "t": 2.0,
+              "count": 1
+            },
+            {
+              "t": 2.2,
+              "count": 1
+            },
+            {
+              "t": 2.4,
+              "count": 1
+            },
+            {
+              "t": 2.6,
+              "count": 1
+            },
+            {
+              "t": 2.8,
+              "count": 1
+            },
+            {
+              "t": 3.0,
+              "count": 1
+            },
+            {
+              "t": 3.2,
+              "count": 1
+            },
+            {
+              "t": 3.4,
+              "count": 1
+            },
+            {
+              "t": 3.6,
+              "count": 1
+            },
+            {
+              "t": 3.8,
+              "count": 1
+            },
+            {
+              "t": 4.0,
+              "count": 1
+            },
+            {
+              "t": 4.2,
+              "count": 1
+            },
+            {
+              "t": 4.4,
+              "count": 1
+            },
+            {
+              "t": 4.6,
+              "count": 1
+            },
+            {
+              "t": 4.8,
+              "count": 1
+            },
+            {
+              "t": 5.0,
+              "count": 1
+            },
+            {
+              "t": 5.2,
+              "count": 1
+            },
+            {
+              "t": 5.4,
+              "count": 1
+            },
+            {
+              "t": 5.6,
+              "count": 1
+            },
+            {
+              "t": 5.8,
+              "count": 2
+            },
+            {
+              "t": 6.0,
+              "count": 2
+            },
+            {
+              "t": 6.2,
+              "count": 2
+            },
+            {
+              "t": 6.4,
+              "count": 2
+            },
+            {
+              "t": 6.6,
+              "count": 2
+            },
+            {
+              "t": 6.8,
+              "count": 2
+            },
+            {
+              "t": 7.0,
+              "count": 2
+            },
+            {
+              "t": 7.2,
+              "count": 2
+            },
+            {
+              "t": 7.4,
+              "count": 2
+            },
+            {
+              "t": 7.6,
+              "count": 2
+            },
+            {
+              "t": 7.8,
+              "count": 2
+            },
+            {
+              "t": 8.0,
+              "count": 2
+            },
+            {
+              "t": 8.2,
+              "count": 2
+            },
+            {
+              "t": 8.4,
+              "count": 2
+            },
+            {
+              "t": 8.6,
+              "count": 2
+            },
+            {
+              "t": 8.8,
+              "count": 2
+            },
+            {
+              "t": 9.0,
+              "count": 2
+            },
+            {
+              "t": 9.2,
+              "count": 2
+            },
+            {
+              "t": 9.4,
+              "count": 2
+            },
+            {
+              "t": 9.6,
+              "count": 2
+            },
+            {
+              "t": 9.8,
+              "count": 2
+            },
+            {
+              "t": 10.0,
+              "count": 2
+            },
+            {
+              "t": 10.2,
+              "count": 2
+            },
+            {
+              "t": 10.4,
+              "count": 2
+            },
+            {
+              "t": 10.6,
+              "count": 2
+            },
+            {
+              "t": 10.8,
+              "count": 2
+            },
+            {
+              "t": 11.0,
+              "count": 2
+            },
+            {
+              "t": 11.2,
+              "count": 2
+            },
+            {
+              "t": 11.4,
+              "count": 2
+            },
+            {
+              "t": 11.6,
+              "count": 2
+            },
+            {
+              "t": 11.8,
+              "count": 2
+            },
+            {
+              "t": 12.0,
+              "count": 2
+            },
+            {
+              "t": 12.2,
+              "count": 2
+            },
+            {
+              "t": 12.4,
+              "count": 2
+            },
+            {
+              "t": 12.6,
+              "count": 2
+            },
+            {
+              "t": 12.8,
+              "count": 2
+            },
+            {
+              "t": 13.0,
+              "count": 1
+            },
+            {
+              "t": 13.2,
+              "count": 1
+            },
+            {
+              "t": 13.4,
+              "count": 1
+            },
+            {
+              "t": 13.6,
+              "count": 1
+            },
+            {
+              "t": 13.8,
+              "count": 1
+            },
+            {
+              "t": 14.0,
+              "count": 1
+            },
+            {
+              "t": 14.2,
+              "count": 1
+            },
+            {
+              "t": 14.4,
+              "count": 1
+            },
+            {
+              "t": 14.6,
+              "count": 1
+            },
+            {
+              "t": 14.8,
+              "count": 1
+            },
+            {
+              "t": 15.0,
+              "count": 1
+            },
+            {
+              "t": 15.2,
+              "count": 1
+            },
+            {
+              "t": 15.4,
+              "count": 1
+            },
+            {
+              "t": 15.6,
+              "count": 1
+            },
+            {
+              "t": 15.8,
+              "count": 0
+            },
+            {
+              "t": 16.0,
+              "count": 0
+            },
+            {
+              "t": 16.2,
+              "count": 0
+            },
+            {
+              "t": 16.4,
+              "count": 0
+            },
+            {
+              "t": 16.6,
+              "count": 0
+            },
+            {
+              "t": 16.8,
+              "count": 0
+            },
+            {
+              "t": 17.0,
+              "count": 0
+            },
+            {
+              "t": 17.2,
+              "count": 0
+            },
+            {
+              "t": 17.4,
+              "count": 0
+            },
+            {
+              "t": 17.6,
+              "count": 0
+            },
+            {
+              "t": 17.8,
+              "count": 0
+            },
+            {
+              "t": 18.0,
+              "count": 0
+            },
+            {
+              "t": 18.2,
+              "count": 0
+            },
+            {
+              "t": 18.4,
+              "count": 0
+            },
+            {
+              "t": 18.6,
+              "count": 0
+            },
+            {
+              "t": 18.8,
+              "count": 0
+            },
+            {
+              "t": 19.0,
+              "count": 0
+            },
+            {
+              "t": 19.2,
+              "count": 0
+            },
+            {
+              "t": 19.4,
+              "count": 0
+            },
+            {
+              "t": 19.6,
+              "count": 0
+            },
+            {
+              "t": 19.8,
+              "count": 0
+            },
+            {
+              "t": 20.0,
+              "count": 0
+            },
+            {
+              "t": 20.2,
+              "count": 0
+            }
+          ],
           "activityTrackIds": {},
           "endpoints": {
-            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam4/inference/geo"
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam4/inference/geo",
+            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam4/inference/yolo26m"
           },
           "pose": {
             "available": false
@@ -2611,623 +4853,723 @@
       "occupancyTimeline": [
         {
           "t": 0.0,
-          "count": 0
+          "count": 3
         },
         {
-          "t": 0.2,
-          "count": 0
+          "t": 0.34,
+          "count": 2
         },
         {
-          "t": 0.4,
-          "count": 0
+          "t": 0.69,
+          "count": 2
         },
         {
-          "t": 0.6,
-          "count": 0
+          "t": 1.03,
+          "count": 2
         },
         {
-          "t": 0.8,
-          "count": 0
+          "t": 1.37,
+          "count": 3
         },
         {
-          "t": 1.0,
-          "count": 0
+          "t": 1.71,
+          "count": 3
         },
         {
-          "t": 1.2,
-          "count": 0
-        },
-        {
-          "t": 1.4,
-          "count": 0
-        },
-        {
-          "t": 1.6,
-          "count": 1
-        },
-        {
-          "t": 1.8,
-          "count": 1
-        },
-        {
-          "t": 2.0,
-          "count": 1
-        },
-        {
-          "t": 2.2,
-          "count": 1
+          "t": 2.06,
+          "count": 2
         },
         {
           "t": 2.4,
-          "count": 1
+          "count": 2
         },
         {
-          "t": 2.6,
-          "count": 1
+          "t": 2.74,
+          "count": 2
         },
         {
-          "t": 2.8,
-          "count": 1
+          "t": 3.08,
+          "count": 3
         },
         {
-          "t": 3.0,
-          "count": 1
+          "t": 3.43,
+          "count": 3
         },
         {
-          "t": 3.2,
-          "count": 1
+          "t": 3.77,
+          "count": 3
         },
         {
-          "t": 3.4,
-          "count": 1
+          "t": 4.11,
+          "count": 3
         },
         {
-          "t": 3.6,
-          "count": 1
-        },
-        {
-          "t": 3.8,
-          "count": 1
-        },
-        {
-          "t": 4.0,
-          "count": 1
-        },
-        {
-          "t": 4.2,
-          "count": 1
-        },
-        {
-          "t": 4.4,
-          "count": 1
-        },
-        {
-          "t": 4.6,
-          "count": 1
+          "t": 4.45,
+          "count": 3
         },
         {
           "t": 4.8,
+          "count": 2
+        },
+        {
+          "t": 5.14,
+          "count": 2
+        },
+        {
+          "t": 5.48,
+          "count": 3
+        },
+        {
+          "t": 5.82,
+          "count": 3
+        },
+        {
+          "t": 6.17,
+          "count": 3
+        },
+        {
+          "t": 6.51,
+          "count": 3
+        },
+        {
+          "t": 6.85,
+          "count": 3
+        },
+        {
+          "t": 7.19,
+          "count": 2
+        },
+        {
+          "t": 7.54,
+          "count": 3
+        },
+        {
+          "t": 7.88,
+          "count": 3
+        },
+        {
+          "t": 8.22,
+          "count": 3
+        },
+        {
+          "t": 8.57,
+          "count": 3
+        },
+        {
+          "t": 8.91,
+          "count": 3
+        },
+        {
+          "t": 9.25,
+          "count": 3
+        },
+        {
+          "t": 9.59,
+          "count": 3
+        },
+        {
+          "t": 9.94,
+          "count": 3
+        },
+        {
+          "t": 10.28,
+          "count": 3
+        },
+        {
+          "t": 10.62,
+          "count": 3
+        },
+        {
+          "t": 10.96,
+          "count": 3
+        },
+        {
+          "t": 11.31,
+          "count": 3
+        },
+        {
+          "t": 11.65,
+          "count": 3
+        },
+        {
+          "t": 11.99,
+          "count": 2
+        },
+        {
+          "t": 12.33,
+          "count": 2
+        },
+        {
+          "t": 12.68,
+          "count": 3
+        },
+        {
+          "t": 13.02,
+          "count": 2
+        },
+        {
+          "t": 13.36,
+          "count": 2
+        },
+        {
+          "t": 13.7,
+          "count": 2
+        },
+        {
+          "t": 14.05,
+          "count": 3
+        },
+        {
+          "t": 14.39,
+          "count": 3
+        },
+        {
+          "t": 14.73,
+          "count": 3
+        },
+        {
+          "t": 15.07,
+          "count": 4
+        },
+        {
+          "t": 15.42,
+          "count": 2
+        },
+        {
+          "t": 15.76,
+          "count": 3
+        },
+        {
+          "t": 16.1,
+          "count": 2
+        },
+        {
+          "t": 16.45,
+          "count": 2
+        },
+        {
+          "t": 16.79,
+          "count": 3
+        },
+        {
+          "t": 17.13,
+          "count": 2
+        },
+        {
+          "t": 17.47,
+          "count": 2
+        },
+        {
+          "t": 17.82,
+          "count": 2
+        },
+        {
+          "t": 18.16,
+          "count": 2
+        },
+        {
+          "t": 18.5,
+          "count": 2
+        },
+        {
+          "t": 18.84,
+          "count": 2
+        },
+        {
+          "t": 19.19,
+          "count": 2
+        },
+        {
+          "t": 19.53,
+          "count": 2
+        },
+        {
+          "t": 19.87,
+          "count": 2
+        },
+        {
+          "t": 20.21,
+          "count": 2
+        },
+        {
+          "t": 20.56,
           "count": 1
         },
         {
-          "t": 5.0,
+          "t": 20.9,
+          "count": 2
+        },
+        {
+          "t": 21.24,
+          "count": 3
+        },
+        {
+          "t": 21.58,
           "count": 1
         },
         {
-          "t": 5.2,
+          "t": 21.93,
           "count": 1
         },
         {
-          "t": 5.4,
+          "t": 22.27,
           "count": 1
         },
         {
-          "t": 5.6,
+          "t": 22.61,
+          "count": 2
+        },
+        {
+          "t": 22.95,
+          "count": 2
+        },
+        {
+          "t": 23.3,
+          "count": 2
+        },
+        {
+          "t": 23.64,
           "count": 1
         },
         {
-          "t": 5.8,
+          "t": 23.98,
+          "count": 2
+        },
+        {
+          "t": 24.33,
           "count": 1
         },
         {
-          "t": 6.0,
-          "count": 1
-        },
-        {
-          "t": 6.2,
-          "count": 1
-        },
-        {
-          "t": 6.4,
-          "count": 1
-        },
-        {
-          "t": 6.6,
-          "count": 1
-        },
-        {
-          "t": 6.8,
-          "count": 1
-        },
-        {
-          "t": 7.0,
-          "count": 1
-        },
-        {
-          "t": 7.2,
-          "count": 1
-        },
-        {
-          "t": 7.4,
-          "count": 1
-        },
-        {
-          "t": 7.6,
-          "count": 1
-        },
-        {
-          "t": 7.8,
-          "count": 1
-        },
-        {
-          "t": 8.0,
-          "count": 1
-        },
-        {
-          "t": 8.2,
-          "count": 1
-        },
-        {
-          "t": 8.4,
-          "count": 1
-        },
-        {
-          "t": 8.6,
-          "count": 1
-        },
-        {
-          "t": 8.8,
-          "count": 2
-        },
-        {
-          "t": 9.0,
-          "count": 2
-        },
-        {
-          "t": 9.2,
-          "count": 2
-        },
-        {
-          "t": 9.4,
-          "count": 2
-        },
-        {
-          "t": 9.6,
-          "count": 2
-        },
-        {
-          "t": 9.8,
-          "count": 2
-        },
-        {
-          "t": 10.0,
-          "count": 2
-        },
-        {
-          "t": 10.2,
-          "count": 2
-        },
-        {
-          "t": 10.4,
-          "count": 2
-        },
-        {
-          "t": 10.6,
-          "count": 1
-        },
-        {
-          "t": 10.8,
-          "count": 2
-        },
-        {
-          "t": 11.0,
-          "count": 2
-        },
-        {
-          "t": 11.2,
-          "count": 2
-        },
-        {
-          "t": 11.4,
-          "count": 2
-        },
-        {
-          "t": 11.6,
-          "count": 2
-        },
-        {
-          "t": 11.8,
-          "count": 2
-        },
-        {
-          "t": 12.0,
-          "count": 2
-        },
-        {
-          "t": 12.2,
-          "count": 2
-        },
-        {
-          "t": 12.4,
-          "count": 2
-        },
-        {
-          "t": 12.6,
-          "count": 2
-        },
-        {
-          "t": 12.8,
-          "count": 2
-        },
-        {
-          "t": 13.0,
-          "count": 2
-        },
-        {
-          "t": 13.2,
-          "count": 2
-        },
-        {
-          "t": 13.4,
-          "count": 2
-        },
-        {
-          "t": 13.6,
-          "count": 2
-        },
-        {
-          "t": 13.8,
-          "count": 2
-        },
-        {
-          "t": 14.0,
-          "count": 2
-        },
-        {
-          "t": 14.2,
-          "count": 2
-        },
-        {
-          "t": 14.4,
-          "count": 2
-        },
-        {
-          "t": 14.6,
-          "count": 2
-        },
-        {
-          "t": 14.8,
-          "count": 2
-        },
-        {
-          "t": 15.0,
-          "count": 2
-        },
-        {
-          "t": 15.2,
-          "count": 2
-        },
-        {
-          "t": 15.4,
-          "count": 2
-        },
-        {
-          "t": 15.6,
-          "count": 2
-        },
-        {
-          "t": 15.8,
-          "count": 2
-        },
-        {
-          "t": 16.0,
-          "count": 2
-        },
-        {
-          "t": 16.2,
-          "count": 2
-        },
-        {
-          "t": 16.4,
-          "count": 1
-        },
-        {
-          "t": 16.6,
-          "count": 1
-        },
-        {
-          "t": 16.8,
-          "count": 2
-        },
-        {
-          "t": 17.0,
-          "count": 2
-        },
-        {
-          "t": 17.2,
-          "count": 2
-        },
-        {
-          "t": 17.4,
-          "count": 2
-        },
-        {
-          "t": 17.6,
-          "count": 2
-        },
-        {
-          "t": 17.8,
-          "count": 2
-        },
-        {
-          "t": 18.0,
-          "count": 2
-        },
-        {
-          "t": 18.2,
-          "count": 2
-        },
-        {
-          "t": 18.4,
-          "count": 2
-        },
-        {
-          "t": 18.6,
-          "count": 2
-        },
-        {
-          "t": 18.8,
-          "count": 2
-        },
-        {
-          "t": 19.0,
-          "count": 2
-        },
-        {
-          "t": 19.2,
-          "count": 2
-        },
-        {
-          "t": 19.4,
-          "count": 2
-        },
-        {
-          "t": 19.6,
-          "count": 2
-        },
-        {
-          "t": 19.8,
-          "count": 1
-        },
-        {
-          "t": 20.0,
-          "count": 1
-        },
-        {
-          "t": 20.2,
-          "count": 1
-        },
-        {
-          "t": 20.4,
-          "count": 1
-        },
-        {
-          "t": 20.6,
-          "count": 1
-        },
-        {
-          "t": 20.8,
-          "count": 1
-        },
-        {
-          "t": 21.0,
-          "count": 1
-        },
-        {
-          "t": 21.2,
-          "count": 1
-        },
-        {
-          "t": 21.4,
-          "count": 1
-        },
-        {
-          "t": 21.6,
-          "count": 1
-        },
-        {
-          "t": 21.8,
-          "count": 1
-        },
-        {
-          "t": 22.0,
-          "count": 1
-        },
-        {
-          "t": 22.2,
-          "count": 1
-        },
-        {
-          "t": 22.4,
-          "count": 1
-        },
-        {
-          "t": 22.6,
-          "count": 1
-        },
-        {
-          "t": 22.8,
-          "count": 1
-        },
-        {
-          "t": 23.0,
-          "count": 1
-        },
-        {
-          "t": 23.2,
-          "count": 1
-        },
-        {
-          "t": 23.4,
-          "count": 1
-        },
-        {
-          "t": 23.6,
-          "count": 1
-        },
-        {
-          "t": 23.8,
-          "count": 1
-        },
-        {
-          "t": 24.0,
-          "count": 1
-        },
-        {
-          "t": 24.2,
+          "t": 24.67,
           "count": 0
         },
         {
-          "t": 24.4,
+          "t": 25.01,
+          "count": 2
+        },
+        {
+          "t": 25.35,
+          "count": 1
+        },
+        {
+          "t": 25.7,
           "count": 0
         },
         {
-          "t": 24.6,
+          "t": 26.04,
+          "count": 2
+        },
+        {
+          "t": 26.38,
+          "count": 1
+        },
+        {
+          "t": 26.72,
           "count": 0
         },
         {
-          "t": 24.8,
+          "t": 27.07,
+          "count": 1
+        },
+        {
+          "t": 27.41,
+          "count": 3
+        },
+        {
+          "t": 27.75,
+          "count": 1
+        },
+        {
+          "t": 28.09,
           "count": 0
         },
         {
-          "t": 25.0,
+          "t": 28.44,
+          "count": 2
+        },
+        {
+          "t": 28.78,
+          "count": 1
+        },
+        {
+          "t": 29.12,
           "count": 0
         },
         {
-          "t": 25.2,
+          "t": 29.46,
+          "count": 1
+        },
+        {
+          "t": 29.81,
+          "count": 2
+        },
+        {
+          "t": 30.15,
           "count": 0
         },
         {
-          "t": 25.4,
+          "t": 30.49,
+          "count": 1
+        },
+        {
+          "t": 30.84,
+          "count": 2
+        },
+        {
+          "t": 31.18,
+          "count": 2
+        },
+        {
+          "t": 31.52,
+          "count": 3
+        },
+        {
+          "t": 31.86,
+          "count": 2
+        },
+        {
+          "t": 32.21,
+          "count": 2
+        },
+        {
+          "t": 32.55,
+          "count": 2
+        },
+        {
+          "t": 32.89,
+          "count": 2
+        },
+        {
+          "t": 33.23,
+          "count": 2
+        },
+        {
+          "t": 33.58,
+          "count": 2
+        },
+        {
+          "t": 33.92,
+          "count": 2
+        },
+        {
+          "t": 34.26,
+          "count": 2
+        },
+        {
+          "t": 34.6,
+          "count": 2
+        },
+        {
+          "t": 34.95,
+          "count": 2
+        },
+        {
+          "t": 35.29,
+          "count": 2
+        },
+        {
+          "t": 35.63,
+          "count": 2
+        },
+        {
+          "t": 35.97,
+          "count": 2
+        },
+        {
+          "t": 36.32,
+          "count": 2
+        },
+        {
+          "t": 36.66,
+          "count": 3
+        },
+        {
+          "t": 37.0,
+          "count": 2
+        },
+        {
+          "t": 37.34,
+          "count": 2
+        },
+        {
+          "t": 37.69,
+          "count": 2
+        },
+        {
+          "t": 38.03,
+          "count": 2
+        },
+        {
+          "t": 38.37,
+          "count": 3
+        },
+        {
+          "t": 38.72,
+          "count": 3
+        },
+        {
+          "t": 39.06,
+          "count": 2
+        },
+        {
+          "t": 39.4,
+          "count": 3
+        },
+        {
+          "t": 39.74,
+          "count": 3
+        },
+        {
+          "t": 40.09,
+          "count": 3
+        },
+        {
+          "t": 40.43,
+          "count": 3
+        },
+        {
+          "t": 40.77,
+          "count": 3
+        },
+        {
+          "t": 41.11,
+          "count": 4
+        },
+        {
+          "t": 41.46,
+          "count": 4
+        },
+        {
+          "t": 41.8,
+          "count": 2
+        },
+        {
+          "t": 42.14,
+          "count": 2
+        },
+        {
+          "t": 42.48,
+          "count": 1
+        },
+        {
+          "t": 42.83,
+          "count": 3
+        },
+        {
+          "t": 43.17,
+          "count": 2
+        },
+        {
+          "t": 43.51,
+          "count": 2
+        },
+        {
+          "t": 43.85,
+          "count": 2
+        },
+        {
+          "t": 44.2,
+          "count": 2
+        },
+        {
+          "t": 44.54,
+          "count": 3
+        },
+        {
+          "t": 44.88,
+          "count": 3
+        },
+        {
+          "t": 45.22,
+          "count": 4
+        },
+        {
+          "t": 45.57,
+          "count": 3
+        },
+        {
+          "t": 45.91,
+          "count": 4
+        },
+        {
+          "t": 46.25,
+          "count": 3
+        },
+        {
+          "t": 46.6,
+          "count": 4
+        },
+        {
+          "t": 46.94,
+          "count": 3
+        },
+        {
+          "t": 47.28,
+          "count": 4
+        },
+        {
+          "t": 47.62,
+          "count": 4
+        },
+        {
+          "t": 47.97,
+          "count": 4
+        },
+        {
+          "t": 48.31,
+          "count": 4
+        },
+        {
+          "t": 48.65,
+          "count": 4
+        },
+        {
+          "t": 48.99,
+          "count": 4
+        },
+        {
+          "t": 49.34,
+          "count": 3
+        },
+        {
+          "t": 49.68,
+          "count": 2
+        },
+        {
+          "t": 50.02,
+          "count": 2
+        },
+        {
+          "t": 50.36,
+          "count": 2
+        },
+        {
+          "t": 50.71,
+          "count": 1
+        },
+        {
+          "t": 51.05,
+          "count": 3
+        },
+        {
+          "t": 51.39,
+          "count": 3
+        },
+        {
+          "t": 51.73,
+          "count": 3
+        },
+        {
+          "t": 52.08,
+          "count": 2
+        },
+        {
+          "t": 52.42,
+          "count": 2
+        },
+        {
+          "t": 52.76,
+          "count": 1
+        },
+        {
+          "t": 53.1,
+          "count": 1
+        },
+        {
+          "t": 53.45,
+          "count": 2
+        },
+        {
+          "t": 53.79,
+          "count": 3
+        },
+        {
+          "t": 54.13,
+          "count": 3
+        },
+        {
+          "t": 54.48,
+          "count": 2
+        },
+        {
+          "t": 54.82,
+          "count": 2
+        },
+        {
+          "t": 55.16,
+          "count": 3
+        },
+        {
+          "t": 55.5,
+          "count": 3
+        },
+        {
+          "t": 55.85,
+          "count": 2
+        },
+        {
+          "t": 56.19,
+          "count": 2
+        },
+        {
+          "t": 56.53,
+          "count": 2
+        },
+        {
+          "t": 56.87,
+          "count": 2
+        },
+        {
+          "t": 57.22,
+          "count": 3
+        },
+        {
+          "t": 57.56,
+          "count": 3
+        },
+        {
+          "t": 57.9,
+          "count": 1
+        },
+        {
+          "t": 58.24,
           "count": 0
         },
         {
-          "t": 25.6,
-          "count": 0
+          "t": 58.59,
+          "count": 1
         },
         {
-          "t": 25.8,
-          "count": 0
+          "t": 58.93,
+          "count": 1
         },
         {
-          "t": 26.0,
-          "count": 0
+          "t": 59.27,
+          "count": 2
         },
         {
-          "t": 26.2,
-          "count": 0
+          "t": 59.61,
+          "count": 1
         },
         {
-          "t": 26.4,
-          "count": 0
+          "t": 59.96,
+          "count": 3
         },
         {
-          "t": 26.6,
-          "count": 0
+          "t": 60.3,
+          "count": 2
         },
         {
-          "t": 26.8,
-          "count": 0
+          "t": 60.64,
+          "count": 2
         },
         {
-          "t": 27.0,
-          "count": 0
+          "t": 60.98,
+          "count": 2
         },
         {
-          "t": 27.2,
-          "count": 0
-        },
-        {
-          "t": 27.4,
-          "count": 0
-        },
-        {
-          "t": 27.6,
-          "count": 0
-        },
-        {
-          "t": 27.8,
-          "count": 0
-        },
-        {
-          "t": 28.0,
-          "count": 0
-        },
-        {
-          "t": 28.2,
-          "count": 0
-        },
-        {
-          "t": 28.4,
-          "count": 0
-        },
-        {
-          "t": 28.6,
-          "count": 0
-        },
-        {
-          "t": 28.8,
-          "count": 0
-        },
-        {
-          "t": 29.0,
-          "count": 0
-        },
-        {
-          "t": 29.2,
-          "count": 0
-        },
-        {
-          "t": 29.4,
-          "count": 0
-        },
-        {
-          "t": 29.6,
-          "count": 0
-        },
-        {
-          "t": 29.8,
-          "count": 0
-        },
-        {
-          "t": 30.0,
-          "count": 0
-        },
-        {
-          "t": 30.2,
-          "count": 0
-        },
-        {
-          "t": 30.4,
-          "count": 0
-        },
-        {
-          "t": 30.6,
-          "count": 0
-        },
-        {
-          "t": 30.8,
-          "count": 0
+          "t": 61.33,
+          "count": 2
         }
       ],
       "requestedActivityCombination": null,
@@ -3236,19 +5578,19 @@
       "runtime_model": "z-ai/glm-5.2",
       "generation_mode": "llm"
     },
-    "web_data_answer_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260805-173122-915099\\smartroom-answer.json",
+    "web_data_answer_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260805-174222-668456\\smartroom-answer.json",
     "web_data_manifest_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260730_113000\\output\\cityos_synthesis\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis.json",
     "web_data_recording_override": {
       "day": "day_23_2026-08-05",
       "rec": "rec_20260805_110324"
     },
     "web_data_snapshot_summary": null,
-    "web_data_payload_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260805-173122-915099\\source_data\\20260805-173125-640781_agent_request.json",
+    "web_data_payload_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260805-174222-668456\\source_data\\20260805-174226-436248_agent_request.json",
     "web_data_source_url": "http://172.16.60.239:3000/api/v1",
     "web_data_source_kind": "smartroom-control"
   },
   "tracefix": {
-    "run_id": "cached-74c12017",
+    "run_id": "cached-4413c885",
     "workspace": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260730_113000"
   },
   "cityos": {
