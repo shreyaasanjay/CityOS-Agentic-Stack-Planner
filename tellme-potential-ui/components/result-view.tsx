@@ -21,15 +21,17 @@ import {
   Download,
   Timer,
   Database,
+  Activity,
 } from 'lucide-react'
 import type { Agent, QueryResult, RecordingCandidate } from '@/lib/api/types'
 import { EvidenceCard } from '@/components/evidence-card'
+import { OccupancyChart } from '@/components/occupancy-chart'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { formatResponseTime } from '@/components/response-timer'
 import { translate, type LanguageMode, type TranslationKey } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-type ResultTab = 'answer' | 'agents' | 'evidence'
+type ResultTab = 'answer' | 'agents' | 'evidence' | 'occupancy'
 type Feedback = 'helpful' | 'incorrect'
 
 function confidenceLabel(value: number | null, language: LanguageMode) {
@@ -99,6 +101,10 @@ export function ResultView({
     { id: 'agents', label: t('result.sensorsUsed'), icon: Cpu, count: result.agents.length },
     { id: 'evidence', label: t('result.privacyReceipt'), icon: FileSearch, count: result.evidence.length },
   ]
+  const occupancy = result.occupancyTimeline ?? []
+  if (occupancy.length) {
+    tabs.push({ id: 'occupancy', label: t('chart.tab'), icon: Activity })
+  }
 
   return (
     <section
@@ -295,6 +301,10 @@ export function ResultView({
               {t('result.privacyFirst')}
             </div>
           </div>
+        )}
+
+        {tab === 'occupancy' && (
+          <OccupancyChart points={occupancy} language={language} />
         )}
 
         {tab === 'evidence' && (

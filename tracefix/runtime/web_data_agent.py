@@ -16,6 +16,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 
@@ -37,16 +38,29 @@ def _read_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def _request_json(url: str, *, timeout: int, max_bytes: int) -> dict[str, Any]:
+def _request_json(url: str, *, timeout: int, max_bytes: int, api_key: str = "") -> Any:
+    if api_key:
+        separator = "&" if "?" in url else "?"
+        url = f"{url}{separator}api_key={urllib.parse.quote(api_key)}"
     request = urllib.request.Request(
         url,
         headers={"User-Agent": "TraceFix-Generated-Agent/0.1", "Accept": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - approved runtime URL
-        body = response.read(max_bytes + 1)
-        if len(body) > max_bytes:
-            raise ValueError(f"agent data response exceeded {max_bytes} bytes")
-    value = json.loads(body.decode("utf-8-sig"))
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - approved runtime URL
+            body = response.read(max_bytes + 1)
+            if len(body) > max_bytes:
+                raise ValueError(f"agent data response exceeded {max_bytes} bytes")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(4096).decode("utf-8", "replace")
+        if api_key:
+            detail = detail.replace(api_key, "[redacted]")
+        raise RuntimeError(f"agent data request failed with HTTP {exc.code}: {detail[:500]}") from exc
+    return json.loads(body.decode("utf-8-sig"))
+
+
+def _request_json_object(url: str, *, timeout: int, max_bytes: int, api_key: str = "") -> dict[str, Any]:
+    value = _request_json(url, timeout=timeout, max_bytes=max_bytes, api_key=api_key)
     if not isinstance(value, dict):
         raise ValueError(f"expected a JSON object from {url}")
     return value
@@ -72,6 +86,13 @@ def _json_from_model_text(value: str) -> dict[str, Any]:
 
 def _answer_context(draft: dict[str, Any]) -> dict[str, Any]:
     """Return grounded facts without URLs, raw captures, or tracking identifiers."""
+    simulation = draft.get("simulation")
+    if isinstance(simulation, dict):
+        return {
+            "grounded_draft": draft.get("answer"),
+            "simulation": simulation,
+            "limitations": draft.get("limitations") or [],
+        }
     cameras = []
     for index, raw_camera in enumerate(draft.get("cameras", []), start=1):
         if not isinstance(raw_camera, dict):
@@ -253,12 +274,19 @@ def _model_answer(*, provider: str, model: str, question: str, draft: dict[str, 
     answer = str(result.get("answer") or "").strip()
     if not answer:
         raise ValueError("runtime agent model response omitted answer")
+    derived = draft.get("confidence")
     confidence = result.get("confidence")
     if not isinstance(confidence, (int, float)):
-        confidence = draft.get("confidence", 0.0)
+        confidence = derived if isinstance(derived, (int, float)) else 0.0
+    if isinstance(derived, (int, float)):
+        # The model rewrites the sentence, not the evidence behind it. It may lower
+        # confidence but never raise it above what the underlying data supports.
+        confidence = min(float(confidence), float(derived))
     limitations = result.get("limitations")
     if not isinstance(limitations, list):
-        limitations = draft.get("limitations") or []
+        limitations = []
+    # Keep the derived caveats: the model does not get to drop them by omission.
+    merged = [*(draft.get("limitations") or []), *limitations]
     return {
         **draft,
         "answer": answer,
@@ -266,7 +294,7 @@ def _model_answer(*, provider: str, model: str, question: str, draft: dict[str, 
         "chatAnswer": answer,
         "chat_answer": answer,
         "confidence": max(0.0, min(1.0, float(confidence))),
-        "limitations": [str(item) for item in limitations if str(item).strip()],
+        "limitations": list(dict.fromkeys(str(item) for item in merged if str(item).strip())),
         "runtime_provider": provider,
         "runtime_model": model,
         "generation_mode": "llm",
@@ -499,7 +527,7 @@ def _fetch_recording_evidence(
             try:
                 inference[str(inference_model)] = {
                     "url": endpoint,
-                    "data": _request_json(endpoint, timeout=timeout, max_bytes=max_bytes),
+                    "data": _request_json_object(endpoint, timeout=timeout, max_bytes=max_bytes),
                 }
             except Exception as exc:  # noqa: BLE001 - retain partial evidence
                 errors.append({"url": endpoint, "error": f"{type(exc).__name__}: {exc}"})
@@ -513,7 +541,7 @@ def _retrieve_smartroom(request: dict[str, Any], agent_id: str) -> dict[str, Any
     timeout = int(request.get("timeout_seconds") or 30)
     max_bytes = int(request.get("max_bytes") or 50 * 1024 * 1024)
     base = _base_url(source_url)
-    recordings_doc = _request_json(_api_url(base, "recordings"), timeout=timeout, max_bytes=max_bytes)
+    recordings_doc = _request_json_object(_api_url(base, "recordings"), timeout=timeout, max_bytes=max_bytes)
     recordings = [item for item in recordings_doc.get("recordings", []) if isinstance(item, dict)]
     selected, selection = _select_recording(
         recordings,
@@ -647,7 +675,7 @@ def _retrieve_smartroom_agent(request: dict[str, Any], agent_id: str, provider: 
         if tool not in tools:
             raise ValueError(f"generated retrieval agent requested an unapproved tool: {tool or '(empty)'}")
         if tool == "list_recordings":
-            recordings_doc = _request_json(_api_url(base, "recordings"), timeout=timeout, max_bytes=max_bytes)
+            recordings_doc = _request_json_object(_api_url(base, "recordings"), timeout=timeout, max_bytes=max_bytes)
             recordings = [item for item in recordings_doc.get("recordings", []) if isinstance(item, dict)]
             observation: dict[str, Any] = {"recordings": _recording_catalog(recordings)}
         else:
@@ -712,6 +740,308 @@ def _retrieve_smartroom_agent(request: dict[str, Any], agent_id: str, provider: 
     }
 
 
+def _source_api_key(request: dict[str, Any]) -> str:
+    return str(
+        request.get("source_api_key")
+        or os.environ.get("TRACEFIX_SOURCE_API_KEY", "")
+    ).strip()
+
+
+def _carla_base_url(url: str) -> str:
+    parsed = urllib.parse.urlsplit(url.strip())
+    path = parsed.path.rstrip("/")
+    # The shared link usually points at the human pages, not the API root.
+    for page in ("/ui", "/endpoints", "/docs", "/traces"):
+        if path.endswith(page):
+            path = path[: -len(page)]
+            break
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, "", "")).rstrip("/")
+
+
+def _select_carla_trace(traces: list[dict[str, Any]], question: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Pick one trace; the trace server's timestamps are experimental and never used."""
+    lowered = question.lower()
+    for trace in traces:
+        trace_id = str(trace.get("trace_id") or "")
+        if trace_id and trace_id.lower() in lowered:
+            return trace, {"mode": "question_match", "reason": f"the question named trace {trace_id}"}
+    scenario_match = re.search(r"\bscenario\s*(\d+)\b", lowered)
+    if scenario_match:
+        wanted = int(scenario_match.group(1))
+        for trace in traces:
+            if trace.get("scenario") == wanted:
+                return trace, {
+                    "mode": "question_match",
+                    "reason": f"the question asked for scenario {wanted}",
+                }
+    first_scenario = next(
+        (trace for trace in traces if str(trace.get("trace_id") or "").startswith("scenario_")),
+        None,
+    )
+    if first_scenario is not None:
+        return first_scenario, {
+            "mode": "default_scenario",
+            "reason": "selected the first scenario trace because the question did not name one",
+        }
+    if traces:
+        return traces[0], {"mode": "first_trace", "reason": "no scenario traces exist; selected the first trace"}
+    return None, {"mode": "empty", "reason": "the trace server returned no traces"}
+
+
+def _carla_trace_catalog(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "trace_id": str(trace.get("trace_id") or ""),
+            "scenario": trace.get("scenario"),
+            "map": trace.get("map"),
+            "actor_count": trace.get("actor_count"),
+            "junction": trace.get("junction"),
+            "has_ground_truth": trace.get("has_ground_truth"),
+        }
+        for trace in traces
+    ]
+
+
+def _carla_trace_summary(doc: dict[str, Any]) -> dict[str, Any]:
+    """Reduce one trace to grounded facts: entities, claims, tick aggregates, presence series."""
+    log = [entry for entry in doc.get("log") or [] if isinstance(entry, dict)]
+    trajectories = [item for item in doc.get("trajectories") or [] if isinstance(item, dict)]
+    ground_truth = doc.get("ground_truth") if isinstance(doc.get("ground_truth"), dict) else {}
+
+    entities = [
+        {
+            "id": str(entity.get("local_id") or ""),
+            "type": str(entity.get("type") or ""),
+            "name": str(entity.get("name") or ""),
+        }
+        for entity in ground_truth.get("entities") or []
+        if isinstance(entity, dict)
+    ]
+    entity_type_counts: dict[str, int] = {}
+    for entity in entities:
+        if entity["type"]:
+            entity_type_counts[entity["type"]] = entity_type_counts.get(entity["type"], 0) + 1
+
+    claims = [
+        {
+            "claim_type": str(claim.get("claim_type") or ""),
+            "statement": str(claim.get("natural_language") or ""),
+            "confidence": claim.get("confidence"),
+            "polarity": claim.get("polarity"),
+        }
+        for claim in ground_truth.get("claims") or []
+        if isinstance(claim, dict) and str(claim.get("natural_language") or "").strip()
+    ]
+
+    tick_seconds: dict[int, float] = {}
+    crosswalk_occupied_ticks = 0
+    peak_crosswalk_fraction = 0.0
+    collisions_total = 0
+    for entry in log:
+        tick = entry.get("tick")
+        elapsed = entry.get("sim_elapsed_s")
+        if isinstance(tick, int) and isinstance(elapsed, (int, float)):
+            tick_seconds[tick] = float(elapsed)
+        if entry.get("crosswalk_occupied") is True:
+            crosswalk_occupied_ticks += 1
+        fraction = entry.get("crosswalk_pedestrian_fraction")
+        if isinstance(fraction, (int, float)):
+            peak_crosswalk_fraction = max(peak_crosswalk_fraction, float(fraction))
+        total = entry.get("collision_count_total")
+        if isinstance(total, (int, float)):
+            collisions_total = max(collisions_total, int(total))
+
+    # People/vehicles in the scene over simulation time: one sample per tick,
+    # counting the actors whose trajectory spans that tick.
+    role_of_id: dict[str, str] = {entity["id"]: entity["type"] for entity in entities}
+    presence: dict[float, int] = {}
+    walker_presence: dict[float, int] = {}
+    actor_roles: dict[str, int] = {}
+    for trajectory in trajectories:
+        meta = trajectory.get("meta") if isinstance(trajectory.get("meta"), dict) else {}
+        role = str(meta.get("role") or role_of_id.get(str(meta.get("id") or ""), "") or "actor")
+        actor_roles[role] = actor_roles.get(role, 0) + 1
+        first_tick, last_tick = trajectory.get("first_tick"), trajectory.get("last_tick")
+        if not isinstance(first_tick, int) or not isinstance(last_tick, int):
+            continue
+        for tick in range(first_tick, last_tick + 1):
+            stamp = round(tick_seconds.get(tick, float(tick)), 2)
+            presence[stamp] = presence.get(stamp, 0) + 1
+            if role == "walker":
+                walker_presence[stamp] = walker_presence.get(stamp, 0) + 1
+
+    duration_s = max(tick_seconds.values(), default=0.0)
+    return {
+        "trace_id": str(doc.get("trace_id") or ""),
+        "map": next((str(entry.get("space")) for entry in log if entry.get("space")), None),
+        "scenario": next((entry.get("scenario") for entry in log if entry.get("scenario") is not None), None),
+        "tick_count": len(log),
+        "duration_s": round(duration_s, 2),
+        "has_ground_truth": bool(ground_truth),
+        "entities": entities,
+        "entity_type_counts": dict(sorted(entity_type_counts.items())),
+        "actor_role_counts": dict(sorted(actor_roles.items())),
+        "claims": claims,
+        "crosswalk": {
+            "ticks_occupied": crosswalk_occupied_ticks,
+            "occupied_fraction": round(crosswalk_occupied_ticks / len(log), 3) if log else None,
+            "peak_pedestrian_fraction": round(peak_crosswalk_fraction, 4),
+        },
+        "collisions_total": collisions_total,
+        "peak_actors_present": max(presence.values(), default=0),
+        "peak_walkers_present": max(walker_presence.values(), default=0),
+        "occupancySamples": _downsample_series(presence),
+        "walkerOccupancySamples": _downsample_series(walker_presence),
+    }
+
+
+def _retrieve_carla(request: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    source_url = str(request.get("source_url") or "").strip()
+    question = str(request.get("question") or "").strip()
+    timeout = int(request.get("timeout_seconds") or 30)
+    max_bytes = int(request.get("max_bytes") or 50 * 1024 * 1024)
+    api_key = _source_api_key(request)
+    base = _carla_base_url(source_url)
+    traces_doc = _request_json(_api_url(base, "traces"), timeout=timeout, max_bytes=max_bytes, api_key=api_key)
+    traces = [item for item in traces_doc if isinstance(item, dict)] if isinstance(traces_doc, list) else []
+    override = request.get("recording_override")
+    override_id = ""
+    if isinstance(override, dict):
+        override_id = str(override.get("recordingId") or override.get("id") or "").strip()
+    elif override is not None:
+        override_id = str(override).strip()
+    selected = None
+    if override_id:
+        selected = next(
+            (item for item in traces if str(item.get("trace_id") or "").casefold() == override_id.casefold()),
+            None,
+        )
+    if selected is not None:
+        selection: dict[str, Any] = {
+            "mode": "recording_override",
+            "reason": f"selected the requested trace {selected.get('trace_id')}",
+        }
+    else:
+        selected, selection = _select_carla_trace(traces, question)
+        if override_id:
+            selection = {
+                **selection,
+                "reason": f"trace {override_id} was not found; {selection.get('reason')}",
+            }
+    errors: list[dict[str, str]] = []
+    summary: dict[str, Any] | None = None
+    if selected is not None:
+        trace_id = str(selected.get("trace_id") or "")
+        try:
+            doc = _request_json_object(
+                _api_url(base, "traces", trace_id, "full"),
+                timeout=timeout, max_bytes=max_bytes, api_key=api_key,
+            )
+        except Exception as exc:  # noqa: BLE001 - the deployment view is a legitimate fallback
+            errors.append({"url": _api_url(base, "traces", trace_id, "full"), "error": f"{type(exc).__name__}: {exc}"})
+            doc = _request_json_object(
+                _api_url(base, "traces", trace_id, "deployment"),
+                timeout=timeout, max_bytes=max_bytes, api_key=api_key,
+            )
+        summary = _carla_trace_summary(doc)
+    return {
+        "kind": "tracefix.agent.evidence.v1",
+        "producer_agent": agent_id,
+        "source_kind": "carla-trace-server",
+        "source_url": base,
+        "question": question,
+        "fetched_at": _now(),
+        "source_count": len(traces),
+        "traces": _carla_trace_catalog(traces),
+        "selection": selection,
+        "selected": summary,
+        "errors": errors,
+    }
+
+
+def _carla_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    question = str(evidence.get("question") or "")
+    selection = evidence.get("selection") if isinstance(evidence.get("selection"), dict) else {}
+    summary = evidence.get("selected") if isinstance(evidence.get("selected"), dict) else None
+    errors = evidence.get("errors") or []
+    if summary is None:
+        text = "The CARLA trace server returned no traces to analyze."
+        return {
+            "answer": text, "text": text, "chatAnswer": text, "chat_answer": text,
+            "producer_agent": agent_id,
+            "confidence": 0.0,
+            "evidence_refs": [f"{evidence.get('producer_agent')}:trace-index"],
+            "limitations": ["No simulation trace was available."],
+            "source_count": int(evidence.get("source_count") or 0),
+            "evidence_used_count": 0,
+            "recording": None,
+            "cameras": [],
+            "selection": selection,
+            "errors": errors,
+        }
+    trace_id = summary.get("trace_id") or "unknown"
+    scenario = summary.get("scenario")
+    map_name = str(summary.get("map") or "").rsplit("/", 1)[-1]
+    lowered = question.lower()
+    role_counts = summary.get("actor_role_counts") or {}
+    type_counts = summary.get("entity_type_counts") or {}
+    walkers = int(type_counts.get("walker") or role_counts.get("walker") or 0)
+    vehicles = int(type_counts.get("vehicle") or role_counts.get("vehicle") or 0)
+    crosswalk = summary.get("crosswalk") or {}
+
+    prefix = f"For simulation trace {trace_id}"
+    if scenario is not None:
+        prefix += f" (scenario {scenario}"
+        prefix += f", {map_name})" if map_name else ")"
+    elif map_name:
+        prefix += f" ({map_name})"
+    prefix += ", "
+
+    parts: list[str] = []
+    if re.search(r"\b(crosswalk|cross\w*|across|road|street)\b", lowered) and crosswalk.get("occupied_fraction") is not None:
+        parts.append(
+            f"the crosswalk was occupied for {round(float(crosswalk['occupied_fraction']) * 100)}% "
+            f"of the {summary.get('duration_s')}s simulation"
+        )
+    if re.search(r"\b(collisions?|crash(es)?|accidents?)\b", lowered):
+        parts.append(f"{summary.get('collisions_total', 0)} collision(s) were recorded")
+    if re.search(r"\b(pedestrians?|people|persons?|walkers?)\b", lowered):
+        parts.append(f"{_count_label(walkers)} (pedestrians) appeared in the scene")
+    if re.search(r"\b(cars?|vehicles?|traffic)\b", lowered):
+        parts.append(f"{vehicles} vehicle(s) appeared in the scene")
+    if not parts:
+        described = ", ".join(f"{count} {kind}(s)" for kind, count in sorted(type_counts.items())) or "no catalogued entities"
+        parts.append(f"the simulation ran for {summary.get('duration_s')}s and contained {described}")
+    text = prefix + "; ".join(parts) + "."
+
+    limitations = [
+        "Counts come from the CARLA simulator's ground truth for the selected trace.",
+        "Trace timestamps are experimental and were not used; times are simulation-relative seconds.",
+    ]
+    if not summary.get("has_ground_truth"):
+        limitations.append("This trace has no ground-truth annotations; only the deployment log was available.")
+    if errors:
+        limitations.append(f"{len(errors)} upstream request(s) failed, so the evidence may be incomplete.")
+    confidence = 0.9 if summary.get("has_ground_truth") else 0.6
+    if errors:
+        confidence = round(confidence * 0.85, 2)
+    return {
+        "answer": text, "text": text, "chatAnswer": text, "chat_answer": text,
+        "producer_agent": agent_id,
+        "confidence": confidence,
+        "evidence_refs": [f"{evidence.get('producer_agent')}:{trace_id}"],
+        "limitations": limitations,
+        "source_count": int(evidence.get("source_count") or 0),
+        "evidence_used_count": 1,
+        "recording": {"traceId": trace_id},
+        "cameras": [],
+        "selection": selection,
+        "simulation": {key: value for key, value in summary.items() if key not in {"occupancySamples", "walkerOccupancySamples", "entities"}},
+        "occupancyTimeline": summary.get("occupancySamples") or [],
+        "errors": errors,
+    }
+
+
 def _retrieve_generic(request: dict[str, Any], agent_id: str) -> dict[str, Any]:
     raw = str(request.get("raw_data_json") or "").strip()
     if raw:
@@ -719,7 +1049,7 @@ def _retrieve_generic(request: dict[str, Any], agent_id: str) -> dict[str, Any]:
         source_url = "inline-json"
     else:
         source_url = str(request.get("source_url") or "").strip()
-        data = _request_json(
+        data = _request_json_object(
             source_url,
             timeout=int(request.get("timeout_seconds") or 30),
             max_bytes=int(request.get("max_bytes") or 50 * 1024 * 1024),
@@ -790,11 +1120,18 @@ def _retrieve_generic_agent(request: dict[str, Any], agent_id: str, provider: st
     }
 
 
+_CARLA_MODES = {"carla", "simulation", "carla-trace-server", "carla_trace_server"}
+
+
 def retrieve(request: dict[str, Any], agent_id: str) -> dict[str, Any]:
     source_mode = str(request.get("source_mode") or "auto").lower()
     source_url = str(request.get("source_url") or "").lower()
     provider = str(request.get("agent_provider") or "deterministic").strip().lower()
     model = str(request.get("agent_model") or "").strip()
+    if source_mode in _CARLA_MODES:
+        # Trace selection is deterministic (first scenario trace unless the
+        # question names one); the LLM still writes the final answer wording.
+        return _retrieve_carla(request, agent_id)
     if source_mode == "smartroom" or (source_mode == "auto" and "/api/v1" in source_url):
         if provider != "deterministic":
             return _retrieve_smartroom_agent(request, agent_id, provider, model)
@@ -814,10 +1151,163 @@ def _walk(value: Any):
             yield from _walk(child)
 
 
+def _activity_key(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _concurrent_counts_from_tracks(tracks: list[Any]) -> dict[str, int]:
+    """Most tracks simultaneously classified with each action at one sampled instant.
+
+    Counting distinct track IDs over a whole recording conflates one person the
+    tracker re-acquired N times with N people, so co-occurrence at a shared
+    timestamp is used instead: two IDs only count as two people if the classifier
+    saw them doing the thing at the same moment.
+    """
+    per_label: dict[str, dict[float, set[str]]] = {}
+    for track in tracks:
+        if not isinstance(track, dict):
+            continue
+        track_id = str(track.get("trackId") or "").strip()
+        timeline = track.get("timeline")
+        if not track_id or not isinstance(timeline, list):
+            continue
+        for point in timeline:
+            if not isinstance(point, dict) or point.get("kept") is False:
+                continue
+            label = _activity_key(point.get("action"))
+            stamp = point.get("t")
+            if not label or not isinstance(stamp, (int, float)):
+                continue
+            per_label.setdefault(label, {}).setdefault(round(float(stamp), 3), set()).add(track_id)
+    return {
+        label: max((len(ids) for ids in stamps.values()), default=0)
+        for label, stamps in per_label.items()
+    }
+
+
+def _downsample_series(samples: dict[float, int], max_points: int = 180) -> list[dict[str, float]]:
+    """Reduce a dense count series to a plottable number of points.
+
+    Buckets take the median, not the maximum. The detector's per-frame count
+    flickers by one or two people constantly, and carrying the maximum through
+    turns that noise into a spike on the chart. A bucket spans well under a
+    second, so anything a viewer would call a change still survives; only
+    single-frame jitter is dropped.
+    """
+    if not samples:
+        return []
+    stamps = sorted(samples)
+    span = stamps[-1] - stamps[0]
+    if len(stamps) <= max_points or span <= 0:
+        return [{"t": round(stamp, 2), "count": int(samples[stamp])} for stamp in stamps]
+    width = span / max_points
+    buckets: dict[int, list[int]] = {}
+    for stamp in stamps:
+        index = min(max_points - 1, int((stamp - stamps[0]) / width))
+        buckets.setdefault(index, []).append(int(samples[stamp]))
+    return [
+        {"t": round(stamps[0] + index * width, 2), "count": int(median(sorted(values)))}
+        for index, values in sorted(buckets.items())
+    ]
+
+
+def _segment_counts_from_tracks(tracks: list[Any]) -> dict[str, int]:
+    """Peak overlap of per-track action segments, for data with no sample timeline."""
+    intervals: dict[str, list[tuple[float, float]]] = {}
+    for track in tracks:
+        if not isinstance(track, dict):
+            continue
+        for segment in track.get("segments") or []:
+            if not isinstance(segment, dict):
+                continue
+            label = _activity_key(segment.get("action"))
+            start, end = segment.get("start"), segment.get("end")
+            if not label or not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+                continue
+            # Give degenerate (zero-length) segments a sliver of duration, otherwise
+            # the close-before-open ordering below cancels them out to nothing.
+            intervals.setdefault(label, []).append((float(start), max(float(end), float(start) + 1e-6)))
+    counts: dict[str, int] = {}
+    for label, spans in intervals.items():
+        events: list[tuple[float, int]] = []
+        for start, end in spans:
+            events.append((start, 1))
+            events.append((end, -1))
+        # Close before open at equal timestamps so abutting segments are not an overlap.
+        events.sort(key=lambda item: (item[0], item[1]))
+        current = peak = 0
+        for _, delta in events:
+            current += delta
+            peak = max(peak, current)
+        counts[label] = peak
+    return counts
+
+
+def _geo_occupancy_series(camera: dict[str, Any], duration_sec: float = 0.0) -> dict[float, int] | None:
+    """Depth-verified occupancy series from the geo model's room-frame centroids.
+
+    Per-frame detector counts include anything person-shaped in the image —
+    people on a TV screen, someone visible through a window, reflections — so
+    they overstate how many people are physically in the room. The geo pipeline
+    only emits a centroid when a detection has a consistent depth inside the
+    calibrated room, which makes concurrent geo tracks the authoritative
+    occupancy signal whenever they are present.
+    """
+    step = 0.2
+    tracks_by_bucket: dict[float, set[str]] = {}
+    inference = camera.get("inference") if isinstance(camera.get("inference"), dict) else {}
+    for model, wrapper in inference.items():
+        if "geo" not in str(model).lower():
+            continue
+        data = wrapper.get("data") if isinstance(wrapper, dict) else {}
+        centroids = data.get("centroids") if isinstance(data, dict) else None
+        persons = centroids.get("persons") if isinstance(centroids, dict) else None
+        if not isinstance(persons, dict):
+            continue
+        for track_id, samples in persons.items():
+            if not isinstance(samples, list) or not samples:
+                continue
+            # A hip-based centroid means the pipeline saw a full body and anchored
+            # it to the floor. Shoulder-based centroids are its fallback for
+            # partially visible figures — which is what someone behind the window
+            # or on the TV screen looks like — so a track that is mostly
+            # shoulder-based is not someone standing in the room.
+            hip_samples = sum(
+                1 for sample in samples
+                if isinstance(sample, dict) and str(sample.get("src") or "").startswith("depth-hip")
+            )
+            if hip_samples * 2 < len(samples):
+                continue
+            for sample in samples:
+                stamp = sample.get("t") if isinstance(sample, dict) else None
+                if isinstance(stamp, (int, float)):
+                    bucket = round(round(float(stamp) / step) * step, 2)
+                    tracks_by_bucket.setdefault(bucket, set()).add(str(track_id))
+    if not tracks_by_bucket:
+        return None
+    # Zero-fill the whole recording so an empty room reads as 0 rather than the
+    # series silently stopping at the last sighting.
+    end = max(max(tracks_by_bucket), float(duration_sec or 0.0))
+    series: dict[float, int] = {}
+    index = 0
+    stamp = 0.0
+    while stamp <= end + 1e-9:
+        series[round(stamp, 2)] = len(tracks_by_bucket.get(round(stamp, 2), ()))
+        index += 1
+        stamp = index * step
+    return series
+
+
 def _camera_summary(camera_name: str, camera: dict[str, Any]) -> dict[str, Any]:
     latest: int | None = None
+    peak: int | None = None
+    frames_analyzed = 0
+    duration_sec = 0.0
     activities: set[str] = set()
     activity_tracks: dict[str, set[str]] = {}
+    concurrent_counts: dict[str, int] = {}
+    segment_counts: dict[str, int] = {}
+    occupancy_samples: dict[float, int] = {}
     pose_available = False
     inference = camera.get("inference") if isinstance(camera.get("inference"), dict) else {}
     endpoints: dict[str, str] = {}
@@ -827,17 +1317,46 @@ def _camera_summary(camera_name: str, camera: dict[str, Any]) -> dict[str, Any]:
         if isinstance(wrapper, dict) and wrapper.get("url"):
             endpoints[str(model)] = str(wrapper["url"])
         data = wrapper.get("data") if isinstance(wrapper, dict) else {}
+        tracks = data.get("tracks") if isinstance(data, dict) else None
+        if isinstance(tracks, list):
+            for label, count in _concurrent_counts_from_tracks(tracks).items():
+                concurrent_counts[label] = max(concurrent_counts.get(label, 0), count)
+                activities.add(label)
+            for label, count in _segment_counts_from_tracks(tracks).items():
+                segment_counts[label] = max(segment_counts.get(label, 0), count)
+                activities.add(label)
         for node in _walk(data):
             if not isinstance(node, dict):
                 continue
+            reported_peak = node.get("maxPersons")
+            if isinstance(reported_peak, (int, float)):
+                peak = max(peak or 0, int(reported_peak))
             timeline = node.get("timeline")
-            if isinstance(timeline, list):
-                # Answer selected recordings from their most recent reading. Avoid
-                # scanning every sample merely to calculate a peak occupancy.
-                for item in reversed(timeline):
-                    if isinstance(item, dict) and isinstance(item.get("count"), (int, float)):
-                        latest = int(item["count"])
-                        break
+            counts = [
+                int(item["count"]) for item in timeline
+                if isinstance(item, dict) and isinstance(item.get("count"), (int, float))
+            ] if isinstance(timeline, list) else []
+            if counts:
+                latest = counts[-1]
+                peak = max(peak or 0, max(counts))
+                # Retained at full resolution for the occupancy chart; the answer
+                # itself still reports a single number.
+                for item in timeline:
+                    if not isinstance(item, dict):
+                        continue
+                    stamp, count = item.get("t"), item.get("count")
+                    if isinstance(stamp, (int, float)) and isinstance(count, (int, float)):
+                        rounded = round(float(stamp), 2)
+                        occupancy_samples[rounded] = max(occupancy_samples.get(rounded, 0), int(count))
+            analyzed = node.get("framesAnalyzed")
+            # Only count frames from nodes that actually detect people. Auxiliary
+            # models (depth/geometry) sample far more densely and would otherwise
+            # overstate how much of the recording the counting models examined.
+            if isinstance(analyzed, (int, float)) and (counts or reported_peak is not None):
+                frames_analyzed = max(frames_analyzed, int(analyzed))
+            reported_duration = node.get("durationSec")
+            if isinstance(reported_duration, (int, float)):
+                duration_sec = max(duration_sec, float(reported_duration))
             for key in ("actions", "poses", "labels"):
                 values = node.get(key)
                 if isinstance(values, list):
@@ -845,7 +1364,7 @@ def _camera_summary(camera_name: str, camera: dict[str, Any]) -> dict[str, Any]:
             track_actions = node.get("trackActions")
             if isinstance(track_actions, dict):
                 for track_id, label in track_actions.items():
-                    normalized = str(label).strip().lower()
+                    normalized = _activity_key(label)
                     if normalized:
                         activities.add(normalized)
                         activity_tracks.setdefault(normalized, set()).add(str(track_id))
@@ -855,17 +1374,57 @@ def _camera_summary(camera_name: str, camera: dict[str, Any]) -> dict[str, Any]:
                 pose_available = pose_available or bool(persons)
                 ids = {str(person.get("id", index + 1)) for index, person in enumerate(persons) if isinstance(person, dict)}
                 for label in labels:
-                    normalized = str(label).strip().lower()
+                    normalized = _activity_key(label)
                     if normalized:
                         activities.add(normalized)
                         activity_tracks.setdefault(normalized, set()).update(ids)
-    activity_counts = {label: len(ids) for label, ids in activity_tracks.items()}
+
+    metadata = camera.get("metadata") if isinstance(camera.get("metadata"), dict) else {}
+    if isinstance(metadata.get("durationSec"), (int, float)):
+        duration_sec = max(duration_sec, float(metadata["durationSec"]))
+    geo_series = _geo_occupancy_series(camera, duration_sec)
+    if geo_series:
+        # Depth-verified counts override the detectors' pixel counts: YOLO also
+        # counts people on the TV screen and through the window, which is how a
+        # two-person room gets reported as six.
+        peak = max(geo_series.values())
+        latest = geo_series[max(geo_series)]
+        occupancy_samples = geo_series
+    elif occupancy_samples:
+        # Keep the reported single number consistent with the plotted series
+        # instead of whichever model's timeline happened to be walked last.
+        latest = occupancy_samples[max(occupancy_samples)]
+
+    union_counts = {label: len(ids) for label, ids in activity_tracks.items()}
+    activity_counts: dict[str, int] = {}
+    count_methods: dict[str, str] = {}
+    for label in set(union_counts) | set(concurrent_counts) | set(segment_counts):
+        if concurrent_counts.get(label):
+            value, method = concurrent_counts[label], "concurrent"
+        elif segment_counts.get(label):
+            value, method = segment_counts[label], "segments"
+        else:
+            value, method = union_counts.get(label, 0), "union"
+        # However the label was counted, it cannot involve more people than the
+        # person detector ever saw in the room at once.
+        if peak is not None and value > peak:
+            value, method = peak, method + "-clamped"
+        activity_counts[label] = value
+        count_methods[label] = method
+
     return {
         "camera": camera_name,
-        "peakPeople": None,
+        "peakPeople": peak,
         "lastPeople": latest,
+        "framesAnalyzed": frames_analyzed,
+        "durationSec": round(duration_sec, 3) if duration_sec else None,
         "activities": sorted(activities),
         "activityCounts": dict(sorted(activity_counts.items())),
+        "activityCountMethods": dict(sorted(count_methods.items())),
+        "activityCountsUnion": dict(sorted(union_counts.items())),
+        "occupancySamples": [
+            {"t": stamp, "count": occupancy_samples[stamp]} for stamp in sorted(occupancy_samples)
+        ],
         "activityTrackIds": {label: sorted(ids) for label, ids in sorted(activity_tracks.items())},
         "endpoints": endpoints,
         "pose": {"available": pose_available},
@@ -876,8 +1435,110 @@ def _count_label(value: int) -> str:
     return f"{value} {'person' if value == 1 else 'people'}"
 
 
+def _merge_occupancy_samples(cameras: list[dict[str, Any]]) -> list[dict[str, float]]:
+    """One occupancy series for the recording, plottable as a line.
+
+    Cameras cover different spans and see different parts of the room, so the
+    highest count at each instant wins: a camera that cannot see a corner should
+    not drag the room total down below what another camera plainly observed.
+    """
+    merged: dict[float, int] = {}
+    for camera in cameras:
+        for point in camera.get("occupancySamples") or []:
+            stamp, count = point.get("t"), point.get("count")
+            if isinstance(stamp, (int, float)) and isinstance(count, (int, float)):
+                merged[float(stamp)] = max(merged.get(float(stamp), 0), int(count))
+    return _downsample_series(merged)
+
+
 def _camera_label(value: str) -> str:
     return re.sub(r"(?<=\D)(?=\d)", " ", value.replace("_", " ")).strip()
+
+
+_COUNT_METHOD_FACTORS = {
+    "concurrent": 1.0,
+    "segments": 0.85,
+    "concurrent-clamped": 0.5,
+    "union": 0.45,
+    "segments-clamped": 0.45,
+    "union-clamped": 0.4,
+}
+
+
+def _derive_confidence(
+    cameras: list[dict[str, Any]],
+    requested_labels: list[str],
+    errors: list[Any],
+) -> tuple[float, list[str]]:
+    """Score the evidence instead of asserting a constant.
+
+    Four independent things undermine a count: how it was derived, whether cameras
+    watching the same room agree, how much of the recording was analyzed, and
+    whether any upstream request failed. Each contributes a factor, and every
+    deduction produces a note that becomes a stated limitation.
+    """
+    if not cameras:
+        return 0.0, ["No camera returned usable inference data."]
+
+    notes: list[str] = []
+
+    method_factor = 1.0
+    for label in requested_labels:
+        for camera in cameras:
+            method = (camera.get("activityCountMethods") or {}).get(label)
+            if not method:
+                continue
+            method_factor = min(method_factor, _COUNT_METHOD_FACTORS.get(method, 0.5))
+            if method.endswith("-clamped"):
+                notes.append(
+                    f"The {label} count exceeded observed occupancy and was capped at the peak "
+                    "number of people the detector saw at once."
+                )
+            elif method == "union":
+                notes.append(
+                    f"The {label} count comes from distinct tracking segments, which can exceed "
+                    "the number of distinct people."
+                )
+
+    if requested_labels:
+        values = [
+            int((camera.get("activityCounts") or {}).get(label, 0))
+            for label in requested_labels
+            for camera in cameras
+            if label in (camera.get("activityCounts") or {})
+        ]
+    else:
+        values = [int(camera["lastPeople"]) for camera in cameras if camera.get("lastPeople") is not None]
+
+    agreement_factor = 1.0
+    if len(values) > 1 and max(values) > 0:
+        spread = max(values) - min(values)
+        agreement_factor = max(0.5, 1.0 - spread / max(values))
+        if spread:
+            notes.append(
+                f"Cameras covering the same recording disagreed (values {min(values)} to {max(values)})."
+            )
+
+    frames = max((int(camera.get("framesAnalyzed") or 0) for camera in cameras), default=0)
+    if frames >= 100:
+        coverage_factor = 1.0
+    elif frames >= 30:
+        coverage_factor = 0.85
+        notes.append(f"Only {frames} frames of this recording were analyzed.")
+    else:
+        coverage_factor = 0.6
+        notes.append(
+            f"Sparse coverage: {frames} analyzed frames." if frames
+            else "The inference data reported no analyzed frame count."
+        )
+
+    error_factor = 1.0
+    if errors:
+        error_factor = 0.7
+        notes.append(f"{len(errors)} upstream request(s) failed, so the evidence may be incomplete.")
+
+    score = 0.95 * method_factor * agreement_factor * coverage_factor * error_factor
+    return round(max(0.0, min(1.0, score)), 2), list(dict.fromkeys(notes))
 
 
 def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]:
@@ -977,6 +1638,7 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
     requested_date = str(selection.get("requestedDateLabel") or "").strip()
     prefix = f"For {requested_date} ({day} / {rec}), " if requested_date else f"For the selected recording ({day} / {rec}), "
     lower_question = question.lower()
+    occupancy_timeline = _merge_occupancy_samples(cameras)
     combined = len(requested_labels) > 1 and " both " in f" {lower_question} "
     combination: dict[str, Any] | None = None
     if combined:
@@ -1011,7 +1673,13 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
         text = prefix + ", ".join(parts) + "."
     else:
         latest = [camera["lastPeople"] for camera in cameras if camera["lastPeople"] is not None]
-        if latest:
+        peaks = [camera["peakPeople"] for camera in cameras if camera.get("peakPeople") is not None]
+        if latest and peaks:
+            text = prefix + (
+                f"occupancy peaked at {_count_label(max(peaks))} and the recording ended with "
+                f"{_count_label(max(latest))} in the room."
+            )
+        elif latest:
             text = prefix + f"the latest available room-level reading showed {_count_label(max(latest))}."
         else:
             text = prefix + "the generated agent found no usable occupancy count in this recording."
@@ -1019,15 +1687,20 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
         if activity_labels:
             text += " Detected activities included " + ", ".join(activity_labels) + "."
     counts = {label: max([camera["activityCounts"].get(label, 0) for camera in cameras] or [0]) for label in requested_labels}
+    packet_errors = evidence.get("errors") or []
+    confidence, confidence_notes = _derive_confidence(cameras, requested_labels, packet_errors)
     return {
         "answer": text,
         "text": text,
         "chatAnswer": text,
         "chat_answer": text,
         "producer_agent": agent_id,
-        "confidence": 0.9 if cameras else 0.0,
+        "confidence": confidence,
         "evidence_refs": [f"{evidence.get('producer_agent')}:{rec}:{camera['camera']}" for camera in cameras],
-        "limitations": ["Counts are bounded by the available aggregate inference data."],
+        "limitations": [
+            "Counts are bounded by the available aggregate inference data.",
+            *confidence_notes,
+        ],
         "source_count": int(evidence.get("source_count") or 0),
         "evidence_used_count": len(cameras),
         "recording": {"day": day, "rec": rec},
@@ -1035,6 +1708,7 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
         "selection": selection,
         "requestedActivities": requested_labels,
         "requestedActivityCounts": counts,
+        "occupancyTimeline": occupancy_timeline,
         "requestedActivityCombination": combination,
         "errors": evidence.get("errors") or [],
     }
@@ -1045,8 +1719,11 @@ def synthesize(request: dict[str, Any], agent_id: str) -> dict[str, Any]:
     if not packets:
         raise ValueError("answer synthesis requires at least one agent evidence packet")
     smartroom = next((item for item in packets if item.get("source_kind") == "smartroom-control"), None)
+    carla = next((item for item in packets if item.get("source_kind") == "carla-trace-server"), None)
     if smartroom:
         draft = _smartroom_answer(smartroom, agent_id)
+    elif carla:
+        draft = _carla_answer(carla, agent_id)
     else:
         evidence_refs = [f"{item.get('producer_agent')}:json" for item in packets]
         text = "The generated agent retrieved the approved structured data, but no domain-specific answer rule matched the request."

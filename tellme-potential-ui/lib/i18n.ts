@@ -153,6 +153,17 @@ const ENGLISH = {
   'guidelines.copyJson': 'Copy as JSON',
   'guidelines.copied': 'Copied',
   'guidelines.ready': '{count} rules - ready for ingestion',
+  'chart.tab': 'Occupancy',
+  'chart.title': 'People in the room over the recording',
+  'chart.summary': 'Peak {peak} in view - {duration} of recording',
+  'chart.axisTime': 'Time into recording',
+  'chart.axisPeople': 'People',
+  'chart.showTable': 'View as table',
+  'chart.showChart': 'View as chart',
+  'chart.personCount': '{count} person',
+  'chart.peopleCount': '{count} people',
+  'chart.note': 'Aggregate head counts at points in the recording. Times are offsets from the start, not clock times, and no one is identified.',
+  'chart.unavailable': 'This recording did not include a usable occupancy reading.',
 } as const
 
 export type TranslationKey = keyof typeof ENGLISH
@@ -310,6 +321,17 @@ const SPANISH: Record<TranslationKey, string> = {
   'guidelines.copyJson': 'Copiar como JSON',
   'guidelines.copied': 'Copiado',
   'guidelines.ready': '{count} reglas - listas para usar',
+  'chart.tab': 'Ocupación',
+  'chart.title': 'Personas en la sala durante la grabación',
+  'chart.summary': 'Máximo {peak} a la vista - {duration} de grabación',
+  'chart.axisTime': 'Tiempo de la grabación',
+  'chart.axisPeople': 'Personas',
+  'chart.showTable': 'Ver como tabla',
+  'chart.showChart': 'Ver como gráfico',
+  'chart.personCount': '{count} persona',
+  'chart.peopleCount': '{count} personas',
+  'chart.note': 'Conteos agregados en momentos de la grabación. Los tiempos son desplazamientos desde el inicio, no horas del reloj, y no se identifica a nadie.',
+  'chart.unavailable': 'Esta grabación no incluyó una lectura de ocupación utilizable.',
 }
 
 const HINDI: Record<TranslationKey, string> = {
@@ -465,6 +487,17 @@ const HINDI: Record<TranslationKey, string> = {
   'guidelines.copyJson': 'JSON कॉपी करें',
   'guidelines.copied': 'कॉपी हुआ',
   'guidelines.ready': '{count} नियम - उपयोग के लिए तैयार',
+  'chart.tab': 'उपस्थिति',
+  'chart.title': 'रिकॉर्डिंग के दौरान कमरे में लोग',
+  'chart.summary': 'अधिकतम {peak} दिखे - {duration} की रिकॉर्डिंग',
+  'chart.axisTime': 'रिकॉर्डिंग का समय',
+  'chart.axisPeople': 'लोग',
+  'chart.showTable': 'तालिका देखें',
+  'chart.showChart': 'ग्राफ़ देखें',
+  'chart.personCount': '{count} व्यक्ति',
+  'chart.peopleCount': '{count} लोग',
+  'chart.note': 'रिकॉर्डिंग के अलग-अलग क्षणों की समेकित गिनती। समय शुरुआत से का अंतर है, घड़ी का समय नहीं, और किसी की पहचान नहीं होती।',
+  'chart.unavailable': 'इस रिकॉर्डिंग में उपयोगी उपस्थिति रीडिंग नहीं थी।',
 }
 
 const TRANSLATIONS: Record<LanguageMode, Record<TranslationKey, string>> = {

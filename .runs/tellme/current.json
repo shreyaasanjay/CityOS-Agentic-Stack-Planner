@@ -1,8 +1,8 @@
 {
-  "run_id": "tellme_8ca804320fe0",
+  "run_id": "tellme_6b26ab7f11f2",
   "tellme": {
-    "query_id": "tellme_8ca804320fe0",
-    "query": "How many people are sitting in the smart room on july 29, 2026?",
+    "query_id": "tellme_6b26ab7f11f2",
+    "query": "August 5th on How many people are in the room on August 5th?",
     "timestamp": null,
     "mode": "llm",
     "model": "gpt-4.1-mini",
@@ -12,10 +12,10 @@
     "route_decision": {
       "route": "single_agent",
       "intent": "historical_lookup",
-      "selected_agent": "motion_context_agent",
-      "selected_tool": "get_motion_context",
+      "selected_agent": "occupancy_context_agent",
+      "selected_tool": "get_occupancy_context",
       "required_tools": [
-        "get_motion_context"
+        "get_occupancy_context"
       ],
       "rationale": "The query appears answerable with one focused CityOS-style context lookup.",
       "time_window": null,
@@ -41,9 +41,9 @@
       "harness_subtasks": [
         {
           "expected_modalities": [
-            "context"
+            "video"
           ],
-          "harness_name": "answer_synthesis_harness",
+          "harness_name": "occupancy_context_harness",
           "space_id": "smart_room_1",
           "time_window": null
         }
@@ -89,12 +89,12 @@
         ]
       },
       "plan_type": "tracefix",
-      "query_id": "tellme_8ca804320fe0",
+      "query_id": "tellme_6b26ab7f11f2",
       "required_harnesses": [
-        "answer_synthesis_harness"
+        "occupancy_context_harness"
       ],
       "required_modalities": [
-        "context"
+        "video"
       ],
       "safety_caveats": [
         "This is a stub only; TraceFix-main is not invoked in V0.",
@@ -162,8 +162,9 @@
         "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
         "user_intent": "occupancy_lookup"
       },
-      "brief_id": "brief_task_8ca804320fe0",
+      "brief_id": "brief_task_6b26ab7f11f2",
       "candidate_harnesses": [
+        "occupancy_context_harness",
         "answer_synthesis_harness"
       ],
       "caveats": [
@@ -185,7 +186,9 @@
       ],
       "evidence_card_requirements": {
         "allowed_conclusion_types": [
-          "insufficient_evidence"
+          "observed_state",
+          "bounded_count",
+          "presence_state"
         ],
         "badge_requirements": [
           {
@@ -193,16 +196,21 @@
             "label_template": "{card_type}",
             "required": true,
             "source": "query_analysis"
+          },
+          {
+            "badge_id": "modality",
+            "label_template": "{modalities}",
+            "required": false,
+            "source": "harness_output"
           }
         ],
-        "card_type": "insufficient_evidence",
+        "card_type": "descriptive",
         "caveat_requirements": [
-          "A stronger answer was not produced because the bounded evidence was insufficient.",
           "Reflects structured context only; no causal interpretation."
         ],
-        "claim_target": "insufficient_evidence",
+        "claim_target": "observed_room_state",
         "confidence_requirements": {
-          "confidence_kind": "composite_confidence",
+          "confidence_kind": "sensor_confidence",
           "explanation_required": true,
           "label_bands": {
             "high": [
@@ -219,75 +227,113 @@
             ]
           },
           "minimum_threshold": null,
-          "required_inputs": [],
-          "scoring_method": "none"
+          "required_inputs": [
+            "sensor_confidence",
+            "evidence_count"
+          ],
+          "scoring_method": "bounded_sensor_confidence"
         },
-        "evidence_requirements": [],
+        "evidence_requirements": [
+          {
+            "accepted_packet_types": [
+              "occupancy_context_packet",
+              "room_state_packet",
+              "motion_context_packet",
+              "audio_context_packet"
+            ],
+            "evidence_type": "structured_context",
+            "include_evidence_refs": true,
+            "include_modality": true,
+            "include_time_window": true,
+            "minimum_count": 1,
+            "required": true
+          }
+        ],
         "fallback_card_type": "insufficient_evidence",
         "forbidden_conclusion_types": [
-          "personal_identity",
-          "face_identity",
-          "medical_diagnosis",
-          "confirmed_injury",
-          "cause_or_intent_inference",
-          "unsupported_behavioral_inference",
+          "causal_effect",
+          "statistical_significance",
+          "causal_graph_claim",
           "raw_sensor_access",
-          "fabricated_confidence"
+          "face_identity",
+          "personal_identity",
+          "medical_diagnosis",
+          "unsupported_behavioral_inference",
+          "confirmed_injury",
+          "cause_or_intent_inference"
         ],
         "metric_requirements": [
           {
-            "description": "What the system could establish, if anything.",
-            "display_label": "What was determined",
-            "metric_id": "what_determined",
+            "description": "The value observed in the time window (e.g. occupancy count or state).",
+            "display_label": "Observed value",
+            "metric_id": "observed_value",
+            "required": true,
+            "source": "harness_output",
+            "source_field": "value",
+            "unavailable_behavior": "show_na",
+            "value_type": "category"
+          },
+          {
+            "description": "Bounded window the observation covers.",
+            "display_label": "Time window",
+            "metric_id": "time_window",
+            "required": true,
+            "source": "harness_output",
+            "source_field": "timestamp",
+            "unavailable_behavior": "show_na",
+            "value_type": "range"
+          },
+          {
+            "description": "Sensor modalities that contributed.",
+            "display_label": "Modalities used",
+            "metric_id": "modalities_used",
             "required": true,
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na",
-            "value_type": "text"
+            "value_type": "category"
           },
           {
-            "description": "What evidence was missing or insufficient.",
-            "display_label": "Missing evidence",
-            "metric_id": "missing_evidence",
+            "description": "Number of supporting context packets.",
+            "display_label": "Evidence count",
+            "metric_id": "evidence_count",
             "required": true,
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na",
-            "value_type": "text"
+            "value_type": "integer"
           },
           {
-            "description": "Which harness or modality failed, if safe to disclose.",
-            "display_label": "Failed harness/modality",
-            "metric_id": "failed_modality",
+            "description": "Fraction of modalities in agreement.",
+            "display_label": "Sensor agreement",
+            "metric_id": "sensor_agreement",
             "required": false,
-            "source": "tracefix_verification",
+            "source": "aggregator",
             "source_field": null,
-            "unavailable_behavior": "omit",
-            "value_type": "text"
+            "unavailable_behavior": "show_na",
+            "value_type": "percentage"
           }
         ],
         "primary_question": "What did the structured context observe?",
         "provenance_requirements": [
-          "List which expected packets were missing or empty.",
           "List the harness/packet ids backing the observed value."
         ],
         "summary_requirements": [
-          "State what could and could not be determined; do not fabricate confidence.",
           "State the observed value and its bounded time window in one sentence."
         ],
-        "title_template": "Insufficient evidence to answer confidently"
+        "title_template": "{primary_question}"
       },
       "evidence_plan": {
         "conflicting_evidence_checks": [],
         "minimum_sufficient_evidence": [
-          "answer_packet"
+          "occupancy_context_packet"
         ],
         "primary_evidence": [
-          "answer_packet"
+          "occupancy_context_packet"
         ],
         "supporting_evidence": []
       },
-      "executable": false,
+      "executable": true,
       "forbidden_claims": [
         "raw_sensor_access",
         "face_identity",
@@ -295,7 +341,7 @@
         "medical_diagnosis",
         "unsupported_behavioral_inference"
       ],
-      "normalized_query": "how many people are sitting in the smart room on july 29, 2026?",
+      "normalized_query": "august 5th on how many people are in the room on august 5th?",
       "privacy_policy": {
         "forbidden_inferences": [
           "raw_sensor_access",
@@ -313,10 +359,10 @@
         "privacy_scope": "cityos_structured_context_only",
         "raw_sensor_access_allowed": false
       },
-      "query_id": "tellme_8ca804320fe0",
-      "reasoning_summary": "Deterministic template proposal generated for query tellme_8ca804320fe0.",
+      "query_id": "tellme_6b26ab7f11f2",
+      "reasoning_summary": "Deterministic template proposal generated for query tellme_6b26ab7f11f2.",
       "required_modalities": [
-        "context"
+        "video"
       ],
       "room_capability_context": {
         "available_context_apis": [
@@ -367,7 +413,7 @@
           "privacy_scope": "cityos_structured_context_only",
           "raw_sensor_access_allowed": false
         },
-        "query_id": "tellme_8ca804320fe0",
+        "query_id": "tellme_6b26ab7f11f2",
         "relevant_sensors": [
           {
             "allowed_api_names": [
@@ -468,8 +514,8 @@
               "Cannot establish visual identity."
             ],
             "modality": "audio",
-            "reason": "Modality or supported context type matches the query requirements.",
-            "relevance": "primary",
+            "reason": "Not directly targeted but available for corroboration.",
+            "relevance": "supporting",
             "restricted_api_names": [
               "get_raw_audio_reference",
               "get_full_transcript_context"
@@ -539,42 +585,36 @@
       },
       "route": "single_agent",
       "space_id": "smart_room_1",
-      "task_category": "unsupported",
+      "task_category": "occupancy_count",
       "time_windows": [],
-      "user_query": "How many people are sitting in the smart room on july 29, 2026?",
+      "user_query": "August 5th on How many people are in the room on August 5th?",
       "validation_policy": {
         "bounded_time_windows_required": true,
         "llm_proposal_untrusted": true,
         "must_preserve_forbidden_claims": true,
-        "repairs": [
-          "Trimmed harness plan to deterministic modalities.",
-          "Overrode proposed 'descriptive' card with deterministically supported 'insufficient_evidence' card.",
-          "Discarded LLM-supplied metric/confidence/badge definitions; deterministic card rules are authoritative."
-        ],
+        "repairs": [],
         "schema_validation_required": true,
-        "validation_status": "repaired",
-        "warnings": [
-          "No evidence-gathering harness survived capability/policy filtering (likely a coverage gap); proposal downgraded to unsupported.",
-          "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
-        ]
+        "validation_status": "accepted",
+        "warnings": []
       }
     },
     "tracefix_task_spec": {
-      "task_id": "task_8ca804320fe0",
-      "query_id": "tellme_8ca804320fe0",
-      "user_query": "How many people are sitting in the smart room on july 29, 2026?",
+      "task_id": "task_6b26ab7f11f2",
+      "query_id": "tellme_6b26ab7f11f2",
+      "user_query": "August 5th on How many people are in the room on August 5th?",
       "space_id": "smart_room_1",
       "intent": "occupancy_lookup",
-      "tracefix_reason": "Needs a safe non-executable contract.",
+      "tracefix_reason": "Preserve routing, privacy, and output verification.",
       "required_capabilities": [
+        "occupancy_context",
         "answer_synthesis"
       ],
       "input_artifacts": [
         {
-          "artifact_id": "answer_packet",
+          "artifact_id": "occupancy_context_packet",
           "artifact_type": "packet",
           "time_range": null,
-          "modality": "context",
+          "modality": "video",
           "privacy_level": "structured_context_only"
         }
       ],
@@ -585,7 +625,7 @@
           "evidence_card"
         ],
         "require_evidence_refs": true,
-        "max_agents": 1,
+        "max_agents": 2,
         "privacy_scope": "cityos_structured_context_only",
         "identity_inference_allowed": false
       },
@@ -598,9 +638,10 @@
       "route": "single_agent",
       "time_windows": [],
       "required_modalities": [
-        "context"
+        "video"
       ],
       "candidate_harnesses": [
+        "occupancy_context_harness",
         "answer_synthesis_harness"
       ],
       "application_goal": {
@@ -617,11 +658,11 @@
       },
       "evidence_plan": {
         "primary_evidence": [
-          "answer_packet"
+          "occupancy_context_packet"
         ],
         "supporting_evidence": [],
         "minimum_sufficient_evidence": [
-          "answer_packet"
+          "occupancy_context_packet"
         ],
         "conflicting_evidence_checks": []
       },
@@ -653,22 +694,26 @@
         "fallback_answer_type": "insufficient_evidence"
       },
       "evidence_card_contract": {
-        "card_type": "insufficient_evidence",
+        "card_type": "descriptive",
         "primary_question": "What did the structured context observe?",
-        "title_template": "Insufficient evidence to answer confidently",
-        "claim_target": "insufficient_evidence",
+        "title_template": "{primary_question}",
+        "claim_target": "observed_room_state",
         "allowed_conclusion_types": [
-          "insufficient_evidence"
+          "observed_state",
+          "bounded_count",
+          "presence_state"
         ],
         "forbidden_conclusion_types": [
-          "personal_identity",
-          "face_identity",
-          "medical_diagnosis",
-          "confirmed_injury",
-          "cause_or_intent_inference",
-          "unsupported_behavioral_inference",
+          "causal_effect",
+          "statistical_significance",
+          "causal_graph_claim",
           "raw_sensor_access",
-          "fabricated_confidence"
+          "face_identity",
+          "personal_identity",
+          "medical_diagnosis",
+          "unsupported_behavioral_inference",
+          "confirmed_injury",
+          "cause_or_intent_inference"
         ],
         "badge_requirements": [
           {
@@ -676,47 +721,75 @@
             "label_template": "{card_type}",
             "source": "query_analysis",
             "required": true
+          },
+          {
+            "badge_id": "modality",
+            "label_template": "{modalities}",
+            "source": "harness_output",
+            "required": false
           }
         ],
         "metric_requirements": [
           {
-            "metric_id": "what_determined",
-            "display_label": "What was determined",
-            "description": "What the system could establish, if anything.",
+            "metric_id": "observed_value",
+            "display_label": "Observed value",
+            "description": "The value observed in the time window (e.g. occupancy count or state).",
             "required": true,
-            "value_type": "text",
+            "value_type": "category",
+            "source": "harness_output",
+            "source_field": "value",
+            "unavailable_behavior": "show_na"
+          },
+          {
+            "metric_id": "time_window",
+            "display_label": "Time window",
+            "description": "Bounded window the observation covers.",
+            "required": true,
+            "value_type": "range",
+            "source": "harness_output",
+            "source_field": "timestamp",
+            "unavailable_behavior": "show_na"
+          },
+          {
+            "metric_id": "modalities_used",
+            "display_label": "Modalities used",
+            "description": "Sensor modalities that contributed.",
+            "required": true,
+            "value_type": "category",
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na"
           },
           {
-            "metric_id": "missing_evidence",
-            "display_label": "Missing evidence",
-            "description": "What evidence was missing or insufficient.",
+            "metric_id": "evidence_count",
+            "display_label": "Evidence count",
+            "description": "Number of supporting context packets.",
             "required": true,
-            "value_type": "text",
+            "value_type": "integer",
             "source": "aggregator",
             "source_field": null,
             "unavailable_behavior": "show_na"
           },
           {
-            "metric_id": "failed_modality",
-            "display_label": "Failed harness/modality",
-            "description": "Which harness or modality failed, if safe to disclose.",
+            "metric_id": "sensor_agreement",
+            "display_label": "Sensor agreement",
+            "description": "Fraction of modalities in agreement.",
             "required": false,
-            "value_type": "text",
-            "source": "tracefix_verification",
+            "value_type": "percentage",
+            "source": "aggregator",
             "source_field": null,
-            "unavailable_behavior": "omit"
+            "unavailable_behavior": "show_na"
           }
         ],
         "summary_requirements": [
-          "State what could and could not be determined; do not fabricate confidence.",
           "State the observed value and its bounded time window in one sentence."
         ],
         "confidence_requirements": {
-          "confidence_kind": "composite_confidence",
-          "required_inputs": [],
+          "confidence_kind": "sensor_confidence",
+          "required_inputs": [
+            "sensor_confidence",
+            "evidence_count"
+          ],
           "minimum_threshold": null,
           "label_bands": {
             "low": [
@@ -733,15 +806,28 @@
             ]
           },
           "explanation_required": true,
-          "scoring_method": "none"
+          "scoring_method": "bounded_sensor_confidence"
         },
-        "evidence_requirements": [],
+        "evidence_requirements": [
+          {
+            "evidence_type": "structured_context",
+            "required": true,
+            "minimum_count": 1,
+            "accepted_packet_types": [
+              "occupancy_context_packet",
+              "room_state_packet",
+              "motion_context_packet",
+              "audio_context_packet"
+            ],
+            "include_evidence_refs": true,
+            "include_time_window": true,
+            "include_modality": true
+          }
+        ],
         "caveat_requirements": [
-          "A stronger answer was not produced because the bounded evidence was insufficient.",
           "Reflects structured context only; no causal interpretation."
         ],
         "provenance_requirements": [
-          "List which expected packets were missing or empty.",
           "List the harness/packet ids backing the observed value."
         ],
         "fallback_card_type": "insufficient_evidence"
@@ -803,16 +889,9 @@
         "bounded_time_windows_required": true,
         "schema_validation_required": true,
         "must_preserve_forbidden_claims": true,
-        "validation_status": "repaired",
-        "repairs": [
-          "Trimmed harness plan to deterministic modalities.",
-          "Overrode proposed 'descriptive' card with deterministically supported 'insufficient_evidence' card.",
-          "Discarded LLM-supplied metric/confidence/badge definitions; deterministic card rules are authoritative."
-        ],
-        "warnings": [
-          "No evidence-gathering harness survived capability/policy filtering (likely a coverage gap); proposal downgraded to unsupported.",
-          "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
-        ]
+        "validation_status": "accepted",
+        "repairs": [],
+        "warnings": []
       },
       "escalation_conditions": [
         "insufficient_evidence",
@@ -831,8 +910,8 @@
         "presence_state",
         "timestamped_event_summary"
       ],
-      "reasoning_summary": "Deterministic template proposal generated for query tellme_8ca804320fe0.",
-      "executable": false,
+      "reasoning_summary": "Deterministic template proposal generated for query tellme_6b26ab7f11f2.",
+      "executable": true,
       "reason": "occupancy_lookup",
       "target_tracefix_path": "TraceFix-main/",
       "status": "stub",
@@ -854,9 +933,19 @@
         {
           "name": "answer_synthesis_harness",
           "role": "Synthesize a final answer packet with caveats and evidence references."
+        },
+        {
+          "name": "occupancy_context_harness",
+          "role": "Retrieve occupancy-oriented structured context."
         }
       ],
-      "channels": [],
+      "channels": [
+        {
+          "from": "occupancy_context_harness",
+          "label": "occupancy_findings",
+          "to": "answer_synthesis_harness"
+        }
+      ],
       "notes": [
         "Dry-run bundle only; do not invoke real TraceFix-main.",
         "This bundle is an inspectable artifact representing future integration inputs.",
@@ -899,11 +988,11 @@
           "limitations"
         ]
       },
-      "query_id": "tellme_8ca804320fe0",
+      "query_id": "tellme_6b26ab7f11f2",
       "resources": [
         {
           "modalities": [
-            "context"
+            "video"
           ],
           "name": "cityos_structured_context",
           "space_id": "smart_room_1",
@@ -912,21 +1001,24 @@
         },
         {
           "name": "tellme_query_logs",
-          "query_id": "tellme_8ca804320fe0",
+          "query_id": "tellme_6b26ab7f11f2",
           "type": "local_query_run_directory"
         }
       ],
-      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\nHow many people are sitting in the smart room on july 29, 2026?\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- none specified\n\n## Required Modalities\n- context\n\n## Candidate Harnesses\n- answer_synthesis_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence or escalate when the structured context is inadequate.\n- goal_type: occupancy_count\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer packet with confidence and evidence refs.\n- user_intent: occupancy_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['answer_packet']\n- primary_evidence: ['answer_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['bounded_count', 'presence_state', 'timestamped_event_summary']\n- answer_type: direct_answer\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- bounded_count, presence_state, timestamped_event_summary\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
-      "task_id": "task_8ca804320fe0",
+      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\nAugust 5th on How many people are in the room on August 5th?\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- none specified\n\n## Required Modalities\n- video\n\n## Candidate Harnesses\n- answer_synthesis_harness\n- occupancy_context_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence or escalate when the structured context is inadequate.\n- goal_type: occupancy_count\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer packet with confidence and evidence refs.\n- user_intent: occupancy_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['occupancy_context_packet']\n- primary_evidence: ['occupancy_context_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['bounded_count', 'presence_state', 'timestamped_event_summary']\n- answer_type: direct_answer\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- bounded_count, presence_state, timestamped_event_summary\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
+      "task_id": "task_6b26ab7f11f2",
       "tool_manifest": {
         "answer_synthesis_harness": [
           "synthesize_answer_packet"
+        ],
+        "occupancy_context_harness": [
+          "get_occupancy_context"
         ]
       },
-      "user_query": "How many people are sitting in the smart room on july 29, 2026?"
+      "user_query": "August 5th on How many people are in the room on August 5th?"
     },
     "answer_packet": {
-      "query_id": "tellme_8ca804320fe0",
+      "query_id": "tellme_6b26ab7f11f2",
       "status": "needs_tracefix",
       "answer": "This query requires a future TraceFix multi-agent workflow and cannot be fully answered in V0.",
       "confidence": 0.0,
@@ -942,10 +1034,10 @@
       "route_decision": {
         "route": "single_agent",
         "intent": "historical_lookup",
-        "selected_agent": "motion_context_agent",
-        "selected_tool": "get_motion_context",
+        "selected_agent": "occupancy_context_agent",
+        "selected_tool": "get_occupancy_context",
         "required_tools": [
-          "get_motion_context"
+          "get_occupancy_context"
         ],
         "rationale": "The query appears answerable with one focused CityOS-style context lookup.",
         "time_window": null,
@@ -958,7 +1050,7 @@
       },
       "agent_plan": {},
       "raw_outputs": {
-        "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_8ca804320fe0",
+        "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_6b26ab7f11f2",
         "logging_fallback_used": false,
         "llm_operational": {
           "agent_backend_mode": "llm",
@@ -969,16 +1061,16 @@
           "decomposition": {
             "model": "gpt-4.1-mini",
             "last_used": "primary",
-            "last_latency_ms": 19161.62,
+            "last_latency_ms": 24518.91,
             "fallback_reason": null,
             "primary_calls": 1,
             "fallback_calls": 0,
             "last_request": {
-              "request_start": "2026-07-30T17:56:36.293095+00:00",
-              "first_response_time": "2026-07-30T17:56:55.435365+00:00",
-              "request_end": "2026-07-30T17:56:55.453627+00:00",
-              "total_duration_ms": 19160.5,
-              "time_to_first_response_ms": 19142.32,
+              "request_start": "2026-08-05T15:47:44.260811+00:00",
+              "first_response_time": "2026-08-05T15:48:08.767019+00:00",
+              "request_end": "2026-08-05T15:48:08.779367+00:00",
+              "total_duration_ms": 24518.53,
+              "time_to_first_response_ms": 24506.21,
               "model": "gpt-4.1-mini",
               "provider": "https://api.openai.com/v1",
               "provider_name": "OpenAI",
@@ -992,21 +1084,22 @@
         },
         "agent_backend_mode": "llm",
         "tracefix_task_spec": {
-          "task_id": "task_8ca804320fe0",
-          "query_id": "tellme_8ca804320fe0",
-          "user_query": "How many people are sitting in the smart room on july 29, 2026?",
+          "task_id": "task_6b26ab7f11f2",
+          "query_id": "tellme_6b26ab7f11f2",
+          "user_query": "August 5th on How many people are in the room on August 5th?",
           "space_id": "smart_room_1",
           "intent": "occupancy_lookup",
-          "tracefix_reason": "Needs a safe non-executable contract.",
+          "tracefix_reason": "Preserve routing, privacy, and output verification.",
           "required_capabilities": [
+            "occupancy_context",
             "answer_synthesis"
           ],
           "input_artifacts": [
             {
-              "artifact_id": "answer_packet",
+              "artifact_id": "occupancy_context_packet",
               "artifact_type": "packet",
               "time_range": null,
-              "modality": "context",
+              "modality": "video",
               "privacy_level": "structured_context_only"
             }
           ],
@@ -1017,7 +1110,7 @@
               "evidence_card"
             ],
             "require_evidence_refs": true,
-            "max_agents": 1,
+            "max_agents": 2,
             "privacy_scope": "cityos_structured_context_only",
             "identity_inference_allowed": false
           },
@@ -1030,9 +1123,10 @@
           "route": "single_agent",
           "time_windows": [],
           "required_modalities": [
-            "context"
+            "video"
           ],
           "candidate_harnesses": [
+            "occupancy_context_harness",
             "answer_synthesis_harness"
           ],
           "application_goal": {
@@ -1049,11 +1143,11 @@
           },
           "evidence_plan": {
             "primary_evidence": [
-              "answer_packet"
+              "occupancy_context_packet"
             ],
             "supporting_evidence": [],
             "minimum_sufficient_evidence": [
-              "answer_packet"
+              "occupancy_context_packet"
             ],
             "conflicting_evidence_checks": []
           },
@@ -1085,22 +1179,26 @@
             "fallback_answer_type": "insufficient_evidence"
           },
           "evidence_card_contract": {
-            "card_type": "insufficient_evidence",
+            "card_type": "descriptive",
             "primary_question": "What did the structured context observe?",
-            "title_template": "Insufficient evidence to answer confidently",
-            "claim_target": "insufficient_evidence",
+            "title_template": "{primary_question}",
+            "claim_target": "observed_room_state",
             "allowed_conclusion_types": [
-              "insufficient_evidence"
+              "observed_state",
+              "bounded_count",
+              "presence_state"
             ],
             "forbidden_conclusion_types": [
-              "personal_identity",
-              "face_identity",
-              "medical_diagnosis",
-              "confirmed_injury",
-              "cause_or_intent_inference",
-              "unsupported_behavioral_inference",
+              "causal_effect",
+              "statistical_significance",
+              "causal_graph_claim",
               "raw_sensor_access",
-              "fabricated_confidence"
+              "face_identity",
+              "personal_identity",
+              "medical_diagnosis",
+              "unsupported_behavioral_inference",
+              "confirmed_injury",
+              "cause_or_intent_inference"
             ],
             "badge_requirements": [
               {
@@ -1108,47 +1206,75 @@
                 "label_template": "{card_type}",
                 "source": "query_analysis",
                 "required": true
+              },
+              {
+                "badge_id": "modality",
+                "label_template": "{modalities}",
+                "source": "harness_output",
+                "required": false
               }
             ],
             "metric_requirements": [
               {
-                "metric_id": "what_determined",
-                "display_label": "What was determined",
-                "description": "What the system could establish, if anything.",
+                "metric_id": "observed_value",
+                "display_label": "Observed value",
+                "description": "The value observed in the time window (e.g. occupancy count or state).",
                 "required": true,
-                "value_type": "text",
+                "value_type": "category",
+                "source": "harness_output",
+                "source_field": "value",
+                "unavailable_behavior": "show_na"
+              },
+              {
+                "metric_id": "time_window",
+                "display_label": "Time window",
+                "description": "Bounded window the observation covers.",
+                "required": true,
+                "value_type": "range",
+                "source": "harness_output",
+                "source_field": "timestamp",
+                "unavailable_behavior": "show_na"
+              },
+              {
+                "metric_id": "modalities_used",
+                "display_label": "Modalities used",
+                "description": "Sensor modalities that contributed.",
+                "required": true,
+                "value_type": "category",
                 "source": "aggregator",
                 "source_field": null,
                 "unavailable_behavior": "show_na"
               },
               {
-                "metric_id": "missing_evidence",
-                "display_label": "Missing evidence",
-                "description": "What evidence was missing or insufficient.",
+                "metric_id": "evidence_count",
+                "display_label": "Evidence count",
+                "description": "Number of supporting context packets.",
                 "required": true,
-                "value_type": "text",
+                "value_type": "integer",
                 "source": "aggregator",
                 "source_field": null,
                 "unavailable_behavior": "show_na"
               },
               {
-                "metric_id": "failed_modality",
-                "display_label": "Failed harness/modality",
-                "description": "Which harness or modality failed, if safe to disclose.",
+                "metric_id": "sensor_agreement",
+                "display_label": "Sensor agreement",
+                "description": "Fraction of modalities in agreement.",
                 "required": false,
-                "value_type": "text",
-                "source": "tracefix_verification",
+                "value_type": "percentage",
+                "source": "aggregator",
                 "source_field": null,
-                "unavailable_behavior": "omit"
+                "unavailable_behavior": "show_na"
               }
             ],
             "summary_requirements": [
-              "State what could and could not be determined; do not fabricate confidence.",
               "State the observed value and its bounded time window in one sentence."
             ],
             "confidence_requirements": {
-              "confidence_kind": "composite_confidence",
-              "required_inputs": [],
+              "confidence_kind": "sensor_confidence",
+              "required_inputs": [
+                "sensor_confidence",
+                "evidence_count"
+              ],
               "minimum_threshold": null,
               "label_bands": {
                 "low": [
@@ -1165,15 +1291,28 @@
                 ]
               },
               "explanation_required": true,
-              "scoring_method": "none"
+              "scoring_method": "bounded_sensor_confidence"
             },
-            "evidence_requirements": [],
+            "evidence_requirements": [
+              {
+                "evidence_type": "structured_context",
+                "required": true,
+                "minimum_count": 1,
+                "accepted_packet_types": [
+                  "occupancy_context_packet",
+                  "room_state_packet",
+                  "motion_context_packet",
+                  "audio_context_packet"
+                ],
+                "include_evidence_refs": true,
+                "include_time_window": true,
+                "include_modality": true
+              }
+            ],
             "caveat_requirements": [
-              "A stronger answer was not produced because the bounded evidence was insufficient.",
               "Reflects structured context only; no causal interpretation."
             ],
             "provenance_requirements": [
-              "List which expected packets were missing or empty.",
               "List the harness/packet ids backing the observed value."
             ],
             "fallback_card_type": "insufficient_evidence"
@@ -1235,16 +1374,9 @@
             "bounded_time_windows_required": true,
             "schema_validation_required": true,
             "must_preserve_forbidden_claims": true,
-            "validation_status": "repaired",
-            "repairs": [
-              "Trimmed harness plan to deterministic modalities.",
-              "Overrode proposed 'descriptive' card with deterministically supported 'insufficient_evidence' card.",
-              "Discarded LLM-supplied metric/confidence/badge definitions; deterministic card rules are authoritative."
-            ],
-            "warnings": [
-              "No evidence-gathering harness survived capability/policy filtering (likely a coverage gap); proposal downgraded to unsupported.",
-              "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
-            ]
+            "validation_status": "accepted",
+            "repairs": [],
+            "warnings": []
           },
           "escalation_conditions": [
             "insufficient_evidence",
@@ -1263,8 +1395,8 @@
             "presence_state",
             "timestamped_event_summary"
           ],
-          "reasoning_summary": "Deterministic template proposal generated for query tellme_8ca804320fe0.",
-          "executable": false,
+          "reasoning_summary": "Deterministic template proposal generated for query tellme_6b26ab7f11f2.",
+          "executable": true,
           "reason": "occupancy_lookup",
           "target_tracefix_path": "TraceFix-main/",
           "status": "stub",
@@ -1282,35 +1414,37 @@
           ]
         },
         "tracefix_bundle_summary": {
-          "task_id": "task_8ca804320fe0",
+          "task_id": "task_6b26ab7f11f2",
           "agent_names": [
-            "answer_synthesis_harness"
+            "answer_synthesis_harness",
+            "occupancy_context_harness"
           ],
-          "channel_count": 0,
+          "channel_count": 1,
           "resource_count": 2
         },
         "evidence_card_preview": {
-          "card_type": "insufficient_evidence",
-          "metric_count": 3,
+          "card_type": "descriptive",
+          "metric_count": 5,
           "validation_status": "valid"
         }
       },
       "tracefix_task_spec": {
-        "task_id": "task_8ca804320fe0",
-        "query_id": "tellme_8ca804320fe0",
-        "user_query": "How many people are sitting in the smart room on july 29, 2026?",
+        "task_id": "task_6b26ab7f11f2",
+        "query_id": "tellme_6b26ab7f11f2",
+        "user_query": "August 5th on How many people are in the room on August 5th?",
         "space_id": "smart_room_1",
         "intent": "occupancy_lookup",
-        "tracefix_reason": "Needs a safe non-executable contract.",
+        "tracefix_reason": "Preserve routing, privacy, and output verification.",
         "required_capabilities": [
+          "occupancy_context",
           "answer_synthesis"
         ],
         "input_artifacts": [
           {
-            "artifact_id": "answer_packet",
+            "artifact_id": "occupancy_context_packet",
             "artifact_type": "packet",
             "time_range": null,
-            "modality": "context",
+            "modality": "video",
             "privacy_level": "structured_context_only"
           }
         ],
@@ -1321,7 +1455,7 @@
             "evidence_card"
           ],
           "require_evidence_refs": true,
-          "max_agents": 1,
+          "max_agents": 2,
           "privacy_scope": "cityos_structured_context_only",
           "identity_inference_allowed": false
         },
@@ -1334,9 +1468,10 @@
         "route": "single_agent",
         "time_windows": [],
         "required_modalities": [
-          "context"
+          "video"
         ],
         "candidate_harnesses": [
+          "occupancy_context_harness",
           "answer_synthesis_harness"
         ],
         "application_goal": {
@@ -1353,11 +1488,11 @@
         },
         "evidence_plan": {
           "primary_evidence": [
-            "answer_packet"
+            "occupancy_context_packet"
           ],
           "supporting_evidence": [],
           "minimum_sufficient_evidence": [
-            "answer_packet"
+            "occupancy_context_packet"
           ],
           "conflicting_evidence_checks": []
         },
@@ -1389,22 +1524,26 @@
           "fallback_answer_type": "insufficient_evidence"
         },
         "evidence_card_contract": {
-          "card_type": "insufficient_evidence",
+          "card_type": "descriptive",
           "primary_question": "What did the structured context observe?",
-          "title_template": "Insufficient evidence to answer confidently",
-          "claim_target": "insufficient_evidence",
+          "title_template": "{primary_question}",
+          "claim_target": "observed_room_state",
           "allowed_conclusion_types": [
-            "insufficient_evidence"
+            "observed_state",
+            "bounded_count",
+            "presence_state"
           ],
           "forbidden_conclusion_types": [
-            "personal_identity",
-            "face_identity",
-            "medical_diagnosis",
-            "confirmed_injury",
-            "cause_or_intent_inference",
-            "unsupported_behavioral_inference",
+            "causal_effect",
+            "statistical_significance",
+            "causal_graph_claim",
             "raw_sensor_access",
-            "fabricated_confidence"
+            "face_identity",
+            "personal_identity",
+            "medical_diagnosis",
+            "unsupported_behavioral_inference",
+            "confirmed_injury",
+            "cause_or_intent_inference"
           ],
           "badge_requirements": [
             {
@@ -1412,47 +1551,75 @@
               "label_template": "{card_type}",
               "source": "query_analysis",
               "required": true
+            },
+            {
+              "badge_id": "modality",
+              "label_template": "{modalities}",
+              "source": "harness_output",
+              "required": false
             }
           ],
           "metric_requirements": [
             {
-              "metric_id": "what_determined",
-              "display_label": "What was determined",
-              "description": "What the system could establish, if anything.",
+              "metric_id": "observed_value",
+              "display_label": "Observed value",
+              "description": "The value observed in the time window (e.g. occupancy count or state).",
               "required": true,
-              "value_type": "text",
+              "value_type": "category",
+              "source": "harness_output",
+              "source_field": "value",
+              "unavailable_behavior": "show_na"
+            },
+            {
+              "metric_id": "time_window",
+              "display_label": "Time window",
+              "description": "Bounded window the observation covers.",
+              "required": true,
+              "value_type": "range",
+              "source": "harness_output",
+              "source_field": "timestamp",
+              "unavailable_behavior": "show_na"
+            },
+            {
+              "metric_id": "modalities_used",
+              "display_label": "Modalities used",
+              "description": "Sensor modalities that contributed.",
+              "required": true,
+              "value_type": "category",
               "source": "aggregator",
               "source_field": null,
               "unavailable_behavior": "show_na"
             },
             {
-              "metric_id": "missing_evidence",
-              "display_label": "Missing evidence",
-              "description": "What evidence was missing or insufficient.",
+              "metric_id": "evidence_count",
+              "display_label": "Evidence count",
+              "description": "Number of supporting context packets.",
               "required": true,
-              "value_type": "text",
+              "value_type": "integer",
               "source": "aggregator",
               "source_field": null,
               "unavailable_behavior": "show_na"
             },
             {
-              "metric_id": "failed_modality",
-              "display_label": "Failed harness/modality",
-              "description": "Which harness or modality failed, if safe to disclose.",
+              "metric_id": "sensor_agreement",
+              "display_label": "Sensor agreement",
+              "description": "Fraction of modalities in agreement.",
               "required": false,
-              "value_type": "text",
-              "source": "tracefix_verification",
+              "value_type": "percentage",
+              "source": "aggregator",
               "source_field": null,
-              "unavailable_behavior": "omit"
+              "unavailable_behavior": "show_na"
             }
           ],
           "summary_requirements": [
-            "State what could and could not be determined; do not fabricate confidence.",
             "State the observed value and its bounded time window in one sentence."
           ],
           "confidence_requirements": {
-            "confidence_kind": "composite_confidence",
-            "required_inputs": [],
+            "confidence_kind": "sensor_confidence",
+            "required_inputs": [
+              "sensor_confidence",
+              "evidence_count"
+            ],
             "minimum_threshold": null,
             "label_bands": {
               "low": [
@@ -1469,15 +1636,28 @@
               ]
             },
             "explanation_required": true,
-            "scoring_method": "none"
+            "scoring_method": "bounded_sensor_confidence"
           },
-          "evidence_requirements": [],
+          "evidence_requirements": [
+            {
+              "evidence_type": "structured_context",
+              "required": true,
+              "minimum_count": 1,
+              "accepted_packet_types": [
+                "occupancy_context_packet",
+                "room_state_packet",
+                "motion_context_packet",
+                "audio_context_packet"
+              ],
+              "include_evidence_refs": true,
+              "include_time_window": true,
+              "include_modality": true
+            }
+          ],
           "caveat_requirements": [
-            "A stronger answer was not produced because the bounded evidence was insufficient.",
             "Reflects structured context only; no causal interpretation."
           ],
           "provenance_requirements": [
-            "List which expected packets were missing or empty.",
             "List the harness/packet ids backing the observed value."
           ],
           "fallback_card_type": "insufficient_evidence"
@@ -1539,16 +1719,9 @@
           "bounded_time_windows_required": true,
           "schema_validation_required": true,
           "must_preserve_forbidden_claims": true,
-          "validation_status": "repaired",
-          "repairs": [
-            "Trimmed harness plan to deterministic modalities.",
-            "Overrode proposed 'descriptive' card with deterministically supported 'insufficient_evidence' card.",
-            "Discarded LLM-supplied metric/confidence/badge definitions; deterministic card rules are authoritative."
-          ],
-          "warnings": [
-            "No evidence-gathering harness survived capability/policy filtering (likely a coverage gap); proposal downgraded to unsupported.",
-            "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
-          ]
+          "validation_status": "accepted",
+          "repairs": [],
+          "warnings": []
         },
         "escalation_conditions": [
           "insufficient_evidence",
@@ -1567,8 +1740,8 @@
           "presence_state",
           "timestamped_event_summary"
         ],
-        "reasoning_summary": "Deterministic template proposal generated for query tellme_8ca804320fe0.",
-        "executable": false,
+        "reasoning_summary": "Deterministic template proposal generated for query tellme_6b26ab7f11f2.",
+        "executable": true,
         "reason": "occupancy_lookup",
         "target_tracefix_path": "TraceFix-main/",
         "status": "stub",
@@ -1587,140 +1760,839 @@
       },
       "error_message": null
     },
-    "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_8ca804320fe0",
-    "warnings": [
-      "No evidence-gathering harness survived capability/policy filtering (likely a coverage gap); proposal downgraded to unsupported.",
-      "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
-    ],
-    "answer_summary": "28 people are sitting in the smart room on July 29, 2026.",
-    "chat_answer": "28 people are sitting in the smart room on July 29, 2026.",
+    "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_6b26ab7f11f2",
+    "warnings": [],
+    "answer_summary": "As of the latest available room-level reading on August 5, there was 1 person in the room.",
+    "chat_answer": "As of the latest available room-level reading on August 5, there was 1 person in the room.",
     "web_data_answer": {
-      "answer": "28 people are sitting in the smart room on July 29, 2026.",
-      "text": "28 people are sitting in the smart room on July 29, 2026.",
-      "chatAnswer": "28 people are sitting in the smart room on July 29, 2026.",
-      "chat_answer": "28 people are sitting in the smart room on July 29, 2026.",
+      "answer": "As of the latest available room-level reading on August 5, there was 1 person in the room.",
+      "text": "As of the latest available room-level reading on August 5, there was 1 person in the room.",
+      "chatAnswer": "As of the latest available room-level reading on August 5, there was 1 person in the room.",
+      "chat_answer": "As of the latest available room-level reading on August 5, there was 1 person in the room.",
       "producer_agent": "OCCUPANCY_ANALYZER",
-      "confidence": 0.95,
+      "confidence": 0.9,
       "evidence_refs": [
-        "OCCUPANCY_ANALYZER:rec_20260729_141500:cam2-d435",
-        "OCCUPANCY_ANALYZER:rec_20260729_141500:cam2-d455"
+        "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-cam1",
+        "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-cam2",
+        "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-cam3",
+        "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-cam4",
+        "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-d455"
       ],
       "limitations": [
-        "Counts are bounded by the available aggregate inference data."
+        "Counts are bounded by the available aggregate inference data.",
+        "The value reflects the latest reading; occupancy may have varied at other times on that date."
       ],
-      "source_count": 405,
-      "evidence_used_count": 2,
+      "source_count": 426,
+      "evidence_used_count": 5,
       "recording": {
-        "day": "day_19_2026-07-29",
-        "rec": "rec_20260729_141500"
+        "day": "day_23_2026-08-05",
+        "rec": "rec_20260805_110324"
       },
       "cameras": [
         {
-          "camera": "cam2-d435",
+          "camera": "cam2-cam1",
           "peakPeople": null,
-          "lastPeople": 2,
-          "activities": [
-            "carry/hold (an object)",
-            "sit",
-            "stand"
-          ],
-          "activityCounts": {
-            "sit": 3,
-            "stand": 5
-          },
-          "activityTrackIds": {
-            "sit": [
-              "1",
-              "10",
-              "59"
-            ],
-            "stand": [
-              "13",
-              "2",
-              "29",
-              "65",
-              "68"
-            ]
-          },
+          "lastPeople": null,
+          "framesAnalyzed": 0,
+          "durationSec": 20.23,
+          "activities": [],
+          "activityCounts": {},
+          "activityCountMethods": {},
+          "activityCountsUnion": {},
+          "occupancySamples": [],
+          "activityTrackIds": {},
           "endpoints": {
-            "action-ava": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d435/inference/action-ava",
-            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d435/inference/geo",
-            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d435/inference/yolo26m",
-            "yolo26n-pose": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d435/inference/yolo26n-pose"
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam1/inference/geo"
           },
           "pose": {
-            "available": true
+            "available": false
+          }
+        },
+        {
+          "camera": "cam2-cam2",
+          "peakPeople": null,
+          "lastPeople": null,
+          "framesAnalyzed": 0,
+          "durationSec": 20.6,
+          "activities": [],
+          "activityCounts": {},
+          "activityCountMethods": {},
+          "activityCountsUnion": {},
+          "occupancySamples": [],
+          "activityTrackIds": {},
+          "endpoints": {
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam2/inference/geo"
+          },
+          "pose": {
+            "available": false
+          }
+        },
+        {
+          "camera": "cam2-cam3",
+          "peakPeople": null,
+          "lastPeople": null,
+          "framesAnalyzed": 0,
+          "durationSec": 20.53,
+          "activities": [],
+          "activityCounts": {},
+          "activityCountMethods": {},
+          "activityCountsUnion": {},
+          "occupancySamples": [],
+          "activityTrackIds": {},
+          "endpoints": {
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam3/inference/geo"
+          },
+          "pose": {
+            "available": false
+          }
+        },
+        {
+          "camera": "cam2-cam4",
+          "peakPeople": null,
+          "lastPeople": null,
+          "framesAnalyzed": 0,
+          "durationSec": 20.3,
+          "activities": [],
+          "activityCounts": {},
+          "activityCountMethods": {},
+          "activityCountsUnion": {},
+          "occupancySamples": [],
+          "activityTrackIds": {},
+          "endpoints": {
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam4/inference/geo"
+          },
+          "pose": {
+            "available": false
           }
         },
         {
           "camera": "cam2-d455",
-          "peakPeople": null,
-          "lastPeople": 3,
+          "peakPeople": 6,
+          "lastPeople": 1,
+          "framesAnalyzed": 155,
+          "durationSec": 30.833,
           "activities": [
-            "bend/bow (at the waist)",
             "carry/hold (an object)",
+            "chew",
+            "clap",
+            "draw sword",
+            "dribble",
+            "idle",
             "listen to (a person)",
+            "not fully in frame",
+            "pick",
+            "punch",
+            "run/jog",
             "sit",
             "stand",
-            "walk"
+            "walk",
+            "wave"
           ],
           "activityCounts": {
-            "carry/hold (an object)": 1,
+            "carry/hold (an object)": 2,
+            "chew": 1,
+            "clap": 1,
+            "draw sword": 1,
+            "dribble": 1,
+            "idle": 1,
             "listen to (a person)": 1,
-            "sit": 28,
-            "stand": 2,
-            "walk": 1
+            "not fully in frame": 2,
+            "pick": 1,
+            "punch": 1,
+            "run/jog": 1,
+            "sit": 2,
+            "stand": 3,
+            "walk": 1,
+            "wave": 1
           },
+          "activityCountMethods": {
+            "carry/hold (an object)": "concurrent",
+            "chew": "concurrent",
+            "clap": "concurrent",
+            "draw sword": "concurrent",
+            "dribble": "concurrent",
+            "idle": "segments",
+            "listen to (a person)": "concurrent",
+            "not fully in frame": "segments",
+            "pick": "concurrent",
+            "punch": "concurrent",
+            "run/jog": "concurrent",
+            "sit": "concurrent",
+            "stand": "concurrent",
+            "walk": "concurrent",
+            "wave": "concurrent"
+          },
+          "activityCountsUnion": {
+            "carry/hold (an object)": 2,
+            "dribble": 1,
+            "pick": 1,
+            "punch": 1,
+            "sit": 3,
+            "stand": 8,
+            "walk": 2
+          },
+          "occupancySamples": [
+            {
+              "t": 0.0,
+              "count": 1
+            },
+            {
+              "t": 0.2,
+              "count": 1
+            },
+            {
+              "t": 0.4,
+              "count": 3
+            },
+            {
+              "t": 0.6,
+              "count": 4
+            },
+            {
+              "t": 0.8,
+              "count": 2
+            },
+            {
+              "t": 1.0,
+              "count": 2
+            },
+            {
+              "t": 1.2,
+              "count": 1
+            },
+            {
+              "t": 1.4,
+              "count": 2
+            },
+            {
+              "t": 1.6,
+              "count": 2
+            },
+            {
+              "t": 1.8,
+              "count": 3
+            },
+            {
+              "t": 2.0,
+              "count": 2
+            },
+            {
+              "t": 2.2,
+              "count": 3
+            },
+            {
+              "t": 2.4,
+              "count": 2
+            },
+            {
+              "t": 2.6,
+              "count": 2
+            },
+            {
+              "t": 2.8,
+              "count": 2
+            },
+            {
+              "t": 3.0,
+              "count": 2
+            },
+            {
+              "t": 3.2,
+              "count": 2
+            },
+            {
+              "t": 3.4,
+              "count": 2
+            },
+            {
+              "t": 3.6,
+              "count": 2
+            },
+            {
+              "t": 3.8,
+              "count": 2
+            },
+            {
+              "t": 4.0,
+              "count": 2
+            },
+            {
+              "t": 4.2,
+              "count": 2
+            },
+            {
+              "t": 4.4,
+              "count": 2
+            },
+            {
+              "t": 4.6,
+              "count": 2
+            },
+            {
+              "t": 4.8,
+              "count": 2
+            },
+            {
+              "t": 5.0,
+              "count": 2
+            },
+            {
+              "t": 5.2,
+              "count": 2
+            },
+            {
+              "t": 5.4,
+              "count": 2
+            },
+            {
+              "t": 5.6,
+              "count": 2
+            },
+            {
+              "t": 5.8,
+              "count": 2
+            },
+            {
+              "t": 6.0,
+              "count": 2
+            },
+            {
+              "t": 6.2,
+              "count": 2
+            },
+            {
+              "t": 6.4,
+              "count": 3
+            },
+            {
+              "t": 6.6,
+              "count": 3
+            },
+            {
+              "t": 6.8,
+              "count": 3
+            },
+            {
+              "t": 7.0,
+              "count": 2
+            },
+            {
+              "t": 7.2,
+              "count": 2
+            },
+            {
+              "t": 7.4,
+              "count": 2
+            },
+            {
+              "t": 7.6,
+              "count": 3
+            },
+            {
+              "t": 7.8,
+              "count": 3
+            },
+            {
+              "t": 8.0,
+              "count": 2
+            },
+            {
+              "t": 8.2,
+              "count": 4
+            },
+            {
+              "t": 8.4,
+              "count": 4
+            },
+            {
+              "t": 8.6,
+              "count": 3
+            },
+            {
+              "t": 8.8,
+              "count": 3
+            },
+            {
+              "t": 9.0,
+              "count": 3
+            },
+            {
+              "t": 9.2,
+              "count": 3
+            },
+            {
+              "t": 9.4,
+              "count": 3
+            },
+            {
+              "t": 9.6,
+              "count": 3
+            },
+            {
+              "t": 9.8,
+              "count": 3
+            },
+            {
+              "t": 10.0,
+              "count": 3
+            },
+            {
+              "t": 10.2,
+              "count": 3
+            },
+            {
+              "t": 10.4,
+              "count": 2
+            },
+            {
+              "t": 10.6,
+              "count": 3
+            },
+            {
+              "t": 10.8,
+              "count": 3
+            },
+            {
+              "t": 11.0,
+              "count": 3
+            },
+            {
+              "t": 11.2,
+              "count": 3
+            },
+            {
+              "t": 11.4,
+              "count": 3
+            },
+            {
+              "t": 11.6,
+              "count": 3
+            },
+            {
+              "t": 11.8,
+              "count": 3
+            },
+            {
+              "t": 12.0,
+              "count": 3
+            },
+            {
+              "t": 12.2,
+              "count": 3
+            },
+            {
+              "t": 12.4,
+              "count": 3
+            },
+            {
+              "t": 12.6,
+              "count": 3
+            },
+            {
+              "t": 12.8,
+              "count": 4
+            },
+            {
+              "t": 13.0,
+              "count": 4
+            },
+            {
+              "t": 13.2,
+              "count": 3
+            },
+            {
+              "t": 13.4,
+              "count": 3
+            },
+            {
+              "t": 13.6,
+              "count": 3
+            },
+            {
+              "t": 13.8,
+              "count": 4
+            },
+            {
+              "t": 14.0,
+              "count": 3
+            },
+            {
+              "t": 14.2,
+              "count": 3
+            },
+            {
+              "t": 14.4,
+              "count": 4
+            },
+            {
+              "t": 14.6,
+              "count": 4
+            },
+            {
+              "t": 14.8,
+              "count": 3
+            },
+            {
+              "t": 15.0,
+              "count": 3
+            },
+            {
+              "t": 15.2,
+              "count": 3
+            },
+            {
+              "t": 15.4,
+              "count": 3
+            },
+            {
+              "t": 15.6,
+              "count": 3
+            },
+            {
+              "t": 15.8,
+              "count": 3
+            },
+            {
+              "t": 16.0,
+              "count": 3
+            },
+            {
+              "t": 16.2,
+              "count": 4
+            },
+            {
+              "t": 16.4,
+              "count": 3
+            },
+            {
+              "t": 16.6,
+              "count": 3
+            },
+            {
+              "t": 16.8,
+              "count": 3
+            },
+            {
+              "t": 17.0,
+              "count": 3
+            },
+            {
+              "t": 17.2,
+              "count": 4
+            },
+            {
+              "t": 17.4,
+              "count": 3
+            },
+            {
+              "t": 17.6,
+              "count": 3
+            },
+            {
+              "t": 17.8,
+              "count": 3
+            },
+            {
+              "t": 18.0,
+              "count": 3
+            },
+            {
+              "t": 18.2,
+              "count": 3
+            },
+            {
+              "t": 18.4,
+              "count": 3
+            },
+            {
+              "t": 18.6,
+              "count": 3
+            },
+            {
+              "t": 18.8,
+              "count": 3
+            },
+            {
+              "t": 19.0,
+              "count": 3
+            },
+            {
+              "t": 19.2,
+              "count": 3
+            },
+            {
+              "t": 19.4,
+              "count": 4
+            },
+            {
+              "t": 19.6,
+              "count": 3
+            },
+            {
+              "t": 19.8,
+              "count": 3
+            },
+            {
+              "t": 20.0,
+              "count": 3
+            },
+            {
+              "t": 20.2,
+              "count": 3
+            },
+            {
+              "t": 20.4,
+              "count": 3
+            },
+            {
+              "t": 20.6,
+              "count": 3
+            },
+            {
+              "t": 20.8,
+              "count": 2
+            },
+            {
+              "t": 21.0,
+              "count": 2
+            },
+            {
+              "t": 21.2,
+              "count": 2
+            },
+            {
+              "t": 21.4,
+              "count": 2
+            },
+            {
+              "t": 21.6,
+              "count": 2
+            },
+            {
+              "t": 21.8,
+              "count": 2
+            },
+            {
+              "t": 22.0,
+              "count": 2
+            },
+            {
+              "t": 22.2,
+              "count": 2
+            },
+            {
+              "t": 22.4,
+              "count": 2
+            },
+            {
+              "t": 22.6,
+              "count": 2
+            },
+            {
+              "t": 22.8,
+              "count": 3
+            },
+            {
+              "t": 23.0,
+              "count": 3
+            },
+            {
+              "t": 23.2,
+              "count": 3
+            },
+            {
+              "t": 23.4,
+              "count": 4
+            },
+            {
+              "t": 23.6,
+              "count": 6
+            },
+            {
+              "t": 23.8,
+              "count": 3
+            },
+            {
+              "t": 24.0,
+              "count": 2
+            },
+            {
+              "t": 24.2,
+              "count": 4
+            },
+            {
+              "t": 24.4,
+              "count": 4
+            },
+            {
+              "t": 24.6,
+              "count": 5
+            },
+            {
+              "t": 24.8,
+              "count": 5
+            },
+            {
+              "t": 25.0,
+              "count": 4
+            },
+            {
+              "t": 25.2,
+              "count": 4
+            },
+            {
+              "t": 25.4,
+              "count": 3
+            },
+            {
+              "t": 25.6,
+              "count": 4
+            },
+            {
+              "t": 25.8,
+              "count": 2
+            },
+            {
+              "t": 26.0,
+              "count": 4
+            },
+            {
+              "t": 26.2,
+              "count": 4
+            },
+            {
+              "t": 26.4,
+              "count": 1
+            },
+            {
+              "t": 26.6,
+              "count": 3
+            },
+            {
+              "t": 26.8,
+              "count": 2
+            },
+            {
+              "t": 27.0,
+              "count": 2
+            },
+            {
+              "t": 27.2,
+              "count": 4
+            },
+            {
+              "t": 27.4,
+              "count": 3
+            },
+            {
+              "t": 27.6,
+              "count": 3
+            },
+            {
+              "t": 27.8,
+              "count": 4
+            },
+            {
+              "t": 28.0,
+              "count": 1
+            },
+            {
+              "t": 28.2,
+              "count": 3
+            },
+            {
+              "t": 28.4,
+              "count": 3
+            },
+            {
+              "t": 28.6,
+              "count": 3
+            },
+            {
+              "t": 28.8,
+              "count": 3
+            },
+            {
+              "t": 29.0,
+              "count": 3
+            },
+            {
+              "t": 29.2,
+              "count": 3
+            },
+            {
+              "t": 29.4,
+              "count": 2
+            },
+            {
+              "t": 29.6,
+              "count": 3
+            },
+            {
+              "t": 29.8,
+              "count": 2
+            },
+            {
+              "t": 30.0,
+              "count": 2
+            },
+            {
+              "t": 30.2,
+              "count": 2
+            },
+            {
+              "t": 30.4,
+              "count": 2
+            },
+            {
+              "t": 30.6,
+              "count": 2
+            },
+            {
+              "t": 30.8,
+              "count": 2
+            }
+          ],
           "activityTrackIds": {
             "carry/hold (an object)": [
-              "173"
+              "3",
+              "78"
             ],
-            "listen to (a person)": [
-              "1"
+            "dribble": [
+              "6"
+            ],
+            "pick": [
+              "23"
+            ],
+            "punch": [
+              "84"
             ],
             "sit": [
-              "10",
-              "114",
-              "125",
-              "14",
-              "20",
-              "21",
-              "24",
-              "25",
-              "3",
-              "30",
-              "36",
-              "4",
-              "41",
-              "45",
-              "48",
-              "51",
-              "54",
-              "57",
-              "71",
-              "75",
-              "76",
-              "77",
-              "79",
-              "82",
-              "90",
-              "91",
-              "93",
-              "98"
+              "23",
+              "37",
+              "6"
             ],
             "stand": [
-              "113",
-              "2"
+              "17",
+              "36",
+              "54",
+              "64",
+              "8",
+              "80",
+              "81",
+              "84"
             ],
             "walk": [
-              "171"
+              "37",
+              "62"
             ]
           },
           "endpoints": {
-            "action-ava": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d455/inference/action-ava",
-            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d455/inference/geo",
-            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d455/inference/yolo26m",
-            "yolo26n-pose": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d455/inference/yolo26n-pose"
+            "action-ava": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-d455/inference/action-ava",
+            "action-hmdb": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-d455/inference/action-hmdb",
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-d455/inference/geo",
+            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-d455/inference/yolo26m",
+            "yolo26n-pose": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-d455/inference/yolo26n-pose"
           },
           "pose": {
             "available": true
@@ -1731,41 +2603,659 @@
         "mode": "recording_override",
         "requestedDate": {
           "year": 2026,
-          "month": 7,
-          "day": 29
+          "month": 8,
+          "day": 5
         },
-        "requestedDateLabel": "July 29, 2026",
+        "requestedDateLabel": "August 5, 2026",
         "recordingOverride": {
-          "day": "day_19_2026-07-29",
-          "rec": "rec_20260729_141500"
+          "day": "day_23_2026-08-05",
+          "rec": "rec_20260805_110324"
         },
-        "reason": "selected requested recording rec_20260729_141500"
+        "reason": "selected requested recording rec_20260805_110324"
       },
-      "requestedActivities": [
-        "sit"
+      "requestedActivities": [],
+      "requestedActivityCounts": {},
+      "occupancyTimeline": [
+        {
+          "t": 0.0,
+          "count": 1
+        },
+        {
+          "t": 0.2,
+          "count": 1
+        },
+        {
+          "t": 0.4,
+          "count": 3
+        },
+        {
+          "t": 0.6,
+          "count": 4
+        },
+        {
+          "t": 0.8,
+          "count": 2
+        },
+        {
+          "t": 1.0,
+          "count": 2
+        },
+        {
+          "t": 1.2,
+          "count": 1
+        },
+        {
+          "t": 1.4,
+          "count": 2
+        },
+        {
+          "t": 1.6,
+          "count": 2
+        },
+        {
+          "t": 1.8,
+          "count": 3
+        },
+        {
+          "t": 2.0,
+          "count": 2
+        },
+        {
+          "t": 2.2,
+          "count": 3
+        },
+        {
+          "t": 2.4,
+          "count": 2
+        },
+        {
+          "t": 2.6,
+          "count": 2
+        },
+        {
+          "t": 2.8,
+          "count": 2
+        },
+        {
+          "t": 3.0,
+          "count": 2
+        },
+        {
+          "t": 3.2,
+          "count": 2
+        },
+        {
+          "t": 3.4,
+          "count": 2
+        },
+        {
+          "t": 3.6,
+          "count": 2
+        },
+        {
+          "t": 3.8,
+          "count": 2
+        },
+        {
+          "t": 4.0,
+          "count": 2
+        },
+        {
+          "t": 4.2,
+          "count": 2
+        },
+        {
+          "t": 4.4,
+          "count": 2
+        },
+        {
+          "t": 4.6,
+          "count": 2
+        },
+        {
+          "t": 4.8,
+          "count": 2
+        },
+        {
+          "t": 5.0,
+          "count": 2
+        },
+        {
+          "t": 5.2,
+          "count": 2
+        },
+        {
+          "t": 5.4,
+          "count": 2
+        },
+        {
+          "t": 5.6,
+          "count": 2
+        },
+        {
+          "t": 5.8,
+          "count": 2
+        },
+        {
+          "t": 6.0,
+          "count": 2
+        },
+        {
+          "t": 6.2,
+          "count": 2
+        },
+        {
+          "t": 6.4,
+          "count": 3
+        },
+        {
+          "t": 6.6,
+          "count": 3
+        },
+        {
+          "t": 6.8,
+          "count": 3
+        },
+        {
+          "t": 7.0,
+          "count": 2
+        },
+        {
+          "t": 7.2,
+          "count": 2
+        },
+        {
+          "t": 7.4,
+          "count": 2
+        },
+        {
+          "t": 7.6,
+          "count": 3
+        },
+        {
+          "t": 7.8,
+          "count": 3
+        },
+        {
+          "t": 8.0,
+          "count": 2
+        },
+        {
+          "t": 8.2,
+          "count": 4
+        },
+        {
+          "t": 8.4,
+          "count": 4
+        },
+        {
+          "t": 8.6,
+          "count": 3
+        },
+        {
+          "t": 8.8,
+          "count": 3
+        },
+        {
+          "t": 9.0,
+          "count": 3
+        },
+        {
+          "t": 9.2,
+          "count": 3
+        },
+        {
+          "t": 9.4,
+          "count": 3
+        },
+        {
+          "t": 9.6,
+          "count": 3
+        },
+        {
+          "t": 9.8,
+          "count": 3
+        },
+        {
+          "t": 10.0,
+          "count": 3
+        },
+        {
+          "t": 10.2,
+          "count": 3
+        },
+        {
+          "t": 10.4,
+          "count": 2
+        },
+        {
+          "t": 10.6,
+          "count": 3
+        },
+        {
+          "t": 10.8,
+          "count": 3
+        },
+        {
+          "t": 11.0,
+          "count": 3
+        },
+        {
+          "t": 11.2,
+          "count": 3
+        },
+        {
+          "t": 11.4,
+          "count": 3
+        },
+        {
+          "t": 11.6,
+          "count": 3
+        },
+        {
+          "t": 11.8,
+          "count": 3
+        },
+        {
+          "t": 12.0,
+          "count": 3
+        },
+        {
+          "t": 12.2,
+          "count": 3
+        },
+        {
+          "t": 12.4,
+          "count": 3
+        },
+        {
+          "t": 12.6,
+          "count": 3
+        },
+        {
+          "t": 12.8,
+          "count": 4
+        },
+        {
+          "t": 13.0,
+          "count": 4
+        },
+        {
+          "t": 13.2,
+          "count": 3
+        },
+        {
+          "t": 13.4,
+          "count": 3
+        },
+        {
+          "t": 13.6,
+          "count": 3
+        },
+        {
+          "t": 13.8,
+          "count": 4
+        },
+        {
+          "t": 14.0,
+          "count": 3
+        },
+        {
+          "t": 14.2,
+          "count": 3
+        },
+        {
+          "t": 14.4,
+          "count": 4
+        },
+        {
+          "t": 14.6,
+          "count": 4
+        },
+        {
+          "t": 14.8,
+          "count": 3
+        },
+        {
+          "t": 15.0,
+          "count": 3
+        },
+        {
+          "t": 15.2,
+          "count": 3
+        },
+        {
+          "t": 15.4,
+          "count": 3
+        },
+        {
+          "t": 15.6,
+          "count": 3
+        },
+        {
+          "t": 15.8,
+          "count": 3
+        },
+        {
+          "t": 16.0,
+          "count": 3
+        },
+        {
+          "t": 16.2,
+          "count": 4
+        },
+        {
+          "t": 16.4,
+          "count": 3
+        },
+        {
+          "t": 16.6,
+          "count": 3
+        },
+        {
+          "t": 16.8,
+          "count": 3
+        },
+        {
+          "t": 17.0,
+          "count": 3
+        },
+        {
+          "t": 17.2,
+          "count": 4
+        },
+        {
+          "t": 17.4,
+          "count": 3
+        },
+        {
+          "t": 17.6,
+          "count": 3
+        },
+        {
+          "t": 17.8,
+          "count": 3
+        },
+        {
+          "t": 18.0,
+          "count": 3
+        },
+        {
+          "t": 18.2,
+          "count": 3
+        },
+        {
+          "t": 18.4,
+          "count": 3
+        },
+        {
+          "t": 18.6,
+          "count": 3
+        },
+        {
+          "t": 18.8,
+          "count": 3
+        },
+        {
+          "t": 19.0,
+          "count": 3
+        },
+        {
+          "t": 19.2,
+          "count": 3
+        },
+        {
+          "t": 19.4,
+          "count": 4
+        },
+        {
+          "t": 19.6,
+          "count": 3
+        },
+        {
+          "t": 19.8,
+          "count": 3
+        },
+        {
+          "t": 20.0,
+          "count": 3
+        },
+        {
+          "t": 20.2,
+          "count": 3
+        },
+        {
+          "t": 20.4,
+          "count": 3
+        },
+        {
+          "t": 20.6,
+          "count": 3
+        },
+        {
+          "t": 20.8,
+          "count": 2
+        },
+        {
+          "t": 21.0,
+          "count": 2
+        },
+        {
+          "t": 21.2,
+          "count": 2
+        },
+        {
+          "t": 21.4,
+          "count": 2
+        },
+        {
+          "t": 21.6,
+          "count": 2
+        },
+        {
+          "t": 21.8,
+          "count": 2
+        },
+        {
+          "t": 22.0,
+          "count": 2
+        },
+        {
+          "t": 22.2,
+          "count": 2
+        },
+        {
+          "t": 22.4,
+          "count": 2
+        },
+        {
+          "t": 22.6,
+          "count": 2
+        },
+        {
+          "t": 22.8,
+          "count": 3
+        },
+        {
+          "t": 23.0,
+          "count": 3
+        },
+        {
+          "t": 23.2,
+          "count": 3
+        },
+        {
+          "t": 23.4,
+          "count": 4
+        },
+        {
+          "t": 23.6,
+          "count": 6
+        },
+        {
+          "t": 23.8,
+          "count": 3
+        },
+        {
+          "t": 24.0,
+          "count": 2
+        },
+        {
+          "t": 24.2,
+          "count": 4
+        },
+        {
+          "t": 24.4,
+          "count": 4
+        },
+        {
+          "t": 24.6,
+          "count": 5
+        },
+        {
+          "t": 24.8,
+          "count": 5
+        },
+        {
+          "t": 25.0,
+          "count": 4
+        },
+        {
+          "t": 25.2,
+          "count": 4
+        },
+        {
+          "t": 25.4,
+          "count": 3
+        },
+        {
+          "t": 25.6,
+          "count": 4
+        },
+        {
+          "t": 25.8,
+          "count": 2
+        },
+        {
+          "t": 26.0,
+          "count": 4
+        },
+        {
+          "t": 26.2,
+          "count": 4
+        },
+        {
+          "t": 26.4,
+          "count": 1
+        },
+        {
+          "t": 26.6,
+          "count": 3
+        },
+        {
+          "t": 26.8,
+          "count": 2
+        },
+        {
+          "t": 27.0,
+          "count": 2
+        },
+        {
+          "t": 27.2,
+          "count": 4
+        },
+        {
+          "t": 27.4,
+          "count": 3
+        },
+        {
+          "t": 27.6,
+          "count": 3
+        },
+        {
+          "t": 27.8,
+          "count": 4
+        },
+        {
+          "t": 28.0,
+          "count": 1
+        },
+        {
+          "t": 28.2,
+          "count": 3
+        },
+        {
+          "t": 28.4,
+          "count": 3
+        },
+        {
+          "t": 28.6,
+          "count": 3
+        },
+        {
+          "t": 28.8,
+          "count": 3
+        },
+        {
+          "t": 29.0,
+          "count": 3
+        },
+        {
+          "t": 29.2,
+          "count": 3
+        },
+        {
+          "t": 29.4,
+          "count": 2
+        },
+        {
+          "t": 29.6,
+          "count": 3
+        },
+        {
+          "t": 29.8,
+          "count": 2
+        },
+        {
+          "t": 30.0,
+          "count": 2
+        },
+        {
+          "t": 30.2,
+          "count": 2
+        },
+        {
+          "t": 30.4,
+          "count": 2
+        },
+        {
+          "t": 30.6,
+          "count": 2
+        },
+        {
+          "t": 30.8,
+          "count": 2
+        }
       ],
-      "requestedActivityCounts": {
-        "sit": 28
-      },
       "requestedActivityCombination": null,
       "errors": [],
       "runtime_provider": "openrouter",
       "runtime_model": "z-ai/glm-5.2",
       "generation_mode": "llm"
     },
-    "web_data_answer_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260730-175723-645408\\smartroom-answer.json",
+    "web_data_answer_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260805-154828-956857\\smartroom-answer.json",
     "web_data_manifest_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260730_113000\\output\\cityos_synthesis\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis.json",
     "web_data_recording_override": {
-      "day": "day_19_2026-07-29",
-      "rec": "rec_20260729_141500"
+      "day": "day_23_2026-08-05",
+      "rec": "rec_20260805_110324"
     },
     "web_data_snapshot_summary": null,
-    "web_data_payload_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260730-175723-645408\\source_data\\20260730-175726-431024_agent_request.json",
+    "web_data_payload_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260805-154828-956857\\source_data\\20260805-154832-754822_agent_request.json",
     "web_data_source_url": "http://172.16.60.239:3000/api/v1",
     "web_data_source_kind": "smartroom-control"
   },
   "tracefix": {
-    "run_id": "cached-546f273e",
+    "run_id": "cached-6437f6e6",
     "workspace": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260730_113000"
   },
   "cityos": {

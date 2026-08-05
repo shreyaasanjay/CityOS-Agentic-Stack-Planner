@@ -276,13 +276,17 @@ function ConnectionSetup({
       <Field label="Data source" icon={Link2}>
         <select value={config.dataSource} onChange={(event) => {
           const dataSource = event.target.value as RuntimeConfig['dataSource']
-          onChange({ ...config, dataSource, mirrorApiUrl: dataSource === 'carla' ? 'http://172.16.60.239:8420' : 'http://172.16.60.239:3000/api/v1' })
+          onChange({ ...config, dataSource, mirrorApiUrl: dataSource === 'carla' ? 'http://172.16.60.252:8420' : 'http://172.16.60.239:3000/api/v1' })
         }} className="form-field">
-          <option value="smartroom">Smart-room recordings</option>
-          <option value="carla">CARLA city traces</option>
+          <option value="smartroom">Smart room (live camera recordings)</option>
+          <option value="carla">CARLA simulation (city streets: cars & pedestrians)</option>
         </select>
       </Field>
-      {config.dataSource === 'carla' && <Field label="CARLA API key" icon={KeyRound}><ApiKeyInput name="carla-api-key" value={config.carlaApiKey} onValueChange={(value) => update('carlaApiKey', value)} placeholder="Paste CARLA server key" policy={originPolicy} /></Field>}
+      {config.dataSource === 'carla' && (
+        <Field label="CARLA API key" icon={KeyRound}>
+          <ApiKeyInput name="carla-api-key" value={config.carlaApiKey} onValueChange={(value) => update('carlaApiKey', value)} placeholder="Blank = key from server .env" policy={originPolicy} />
+        </Field>
+      )}
       <Field label={t('sidebar.mirrorUrl')} icon={Link2}>
         <input
           value={config.mirrorApiUrl}

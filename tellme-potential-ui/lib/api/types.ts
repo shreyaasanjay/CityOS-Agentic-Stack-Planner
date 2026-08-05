@@ -81,6 +81,16 @@ export interface RecordingSelection {
   candidates: RecordingCandidate[]
 }
 
+/**
+ * One point on the room occupancy chart. `t` is an offset in seconds from the
+ * start of the recording -- never a wall-clock time -- and `count` is an
+ * aggregate head count, so neither field identifies anyone.
+ */
+export interface OccupancyPoint {
+  t: number
+  count: number
+}
+
 export interface QueryResult {
   id: string
   /** The prominent, grounded natural-language answer. */
@@ -95,6 +105,8 @@ export interface QueryResult {
   evidence: EvidenceItem[]
   /** Machine-readable guidelines synthesized for downstream software. */
   guidelines: Guideline[]
+  /** Aggregate head count over the recording, for the occupancy chart. */
+  occupancyTimeline?: OccupancyPoint[]
   /** Model reported for the completed workflow, when available. */
   model?: string
   /** Internal UI workflow hint; not rendered as backend detail. */
