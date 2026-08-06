@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null) as { query?: string; mirrorApiUrl?: string; dataSource?: string; carlaApiKey?: string; model?: string; timestamp?: string } | null
+  const body = await request.json().catch(() => null) as { query?: string; mirrorApiUrl?: string; dataSource?: string; carlaApiKey?: string; carlaFullApiKey?: string; model?: string; timestamp?: string } | null
   const query = body?.query?.trim() || ''
   if (!query) return NextResponse.json({ error: 'The original question is required.' }, { status: 400 })
   const isCarla = body?.dataSource === 'carla'
@@ -28,6 +28,7 @@ export async function POST(request: Request) {
         sourceUrl: sourceUrlText || undefined,
         sourceMode: isCarla ? 'carla' : undefined,
         carlaApiKey: isCarla ? body?.carlaApiKey?.trim() || undefined : undefined,
+        carlaFullApiKey: isCarla ? body?.carlaFullApiKey?.trim() || undefined : undefined,
         question: query,
         timestamp: isCarla ? undefined : body?.timestamp?.trim() || undefined,
       }),

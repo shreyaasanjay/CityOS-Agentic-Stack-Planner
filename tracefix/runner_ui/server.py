@@ -1078,8 +1078,12 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
                 "The CARLA trace server URL is required: set SIMULATION_API_URL in the repo .env "
                 "or provide sourceUrl in the request."
             )
+        # Prefer the full-scope key when present; the deployment-scope key is
+        # the fallback at both the request and .env level.
         source_api_key = (
-            str(payload.get("sourceApiKey") or payload.get("carlaApiKey") or "").strip()
+            str(payload.get("carlaFullApiKey") or "").strip()
+            or str(payload.get("sourceApiKey") or payload.get("carlaApiKey") or "").strip()
+            or os.environ.get("SIMULATION_FULL_API_KEY", "").strip()
             or os.environ.get("SIMULATION_API_KEY", "").strip()
         )
     else:
@@ -1151,7 +1155,9 @@ def _recording_preflight(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
     if is_carla:
         source_url = source_url or os.environ.get("SIMULATION_API_URL", "").strip()
         source_api_key = (
-            str(payload.get("sourceApiKey") or payload.get("carlaApiKey") or "").strip()
+            str(payload.get("carlaFullApiKey") or "").strip()
+            or str(payload.get("sourceApiKey") or payload.get("carlaApiKey") or "").strip()
+            or os.environ.get("SIMULATION_FULL_API_KEY", "").strip()
             or os.environ.get("SIMULATION_API_KEY", "").strip()
         )
     else:
@@ -2665,6 +2671,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8788, root: Path | None = No
     print(f"TeLLMe TELLME_API_KEY detected: {bool(_tellme_key)}", flush=True)
     print(f"CARLA SIMULATION_API_URL: {os.getenv('SIMULATION_API_URL') or '(not set)'}", flush=True)
     print(f"CARLA SIMULATION_API_KEY detected: {bool((os.getenv('SIMULATION_API_KEY') or '').strip())}", flush=True)
+    print(f"CARLA SIMULATION_FULL_API_KEY detected: {bool((os.getenv('SIMULATION_FULL_API_KEY') or '').strip())}", flush=True)
     print(f"TeLLMe TELLME_MODEL: {os.getenv('TELLME_MODEL') or '(not set, using default)'}", flush=True)
     del _openai_key, _tellme_key
     # Routing-module diagnostics: confirm which source files are actually loaded.

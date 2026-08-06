@@ -20,6 +20,7 @@ interface AnswerRequest {
   mirrorApiUrl?: string
   dataSource?: 'smartroom' | 'carla'
   carlaApiKey?: string
+  carlaFullApiKey?: string
   agentProvider?: 'openai' | 'anthropic' | 'openrouter' | 'local'
   agentModel?: string
   agentApiKey?: string
@@ -336,7 +337,8 @@ export async function POST(request: Request) {
   }
   const dataSource = body.dataSource === 'carla' ? 'carla' : 'smartroom'
   const carlaApiKey = body.carlaApiKey?.trim() || ''
-  if ((agentApiKey || carlaApiKey) && !getRequestApiKeyOriginPolicy(request).canUseApiKeys) {
+  const carlaFullApiKey = body.carlaFullApiKey?.trim() || ''
+  if ((agentApiKey || carlaApiKey || carlaFullApiKey) && !getRequestApiKeyOriginPolicy(request).canUseApiKeys) {
     return NextResponse.json({ error: getRequestApiKeyOriginPolicy(request).message }, { status: 403 })
   }
 
@@ -378,6 +380,7 @@ export async function POST(request: Request) {
         sourceUrl: sourceUrlText || undefined,
         sourceMode: dataSource,
         carlaApiKey: carlaApiKey || undefined,
+        carlaFullApiKey: carlaFullApiKey || undefined,
         timeoutSeconds: 30,
         question: query,
         agentProvider,

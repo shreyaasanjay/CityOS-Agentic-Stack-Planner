@@ -126,6 +126,7 @@ export interface QueryRequest {
   mirrorApiUrl: string
   dataSource?: 'smartroom' | 'carla'
   carlaApiKey?: string
+  carlaFullApiKey?: string
   openaiApiKey?: string
   tracefixProvider: 'openai' | 'anthropic' | 'openrouter' | 'local'
   tracefixModel: string

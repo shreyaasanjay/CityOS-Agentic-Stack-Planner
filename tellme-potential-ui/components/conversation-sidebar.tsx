@@ -47,6 +47,7 @@ export interface RuntimeConfig {
   mirrorApiUrl: string
   dataSource: 'smartroom' | 'carla'
   carlaApiKey: string
+  carlaFullApiKey: string
   timestamp: string
   tracefixProvider: 'openai' | 'anthropic' | 'openrouter' | 'local'
   tracefixModel: string
@@ -283,9 +284,14 @@ function ConnectionSetup({
         </select>
       </Field>
       {config.dataSource === 'carla' && (
-        <Field label="CARLA API key" icon={KeyRound}>
-          <ApiKeyInput name="carla-api-key" value={config.carlaApiKey} onValueChange={(value) => update('carlaApiKey', value)} placeholder="Blank = key from server .env" policy={originPolicy} />
-        </Field>
+        <>
+          <Field label="CARLA full API key" icon={KeyRound}>
+            <ApiKeyInput name="carla-full-api-key" value={config.carlaFullApiKey} onValueChange={(value) => update('carlaFullApiKey', value)} placeholder="Optional: unlocks full trace data" policy={originPolicy} />
+          </Field>
+          <Field label="CARLA API key" icon={KeyRound}>
+            <ApiKeyInput name="carla-api-key" value={config.carlaApiKey} onValueChange={(value) => update('carlaApiKey', value)} placeholder="Fallback - blank = key from server .env" policy={originPolicy} />
+          </Field>
+        </>
       )}
       <Field label={t('sidebar.mirrorUrl')} icon={Link2}>
         <input
