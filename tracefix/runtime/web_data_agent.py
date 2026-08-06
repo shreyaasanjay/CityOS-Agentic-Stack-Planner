@@ -39,13 +39,12 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _request_json(url: str, *, timeout: int, max_bytes: int, api_key: str = "") -> Any:
+    headers = {"User-Agent": "TraceFix-Generated-Agent/0.1", "Accept": "application/json"}
     if api_key:
-        separator = "&" if "?" in url else "?"
-        url = f"{url}{separator}api_key={urllib.parse.quote(api_key)}"
-    request = urllib.request.Request(
-        url,
-        headers={"User-Agent": "TraceFix-Generated-Agent/0.1", "Accept": "application/json"},
-    )
+        # The trace server accepts ?api_key= too, but prefers the header:
+        # query params end up in server logs and browser history.
+        headers["X-API-Key"] = api_key
+    request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - approved runtime URL
             body = response.read(max_bytes + 1)
@@ -64,6 +63,52 @@ def _request_json_object(url: str, *, timeout: int, max_bytes: int, api_key: str
     if not isinstance(value, dict):
         raise ValueError(f"expected a JSON object from {url}")
     return value
+
+
+def _request_text(url: str, *, timeout: int, max_bytes: int) -> str:
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "TraceFix-Generated-Agent/0.1"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - approved runtime URL
+            body = response.read(max_bytes + 1)
+            if len(body) > max_bytes:
+                raise ValueError(f"agent data response exceeded {max_bytes} bytes")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(4096).decode("utf-8", "replace")
+        raise RuntimeError(f"agent data request failed with HTTP {exc.code}: {detail[:500]}") from exc
+    return body.decode("utf-8-sig", "replace")
+
+
+def _frame_seconds_from_timestamps_csv(csv_text: str) -> list[float]:
+    """Per-frame real times (seconds from the first frame) from a clip's timestamps CSV.
+
+    The CSV is `frame,hw_timestamp_ms,sync_ms` — hw_timestamp_ms is the hardware
+    clock, the only timebase that is comparable across cameras (see the mirror
+    API docs' "Timebases" section).
+    """
+    lines = [line.strip() for line in csv_text.splitlines() if line.strip()]
+    if len(lines) < 2:
+        return []
+    header = [column.strip().lower() for column in lines[0].split(",")]
+    try:
+        hw_index = header.index("hw_timestamp_ms")
+    except ValueError:
+        return []
+    stamps: list[float] = []
+    for line in lines[1:]:
+        columns = line.split(",")
+        if len(columns) <= hw_index:
+            continue
+        try:
+            stamps.append(float(columns[hw_index]))
+        except ValueError:
+            continue
+    if len(stamps) < 2:
+        return []
+    first = stamps[0]
+    return [round((stamp - first) / 1000.0, 3) for stamp in stamps]
 
 
 def _json_from_model_text(value: str) -> dict[str, Any]:
@@ -91,6 +136,7 @@ def _answer_context(draft: dict[str, Any]) -> dict[str, Any]:
         return {
             "grounded_draft": draft.get("answer"),
             "simulation": simulation,
+            "actor_positions": draft.get("actorPositions"),
             "limitations": draft.get("limitations") or [],
         }
     cameras = []
@@ -101,6 +147,9 @@ def _answer_context(draft: dict[str, Any]) -> dict[str, Any]:
             "source_index": index,
             "peak_people": raw_camera.get("peakPeople"),
             "latest_people": raw_camera.get("lastPeople"),
+            "occupancy_depth_verified": bool(raw_camera.get("occupancyVerified")),
+            "objects_seen": raw_camera.get("objects") or {},
+            "sound_events": raw_camera.get("sounds") or {},
             "activities": raw_camera.get("activities") or [],
             "activity_counts": raw_camera.get("activityCounts") or {},
             "pose_available": bool((raw_camera.get("pose") or {}).get("available"))
@@ -531,7 +580,23 @@ def _fetch_recording_evidence(
                 }
             except Exception as exc:  # noqa: BLE001 - retain partial evidence
                 errors.append({"url": endpoint, "error": f"{type(exc).__name__}: {exc}"})
-        selected_packet["cameras"][str(camera_name)] = {"metadata": metadata, "inference": inference}
+        # Sidecar `t` values are container time and the container stretch differs
+        # per camera; the timestamps CSV is the documented way to recover real
+        # recording-relative seconds so cameras can be aligned.
+        frame_seconds: list[float] = []
+        if inference:
+            timestamps_endpoint = _api_url(base, "recordings", day, rec, str(camera_name), "timestamps")
+            try:
+                frame_seconds = _frame_seconds_from_timestamps_csv(
+                    _request_text(timestamps_endpoint, timeout=timeout, max_bytes=max_bytes)
+                )
+            except Exception as exc:  # noqa: BLE001 - container time remains a usable fallback
+                errors.append({"url": timestamps_endpoint, "error": f"{type(exc).__name__}: {exc}"})
+        selected_packet["cameras"][str(camera_name)] = {
+            "metadata": metadata,
+            "inference": inference,
+            "frameSeconds": frame_seconds,
+        }
     return selected_packet, errors
 
 
@@ -759,12 +824,24 @@ def _carla_base_url(url: str) -> str:
 
 
 def _select_carla_trace(traces: list[dict[str, Any]], question: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
-    """Pick one trace; the trace server's timestamps are experimental and never used."""
+    """Pick one trace; the trace server's capture timestamps are experimental and never used."""
     lowered = question.lower()
     for trace in traces:
         trace_id = str(trace.get("trace_id") or "")
         if trace_id and trace_id.lower() in lowered:
             return trace, {"mode": "question_match", "reason": f"the question named trace {trace_id}"}
+    # A couple of traces carry a synthetic_date fabricated expressly so TraceFix
+    # can anchor date-scoped questions; capture epochs stay ignored.
+    requested = _requested_date(question)
+    if requested:
+        for trace in traces:
+            match = re.match(r"(\d{4})-(\d{2})-(\d{2})$", str(trace.get("synthetic_date") or ""))
+            if match and int(match.group(2)) == requested["month"] and int(match.group(3)) == requested["day"] \
+                    and requested.get("year") in (None, int(match.group(1))):
+                return trace, {
+                    "mode": "synthetic_date_match",
+                    "reason": f"the question's date matches this trace's synthetic date {trace.get('synthetic_date')}",
+                }
     scenario_match = re.search(r"\bscenario\s*(\d+)\b", lowered)
     if scenario_match:
         wanted = int(scenario_match.group(1))
@@ -797,9 +874,33 @@ def _carla_trace_catalog(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "actor_count": trace.get("actor_count"),
             "junction": trace.get("junction"),
             "has_ground_truth": trace.get("has_ground_truth"),
+            "synthetic_date": trace.get("synthetic_date"),
         }
         for trace in traces
     ]
+
+
+def _carla_positions_records(doc: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Flat {tick, actor_id, x, y, z} records from a positions-capture trace.
+
+    demo_simple_<epoch> traces have no log/trajectories; their /full view carries
+    the positions.json object instead — the record list plus static extras such
+    as drop_point and camera.
+    """
+    raw = doc.get("positions")
+    extras: dict[str, Any] = {}
+    records: list[dict[str, Any]] = []
+    if isinstance(raw, list):
+        records = [item for item in raw if isinstance(item, dict) and item.get("actor_id")]
+    elif isinstance(raw, dict):
+        for key, value in raw.items():
+            if not records and isinstance(value, list) and any(
+                isinstance(item, dict) and item.get("actor_id") for item in value
+            ):
+                records = [item for item in value if isinstance(item, dict) and item.get("actor_id")]
+            else:
+                extras[key] = value
+    return records, extras
 
 
 def _carla_trace_summary(doc: dict[str, Any]) -> dict[str, Any]:
@@ -807,6 +908,14 @@ def _carla_trace_summary(doc: dict[str, Any]) -> dict[str, Any]:
     log = [entry for entry in doc.get("log") or [] if isinstance(entry, dict)]
     trajectories = [item for item in doc.get("trajectories") or [] if isinstance(item, dict)]
     ground_truth = doc.get("ground_truth") if isinstance(doc.get("ground_truth"), dict) else {}
+    position_records, position_extras = _carla_positions_records(doc)
+    # The deployment view strips ground_truth, trajectories, and positions
+    # entirely; when they are absent the entity/actor counts are unknown, not zero.
+    has_full_view = (
+        isinstance(doc.get("trajectories"), list)
+        or isinstance(doc.get("ground_truth"), dict)
+        or bool(position_records)
+    )
 
     entities = [
         {
@@ -822,21 +931,29 @@ def _carla_trace_summary(doc: dict[str, Any]) -> dict[str, Any]:
         if entity["type"]:
             entity_type_counts[entity["type"]] = entity_type_counts.get(entity["type"], 0) + 1
 
-    claims = [
-        {
-            "claim_type": str(claim.get("claim_type") or ""),
-            "statement": str(claim.get("natural_language") or ""),
+    # Old-schema ground truth carries claims[]; the v2 schema (schema_version
+    # present) expresses the same facts as events[] with different field names.
+    claims = []
+    for claim in [*(ground_truth.get("claims") or []), *(ground_truth.get("events") or [])]:
+        if not isinstance(claim, dict):
+            continue
+        statement = str(
+            claim.get("natural_language") or claim.get("description") or claim.get("text") or ""
+        ).strip()
+        if not statement:
+            continue
+        claims.append({
+            "claim_type": str(claim.get("claim_type") or claim.get("event_type") or claim.get("type") or ""),
+            "statement": statement,
             "confidence": claim.get("confidence"),
             "polarity": claim.get("polarity"),
-        }
-        for claim in ground_truth.get("claims") or []
-        if isinstance(claim, dict) and str(claim.get("natural_language") or "").strip()
-    ]
+        })
 
     tick_seconds: dict[int, float] = {}
     crosswalk_occupied_ticks = 0
     peak_crosswalk_fraction = 0.0
     collisions_total = 0
+    has_collision_data = False
     for entry in log:
         tick = entry.get("tick")
         elapsed = entry.get("sim_elapsed_s")
@@ -849,6 +966,7 @@ def _carla_trace_summary(doc: dict[str, Any]) -> dict[str, Any]:
             peak_crosswalk_fraction = max(peak_crosswalk_fraction, float(fraction))
         total = entry.get("collision_count_total")
         if isinstance(total, (int, float)):
+            has_collision_data = True
             collisions_total = max(collisions_total, int(total))
 
     # People/vehicles in the scene over simulation time: one sample per tick,
@@ -870,26 +988,80 @@ def _carla_trace_summary(doc: dict[str, Any]) -> dict[str, Any]:
             if role == "walker":
                 walker_presence[stamp] = walker_presence.get(stamp, 0) + 1
 
+    # Positions-capture traces (demo_simple_<epoch>) have no log/trajectories:
+    # per-tick data is the flat positions record list. Ticks advance at 0.1s in
+    # every generation seen so far, but that rate is empirical, not a contract.
+    positions_actors: dict[str, dict[str, Any]] = {}
+    tick_count = len(log)
+    tick_rate_assumed = False
+    for record in position_records:
+        actor = str(record.get("actor_id") or "")
+        tick = record.get("tick")
+        if not actor or not isinstance(tick, int):
+            continue
+        coords = [record.get(axis) for axis in ("x", "y", "z")]
+        point = (
+            [round(float(value), 2) for value in coords]
+            if all(isinstance(value, (int, float)) for value in coords)
+            else None
+        )
+        entry = positions_actors.setdefault(
+            actor, {"samples": 0, "first_tick": tick, "last_tick": tick, "start": point, "end": point}
+        )
+        entry["samples"] += 1
+        if tick <= entry["first_tick"]:
+            entry["first_tick"] = tick
+            entry["start"] = point or entry["start"]
+        if tick >= entry["last_tick"]:
+            entry["last_tick"] = tick
+            entry["end"] = point or entry["end"]
+        stamp = round(tick * 0.1, 2)
+        presence[stamp] = presence.get(stamp, 0) + 1
+        if re.match(r"(pedestrian|walker|person)", actor):
+            walker_presence[stamp] = walker_presence.get(stamp, 0) + 1
+    if positions_actors and not log:
+        last_tick = max(entry["last_tick"] for entry in positions_actors.values())
+        tick_count = last_tick + 1
+        tick_seconds[last_tick] = last_tick * 0.1
+        tick_rate_assumed = True
+        for actor in positions_actors:
+            kind = re.sub(r"_?\d+$", "", actor) or actor
+            entity_type_counts[kind] = entity_type_counts.get(kind, 0) + 1
+
+    # The synthetic calendar date (tx_1785317034_0 / tx_1785319164_0 only) is
+    # fabricated by request so date-scoped questions have an anchor; it is not
+    # real ground truth. It appears per log tick and in the trace metadata.
+    synthetic_date = str(
+        doc.get("synthetic_date")
+        or next((entry.get("synthetic_date") for entry in log if entry.get("synthetic_date")), "")
+        or ""
+    ) or None
+
     duration_s = max(tick_seconds.values(), default=0.0)
     return {
         "trace_id": str(doc.get("trace_id") or ""),
         "map": next((str(entry.get("space")) for entry in log if entry.get("space")), None),
         "scenario": next((entry.get("scenario") for entry in log if entry.get("scenario") is not None), None),
-        "tick_count": len(log),
+        "tick_count": tick_count,
         "duration_s": round(duration_s, 2),
         "has_ground_truth": bool(ground_truth),
+        "data_scope": "full" if has_full_view else "deployment",
+        "synthetic_date": synthetic_date,
         "entities": entities,
-        "entity_type_counts": dict(sorted(entity_type_counts.items())),
-        "actor_role_counts": dict(sorted(actor_roles.items())),
+        "entity_type_counts": dict(sorted(entity_type_counts.items())) if has_full_view else None,
+        "actor_role_counts": dict(sorted(actor_roles.items())) if has_full_view else None,
+        "positions_actors": dict(sorted(positions_actors.items())) or None,
+        "position_extras": position_extras or None,
+        "tick_rate_assumed": tick_rate_assumed,
         "claims": claims,
         "crosswalk": {
             "ticks_occupied": crosswalk_occupied_ticks,
             "occupied_fraction": round(crosswalk_occupied_ticks / len(log), 3) if log else None,
             "peak_pedestrian_fraction": round(peak_crosswalk_fraction, 4),
         },
-        "collisions_total": collisions_total,
-        "peak_actors_present": max(presence.values(), default=0),
-        "peak_walkers_present": max(walker_presence.values(), default=0),
+        "collisions_total": collisions_total if has_collision_data else None,
+        "peak_actors_present": max(presence.values(), default=0) if has_full_view else None,
+        "peak_walkers_present": max(walker_presence.values(), default=0) if has_full_view else None,
         "occupancySamples": _downsample_series(presence),
         "walkerOccupancySamples": _downsample_series(walker_presence),
     }
@@ -930,6 +1102,7 @@ def _retrieve_carla(request: dict[str, Any], agent_id: str) -> dict[str, Any]:
             }
     errors: list[dict[str, str]] = []
     summary: dict[str, Any] | None = None
+    full_view_denied = False
     if selected is not None:
         trace_id = str(selected.get("trace_id") or "")
         try:
@@ -938,12 +1111,46 @@ def _retrieve_carla(request: dict[str, Any], agent_id: str) -> dict[str, Any]:
                 timeout=timeout, max_bytes=max_bytes, api_key=api_key,
             )
         except Exception as exc:  # noqa: BLE001 - the deployment view is a legitimate fallback
-            errors.append({"url": _api_url(base, "traces", trace_id, "full"), "error": f"{type(exc).__name__}: {exc}"})
+            message = str(exc)
+            if "HTTP 403" in message or "HTTP 401" in message:
+                # Deployment-scope keys cannot read /full; expected, not a data failure.
+                full_view_denied = True
+            else:
+                errors.append({"url": _api_url(base, "traces", trace_id, "full"), "error": f"{type(exc).__name__}: {exc}"})
             doc = _request_json_object(
                 _api_url(base, "traces", trace_id, "deployment"),
                 timeout=timeout, max_bytes=max_bytes, api_key=api_key,
             )
         summary = _carla_trace_summary(doc)
+        if summary.get("synthetic_date") is None and selected.get("synthetic_date"):
+            summary["synthetic_date"] = str(selected["synthetic_date"])
+    # When the question names an actor from a positions-capture trace, pull its
+    # position history through the documented per-actor filter endpoint.
+    actor_positions: dict[str, Any] | None = None
+    if summary is not None and isinstance(summary.get("positions_actors"), dict):
+        lowered_question = question.lower()
+        matched_actor = next(
+            (
+                actor for actor in summary["positions_actors"]
+                if actor.lower() in lowered_question
+                or (re.sub(r"_?\d+$", "", actor).replace("_", " ") or actor).lower() in lowered_question
+            ),
+            None,
+        )
+        if matched_actor:
+            positions_url = _api_url(base, "traces", str(selected.get("trace_id") or ""), "positions", matched_actor)
+            try:
+                history = _request_json(positions_url, timeout=timeout, max_bytes=max_bytes, api_key=api_key)
+                if isinstance(history, list):
+                    records = [item for item in history if isinstance(item, dict)]
+                    stride = max(1, len(records) // 50)
+                    actor_positions = {
+                        "actor_id": matched_actor,
+                        "record_count": len(records),
+                        "records": records[::stride][:50],
+                    }
+            except Exception as exc:  # noqa: BLE001 - the summary already covers the actor coarsely
+                errors.append({"url": positions_url, "error": f"{type(exc).__name__}: {exc}"})
     return {
         "kind": "tracefix.agent.evidence.v1",
         "producer_agent": agent_id,
@@ -955,6 +1162,8 @@ def _retrieve_carla(request: dict[str, Any], agent_id: str) -> dict[str, Any]:
         "traces": _carla_trace_catalog(traces),
         "selection": selection,
         "selected": summary,
+        "actor_positions": actor_positions,
+        "full_view_denied": full_view_denied,
         "errors": errors,
     }
 
@@ -985,9 +1194,16 @@ def _carla_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]:
     lowered = question.lower()
     role_counts = summary.get("actor_role_counts") or {}
     type_counts = summary.get("entity_type_counts") or {}
-    walkers = int(type_counts.get("walker") or role_counts.get("walker") or 0)
+    positions_actors = summary.get("positions_actors") if isinstance(summary.get("positions_actors"), dict) else {}
+    walkers = int(
+        type_counts.get("walker") or role_counts.get("walker") or type_counts.get("pedestrian") or 0
+    )
     vehicles = int(type_counts.get("vehicle") or role_counts.get("vehicle") or 0)
     crosswalk = summary.get("crosswalk") or {}
+    deployment_only = str(summary.get("data_scope") or "") == "deployment"
+    occupied_fraction = crosswalk.get("occupied_fraction")
+    synthetic_date = summary.get("synthetic_date")
+    actor_positions = evidence.get("actor_positions") if isinstance(evidence.get("actor_positions"), dict) else None
 
     prefix = f"For simulation trace {trace_id}"
     if scenario is not None:
@@ -995,34 +1211,103 @@ def _carla_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]:
         prefix += f", {map_name})" if map_name else ")"
     elif map_name:
         prefix += f" ({map_name})"
+    if synthetic_date:
+        prefix += f" (synthetic date {synthetic_date})"
     prefix += ", "
 
     parts: list[str] = []
-    if re.search(r"\b(crosswalk|cross\w*|across|road|street)\b", lowered) and crosswalk.get("occupied_fraction") is not None:
+    if actor_positions and positions_actors.get(str(actor_positions.get("actor_id"))):
+        actor_id = str(actor_positions.get("actor_id"))
+        info = positions_actors[actor_id]
+        start, end = info.get("start"), info.get("end")
+        span = f"tick {info.get('first_tick')} to {info.get('last_tick')}"
+        sentence = f"{actor_id} was tracked from {span} ({info.get('samples')} position records)"
+        if isinstance(start, list) and isinstance(end, list) and len(start) == 3 and len(end) == 3:
+            displacement = round(sum((e - s) ** 2 for s, e in zip(start, end)) ** 0.5, 2)
+            sentence += (
+                f"; it started at ({start[0]}, {start[1]}, {start[2]}) and ended at "
+                f"({end[0]}, {end[1]}, {end[2]}), a net displacement of {displacement} units"
+            )
+        parts.append(sentence)
+    if re.search(r"\b(crosswalk|cross\w*|across|road|street)\b", lowered) and occupied_fraction is not None:
         parts.append(
-            f"the crosswalk was occupied for {round(float(crosswalk['occupied_fraction']) * 100)}% "
+            f"the crosswalk was occupied for {round(float(occupied_fraction) * 100)}% "
             f"of the {summary.get('duration_s')}s simulation"
         )
     if re.search(r"\b(collisions?|crash(es)?|accidents?)\b", lowered):
-        parts.append(f"{summary.get('collisions_total', 0)} collision(s) were recorded")
+        if summary.get("collisions_total") is None:
+            parts.append("collision data is not included in the deployment view of this trace")
+        else:
+            parts.append(f"{summary.get('collisions_total', 0)} collision(s) were recorded")
     if re.search(r"\b(pedestrians?|people|persons?|walkers?)\b", lowered):
-        parts.append(f"{_count_label(walkers)} (pedestrians) appeared in the scene")
+        if deployment_only:
+            if isinstance(occupied_fraction, (int, float)) and occupied_fraction > 0:
+                parts.append(
+                    f"pedestrian activity was detected on the crosswalk for {round(float(occupied_fraction) * 100)}% "
+                    f"of the {summary.get('duration_s')}s simulation, but an exact people count is not available "
+                    "because this API key only has deployment-scope access"
+                )
+            else:
+                parts.append(
+                    "a people count is not available: this API key only has deployment-scope access, "
+                    "which excludes the simulator's entity data"
+                )
+        else:
+            parts.append(f"{_count_label(walkers)} (pedestrians) appeared in the scene")
     if re.search(r"\b(cars?|vehicles?|traffic)\b", lowered):
-        parts.append(f"{vehicles} vehicle(s) appeared in the scene")
+        if deployment_only:
+            parts.append(
+                "a vehicle count is not available: this API key only has deployment-scope access, "
+                "which excludes the simulator's entity data"
+            )
+        else:
+            parts.append(f"{vehicles} vehicle(s) appeared in the scene")
     if not parts:
-        described = ", ".join(f"{count} {kind}(s)" for kind, count in sorted(type_counts.items())) or "no catalogued entities"
-        parts.append(f"the simulation ran for {summary.get('duration_s')}s and contained {described}")
+        if deployment_only:
+            if summary.get("tick_count"):
+                occupied_text = (
+                    f" and the crosswalk was occupied for {round(float(occupied_fraction) * 100)}% of it"
+                    if isinstance(occupied_fraction, (int, float)) else ""
+                )
+                parts.append(
+                    f"the simulation ran for {summary.get('duration_s')}s over {summary.get('tick_count')} ticks"
+                    f"{occupied_text}; entity-level details require full trace access, which this API key does not have"
+                )
+            else:
+                parts.append(
+                    "the deployment view of this trace is empty; its contents require full trace access, "
+                    "which this API key does not have"
+                )
+        else:
+            described = ", ".join(f"{count} {kind}(s)" for kind, count in sorted(type_counts.items())) or "no catalogued entities"
+            parts.append(f"the simulation ran for {summary.get('duration_s')}s and contained {described}")
     text = prefix + "; ".join(parts) + "."
 
     limitations = [
-        "Counts come from the CARLA simulator's ground truth for the selected trace.",
         "Trace timestamps are experimental and were not used; times are simulation-relative seconds.",
     ]
-    if not summary.get("has_ground_truth"):
-        limitations.append("This trace has no ground-truth annotations; only the deployment log was available.")
+    if deployment_only:
+        limitations.insert(
+            0,
+            "The trace server API key only has deployment scope: ground-truth entities, trajectories, "
+            "and counts were not accessible, so missing values are unknown rather than zero.",
+        )
+    else:
+        limitations.insert(0, "Counts come from the CARLA simulator's ground truth for the selected trace.")
+        if not summary.get("has_ground_truth") and not positions_actors:
+            limitations.append("This trace has no ground-truth annotations; only the deployment log was available.")
+    if synthetic_date:
+        limitations.append(
+            f"The calendar date {synthetic_date} is synthetic — fabricated so date-scoped "
+            "questions have an anchor; it is not real ground truth."
+        )
+    if summary.get("tick_rate_assumed"):
+        limitations.append(
+            "Durations assume the empirically observed 10 ticks/second rate; the API does not guarantee it."
+        )
     if errors:
         limitations.append(f"{len(errors)} upstream request(s) failed, so the evidence may be incomplete.")
-    confidence = 0.9 if summary.get("has_ground_truth") else 0.6
+    confidence = 0.9 if summary.get("has_ground_truth") or positions_actors else 0.6
     if errors:
         confidence = round(confidence * 0.85, 2)
     return {
@@ -1037,6 +1322,7 @@ def _carla_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]:
         "cameras": [],
         "selection": selection,
         "simulation": {key: value for key, value in summary.items() if key not in {"occupancySamples", "walkerOccupancySamples", "entities"}},
+        "actorPositions": actor_positions,
         "occupancyTimeline": summary.get("occupancySamples") or [],
         "errors": errors,
     }
@@ -1243,7 +1529,11 @@ def _segment_counts_from_tracks(tracks: list[Any]) -> dict[str, int]:
     return counts
 
 
-def _geo_occupancy_series(camera: dict[str, Any], duration_sec: float = 0.0) -> dict[float, int] | None:
+def _geo_occupancy_series(
+    camera: dict[str, Any],
+    duration_sec: float = 0.0,
+    remap: Any = None,
+) -> dict[float, int] | None:
     """Depth-verified occupancy series from the geo model's room-frame centroids.
 
     Per-frame detector counts include anything person-shaped in the image —
@@ -1281,7 +1571,10 @@ def _geo_occupancy_series(camera: dict[str, Any], duration_sec: float = 0.0) -> 
             for sample in samples:
                 stamp = sample.get("t") if isinstance(sample, dict) else None
                 if isinstance(stamp, (int, float)):
-                    bucket = round(round(float(stamp) / step) * step, 2)
+                    # Geo `t` is sidecar container time like every inference JSON;
+                    # remap to real recording seconds when the caller has a mapper.
+                    real = float(remap(float(stamp))) if remap else float(stamp)
+                    bucket = round(round(real / step) * step, 2)
                     tracks_by_bucket.setdefault(bucket, set()).add(str(track_id))
     if not tracks_by_bucket:
         return None
@@ -1382,7 +1675,30 @@ def _camera_summary(camera_name: str, camera: dict[str, Any]) -> dict[str, Any]:
     metadata = camera.get("metadata") if isinstance(camera.get("metadata"), dict) else {}
     if isinstance(metadata.get("durationSec"), (int, float)):
         duration_sec = max(duration_sec, float(metadata["durationSec"]))
-    geo_series = _geo_occupancy_series(camera, duration_sec)
+    # Sidecar `t` is container time, and live-segment containers are encoded
+    # blind-CFR with only the frames that actually arrived — so the stretch
+    # differs per camera. The timestamps CSV carries each frame's hardware-clock
+    # time; remap onto it so every camera reports real recording seconds.
+    frame_seconds = [
+        float(item) for item in camera.get("frameSeconds") or []
+        if isinstance(item, (int, float))
+    ]
+    remap = None
+    if len(frame_seconds) >= 2 and duration_sec > 0:
+        container_step = duration_sec / len(frame_seconds)
+
+        def remap(stamp: float, _step: float = container_step, _frames: list[float] = frame_seconds) -> float:
+            index = int(round(float(stamp) / _step)) if _step > 0 else 0
+            return _frames[max(0, min(len(_frames) - 1, index))]
+
+        if occupancy_samples:
+            remapped: dict[float, int] = {}
+            for stamp, count in occupancy_samples.items():
+                real = round(remap(stamp), 2)
+                remapped[real] = max(remapped.get(real, 0), count)
+            occupancy_samples = remapped
+        duration_sec = frame_seconds[-1]
+    geo_series = _geo_occupancy_series(camera, duration_sec, remap=remap)
     if geo_series:
         # Depth-verified counts override the detectors' pixel counts: YOLO also
         # counts people on the TV screen and through the window, which is how a
@@ -1394,6 +1710,34 @@ def _camera_summary(camera_name: str, camera: dict[str, Any]) -> dict[str, Any]:
         # Keep the reported single number consistent with the plotted series
         # instead of whichever model's timeline happened to be walked last.
         latest = occupancy_samples[max(occupancy_samples)]
+
+    # The recordings listing carries per-clip `objects` (COCO class → sampled-frame
+    # stats) and `sound` (AudioSet label → window stats) indexes. An empty objects
+    # map means "not analysed for objects", never "nothing was in the room".
+    objects_index: dict[str, dict[str, Any]] = {}
+    raw_objects = metadata.get("objects")
+    if isinstance(raw_objects, dict):
+        for name, stats in raw_objects.items():
+            if not isinstance(stats, dict):
+                continue
+            entry = {
+                key: stats.get(key)
+                for key in ("frames", "maxPerFrame", "avgPerFrame", "peakConf")
+                if isinstance(stats.get(key), (int, float))
+            }
+            if isinstance(stats.get("frames"), (int, float)) and frames_analyzed:
+                entry["visibleFraction"] = round(float(stats["frames"]) / frames_analyzed, 3)
+            objects_index[str(name)] = entry
+    sounds_index: dict[str, dict[str, Any]] = {}
+    raw_sound = metadata.get("sound")
+    if isinstance(raw_sound, dict):
+        for label, stats in raw_sound.items():
+            if isinstance(stats, dict):
+                sounds_index[str(label)] = {
+                    key: stats.get(key)
+                    for key in ("windows", "peakProb")
+                    if isinstance(stats.get(key), (int, float))
+                }
 
     union_counts = {label: len(ids) for label, ids in activity_tracks.items()}
     activity_counts: dict[str, int] = {}
@@ -1416,6 +1760,9 @@ def _camera_summary(camera_name: str, camera: dict[str, Any]) -> dict[str, Any]:
         "camera": camera_name,
         "peakPeople": peak,
         "lastPeople": latest,
+        "occupancyVerified": bool(geo_series),
+        "objects": objects_index,
+        "sounds": sounds_index,
         "framesAnalyzed": frames_analyzed,
         "durationSec": round(duration_sec, 3) if duration_sec else None,
         "activities": sorted(activities),
@@ -1561,7 +1908,9 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
                 _camera_summary(name, value if isinstance(value, dict) else {})
                 for name, value in cameras_raw.items()
             ]
-            peaks = [camera["peakPeople"] for camera in camera_summaries if camera.get("peakPeople") is not None]
+            verified_summaries = [camera for camera in camera_summaries if camera.get("occupancyVerified")]
+            counting_summaries = verified_summaries or camera_summaries
+            peaks = [camera["peakPeople"] for camera in counting_summaries if camera.get("peakPeople") is not None]
             recording_peaks.append(max(peaks, default=0))
             aggregate_cameras.extend(camera_summaries)
         total_peak = sum(recording_peaks)
@@ -1634,6 +1983,11 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
         }
     cameras_raw = selected.get("cameras") if isinstance(selected.get("cameras"), dict) else {}
     cameras = [_camera_summary(name, value if isinstance(value, dict) else {}) for name, value in cameras_raw.items()]
+    # Depth-verified cameras are the authoritative occupancy signal; plain
+    # webcams fall back to raw detector counts, which also count people on the
+    # TV screen or through the window. Never let those outvote a verified count.
+    verified_cameras = [camera for camera in cameras if camera.get("occupancyVerified")]
+    counting_cameras = verified_cameras or cameras
     known_labels = sorted({label for camera in cameras for label in camera["activities"]}, key=lambda label: question.lower().find(label) if label in question.lower() else 10_000)
     requested_labels = [label for label in known_labels if label in question.lower()]
     day = str(selected.get("day") or "")
@@ -1641,7 +1995,31 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
     requested_date = str(selection.get("requestedDateLabel") or "").strip()
     prefix = f"For {requested_date} ({day} / {rec}), " if requested_date else f"For the selected recording ({day} / {rec}), "
     lower_question = question.lower()
-    occupancy_timeline = _merge_occupancy_samples(cameras)
+    occupancy_timeline = _merge_occupancy_samples(counting_cameras)
+    media_notes: list[str] = []
+    # Object classes and sound labels the listing indexed for this recording;
+    # 'person' stays with the occupancy path, which is depth-verified.
+    known_objects = sorted({
+        str(name) for camera in cameras for name in (camera.get("objects") or {})
+        if str(name).lower() != "person"
+    })
+    requested_objects = [
+        name for name in known_objects
+        if re.search(rf"\b{re.escape(name.lower())}(?:s|es)?\b", lower_question)
+    ]
+    _SOUND_ALIASES = {
+        "speech": ("talk", "talking", "speak", "speaking", "conversation", "voice", "said", "say"),
+        "music": ("music", "song"),
+        "door": ("door",),
+        "typing": ("typing", "typed"),
+    }
+    known_sounds = sorted({str(label) for camera in cameras for label in (camera.get("sounds") or {})})
+    requested_sounds = []
+    for label in known_sounds:
+        words = {label.lower(), *_SOUND_ALIASES.get(label.lower(), ())}
+        if any(re.search(rf"\b{re.escape(word)}\b", lower_question) for word in words):
+            requested_sounds.append(label)
+    generic_sound_query = bool(re.search(r"\b(sounds?|hear|heard|audio|noises?|loud)\b", lower_question))
     combined = len(requested_labels) > 1 and " both " in f" {lower_question} "
     combination: dict[str, Any] | None = None
     if combined:
@@ -1674,9 +2052,68 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
             count = max([camera["activityCounts"].get(label, 0) for camera in cameras] or [0])
             parts.append(f"{label}: {_count_label(count)}")
         text = prefix + ", ".join(parts) + "."
+    elif requested_objects or requested_sounds or generic_sound_query:
+        parts = []
+        for name in requested_objects:
+            best: dict[str, Any] = {}
+            for camera in cameras:
+                stats = (camera.get("objects") or {}).get(name)
+                if isinstance(stats, dict):
+                    for key in ("maxPerFrame", "visibleFraction", "peakConf"):
+                        value = stats.get(key)
+                        if isinstance(value, (int, float)):
+                            best[key] = max(best.get(key, 0), value)
+            detail: list[str] = []
+            if best.get("maxPerFrame"):
+                detail.append(f"up to {int(best['maxPerFrame'])} at once")
+            if best.get("visibleFraction"):
+                detail.append(f"visible in about {round(float(best['visibleFraction']) * 100)}% of sampled frames")
+            if best.get("peakConf"):
+                detail.append(f"peak confidence {round(float(best['peakConf']), 2)}")
+            parts.append(f"a {name} was detected ({', '.join(detail)})" if detail else f"a {name} was detected")
+        if requested_sounds:
+            for label in requested_sounds:
+                best_windows = 0
+                best_prob = 0.0
+                for camera in cameras:
+                    stats = (camera.get("sounds") or {}).get(label)
+                    if isinstance(stats, dict):
+                        best_windows = max(best_windows, int(stats.get("windows") or 0))
+                        best_prob = max(best_prob, float(stats.get("peakProb") or 0.0))
+                parts.append(
+                    f"{label} was heard in {best_windows} analysis window(s)"
+                    + (f" (peak probability {round(best_prob, 2)})" if best_prob else "")
+                )
+        elif generic_sound_query:
+            ranked = sorted(
+                ((label, stats) for camera in cameras for label, stats in (camera.get("sounds") or {}).items()),
+                key=lambda item: int((item[1] or {}).get("windows") or 0),
+                reverse=True,
+            )
+            seen_labels: list[str] = []
+            for label, stats in ranked:
+                if label not in seen_labels:
+                    seen_labels.append(label)
+                if len(seen_labels) >= 3:
+                    break
+            if seen_labels:
+                parts.append("the most frequent sound events were " + ", ".join(seen_labels))
+            else:
+                parts.append("no confident sound events were recorded")
+        if requested_sounds or generic_sound_query:
+            media_notes.append(
+                "Sound events are room-level: one microphone covers the room, so they cannot "
+                "say who made a sound or where."
+            )
+        if requested_objects:
+            media_notes.append(
+                "Object detections are sampled at 5 Hz and dropped below the detector's "
+                "confidence threshold; counts are per-frame, not unique objects."
+            )
+        text = prefix + "; ".join(parts) + "."
     else:
-        latest = [camera["lastPeople"] for camera in cameras if camera["lastPeople"] is not None]
-        peaks = [camera["peakPeople"] for camera in cameras if camera.get("peakPeople") is not None]
+        latest = [camera["lastPeople"] for camera in counting_cameras if camera["lastPeople"] is not None]
+        peaks = [camera["peakPeople"] for camera in counting_cameras if camera.get("peakPeople") is not None]
         if latest and peaks:
             text = prefix + (
                 f"occupancy peaked at {_count_label(max(peaks))} and the recording ended with "
@@ -1691,7 +2128,14 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
             text += " Detected activities included " + ", ".join(activity_labels) + "."
     counts = {label: max([camera["activityCounts"].get(label, 0) for camera in cameras] or [0]) for label in requested_labels}
     packet_errors = evidence.get("errors") or []
-    confidence, confidence_notes = _derive_confidence(cameras, requested_labels, packet_errors)
+    confidence, confidence_notes = _derive_confidence(counting_cameras, requested_labels, packet_errors)
+    excluded_notes: list[str] = []
+    if verified_cameras and len(verified_cameras) < len(cameras):
+        skipped = ", ".join(camera["camera"] for camera in cameras if not camera.get("occupancyVerified"))
+        excluded_notes.append(
+            f"Occupancy comes from the depth-verified camera(s) only; raw detector counts from {skipped} "
+            "were not used because they can include people on screens or seen through windows."
+        )
     return {
         "answer": text,
         "text": text,
@@ -1702,6 +2146,8 @@ def _smartroom_answer(evidence: dict[str, Any], agent_id: str) -> dict[str, Any]
         "evidence_refs": [f"{evidence.get('producer_agent')}:{rec}:{camera['camera']}" for camera in cameras],
         "limitations": [
             "Counts are bounded by the available aggregate inference data.",
+            *media_notes,
+            *excluded_notes,
             *confidence_notes,
         ],
         "source_count": int(evidence.get("source_count") or 0),
