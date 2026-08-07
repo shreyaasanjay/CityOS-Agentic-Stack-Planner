@@ -1932,6 +1932,113 @@ def _write_answer_artifacts(output_root: Path, runs: list[dict[str, Any]], answe
         run["answerPath"] = str(app_answer_path)
     return str(answer_path)
 
+_CARLA_SOURCE_MODES = {"carla", "simulation", "carla-trace-server", "carla_trace_server"}
+
+
+def _carla_trace_candidates(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candidates = []
+    for trace in traces:
+        trace_id = str(trace.get("trace_id") or "")
+        if not trace_id:
+            continue
+        bits = []
+        if trace.get("scenario") is not None:
+            bits.append(f"scenario {trace.get('scenario')}")
+        if trace.get("actor_count") is not None:
+            bits.append(f"{trace.get('actor_count')} actors")
+        map_name = str(trace.get("map") or "").rsplit("/", 1)[-1]
+        if map_name:
+            bits.append(map_name)
+        if trace.get("has_video"):
+            bits.append("video")
+        candidates.append({
+            "recordingId": trace_id,
+            "label": trace_id,
+            "detail": ", ".join(bits),
+        })
+    return candidates
+
+
+def _carla_override_id(recording_override: Any | None) -> str:
+    if isinstance(recording_override, dict):
+        return str(recording_override.get("recordingId") or recording_override.get("id") or "").strip()
+    if recording_override is None:
+        return ""
+    return str(recording_override).strip()
+
+
+def fetch_carla_payload(
+    source_url: str,
+    *,
+    timeout_seconds: int = 30,
+    max_bytes: int = _DEFAULT_MAX_BYTES,
+    api_key: str = "",
+    question_context: Any | None = None,
+    recording_override: Any | None = None,
+) -> dict[str, Any]:
+    """Preflight for the CARLA trace server: reachability plus trace choice.
+
+    Mirrors the smartroom preflight contract: when neither the question nor an
+    override names a trace, return a clarification listing the trace ids so the
+    UI can render its selection dropdown. Trace timestamps are experimental
+    upstream and are deliberately ignored here.
+    """
+    from tracefix.runtime import web_data_agent as _agent
+
+    base = _agent._carla_base_url(source_url)
+    url = f"{base}/traces"
+    if api_key:
+        url += ("&" if "?" in url else "?") + urlencode({"api_key": api_key})
+    traces: list[dict[str, Any]] = []
+    body = b"[]"
+    error = None
+    try:
+        request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "TraceFix-WebData/0.1"})
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:  # noqa: S310 - configured source
+            body = response.read(max_bytes)
+        parsed_body = json.loads(body.decode("utf-8-sig"))
+        traces = [item for item in parsed_body if isinstance(item, dict)] if isinstance(parsed_body, list) else []
+    except Exception as exc:  # noqa: BLE001 - the agent run reports retrieval failures itself
+        message = f"{type(exc).__name__}: {exc}"
+        error = message.replace(api_key, "[redacted]") if api_key else message
+
+    question = _question_text(question_context)
+    candidates = _carla_trace_candidates(traces)
+    override_id = _carla_override_id(recording_override)
+    answer: dict[str, Any] | None = None
+    if error is None:
+        if override_id:
+            match = next(
+                (item for item in traces if str(item.get("trace_id") or "").casefold() == override_id.casefold()),
+                None,
+            )
+            if match is None:
+                answer = {
+                    "needsClarification": True,
+                    "clarificationPrompt": "I could not find that simulation trace. Choose one of the available traces.",
+                    "clarificationCandidates": candidates,
+                }
+        else:
+            _, selection = _agent._select_carla_trace(traces, question)
+            if selection.get("mode") != "question_match" and len(traces) > 1:
+                answer = {
+                    "needsClarification": True,
+                    "clarificationPrompt": "Which simulation trace should I analyze? Each trace is one recorded CARLA run.",
+                    "clarificationCandidates": candidates,
+                }
+    return {
+        "url": base,
+        "sourceKind": "carla-trace-server",
+        "status": 200 if error is None else None,
+        "contentType": "application/json",
+        "body": body if isinstance(body, bytes) else b"[]",
+        "fetchedAt": _utc_now().isoformat(),
+        "answer": answer,
+        "traceCount": len(traces),
+        "error": error,
+    }
+
+
 def fetch_source_payload(
     source_url: str,
     *,
@@ -1942,6 +2049,7 @@ def fetch_source_payload(
     question_context: Any | None = None,
     raw_data_json: str | None = None,
     recording_override: Any | None = None,
+    source_api_key: str = "",
 ) -> dict[str, Any]:
     mode = str(source_mode or "auto").strip().lower()
     raw_text = str(raw_data_json or "").strip()
@@ -1950,6 +2058,15 @@ def fetch_source_payload(
             raw_text,
             max_bytes=max_bytes,
             question_context=question_context,
+        )
+    if mode in _CARLA_SOURCE_MODES:
+        return fetch_carla_payload(
+            source_url,
+            timeout_seconds=timeout_seconds,
+            max_bytes=max_bytes,
+            api_key=source_api_key,
+            question_context=question_context,
+            recording_override=recording_override,
         )
     if mode in {"smartroom", "smartroom-control", "smartroom_control"} or (
         mode == "auto" and _looks_like_smartroom_url(source_url)
@@ -2293,7 +2410,16 @@ async def _run_agent_pipeline(
     agent_provider: str,
     agent_model: str,
     agent_api_key: str,
+    source_api_key: str = "",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None]:
+    agent_environment = {
+        name: value
+        for name, value in {
+            "TRACEFIX_RUNTIME_AGENT_API_KEY": agent_api_key,
+            "TRACEFIX_SOURCE_API_KEY": source_api_key,
+        }.items()
+        if value
+    }
     agent_apps = [app for app in apps if app.kind != "monitor"]
     monitor_apps = [app for app in apps if app.kind == "monitor"]
     if not monitor_apps:
@@ -2317,7 +2443,7 @@ async def _run_agent_pipeline(
         start = await _run_monitor_checkpoint(monitor_apps=monitor_apps, manifest_path=manifest_path, output_root=output_root, handler_command=handler_command, handler_timeout_seconds=handler_timeout_seconds, agent_provider=agent_provider, agent_model=agent_model, agent_api_key=agent_api_key, mode="start", transcript=[], single_agent_execution=True)
         runs.extend(start)
         request_path = _write_agent_phase_request(output_root, single_app, "single_agent", {"source_url": source_url, "source_mode": source_mode, "timeout_seconds": timeout_seconds, "max_bytes": max_bytes, "question": question, "raw_data_json": raw_data_json, "recording_override": recording_override, "agent_provider": agent_provider, "agent_model": agent_model})
-        single_run = await _run_app_phase(app=single_app, manifest_path=manifest_path, request_path=request_path, phase="single_agent", output_root=output_root, handler_command=handler_command, handler_timeout_seconds=handler_timeout_seconds, handler_environment={"TRACEFIX_RUNTIME_AGENT_API_KEY": agent_api_key} if agent_api_key else {})
+        single_run = await _run_app_phase(app=single_app, manifest_path=manifest_path, request_path=request_path, phase="single_agent", output_root=output_root, handler_command=handler_command, handler_timeout_seconds=handler_timeout_seconds, handler_environment=agent_environment)
         runs.append(single_run)
         evidence = single_run.get("agentOutput", {}).get("evidence_packet")
         answer = single_run.get("agentOutput", {}).get("answer_packet")
@@ -2380,7 +2506,7 @@ async def _run_agent_pipeline(
             output_root=output_root,
             handler_command=handler_command,
             handler_timeout_seconds=handler_timeout_seconds,
-            handler_environment={"TRACEFIX_RUNTIME_AGENT_API_KEY": agent_api_key} if agent_api_key else {},
+            handler_environment=agent_environment,
         )
         for app, request_path in zip(retrievers, retrieval_requests)
     ])
@@ -2432,7 +2558,7 @@ async def _run_agent_pipeline(
         output_root=output_root,
         handler_command=handler_command,
         handler_timeout_seconds=handler_timeout_seconds,
-        handler_environment={"TRACEFIX_RUNTIME_AGENT_API_KEY": agent_api_key} if agent_api_key else {},
+        handler_environment=agent_environment,
     )
     runs.append(synthesis_run)
     answer = synthesis_run.get("agentOutput", {}).get("answer_packet")
@@ -2557,6 +2683,7 @@ def run_web_data_apps(
     agent_provider: str = "local",
     agent_model: str = "gemma3:4b",
     agent_api_key: str = "",
+    source_api_key: str = "",
 ) -> dict[str, Any]:
     manifest_path = manifest_path.expanduser().resolve()
     if not manifest_path.exists():
@@ -2581,6 +2708,7 @@ def run_web_data_apps(
         question_context=question_context,
         raw_data_json=raw_data_json,
         recording_override=recording_override,
+        source_api_key=source_api_key,
     )
     source_answer = payload.get("answer")
     needs_recording_choice = (
@@ -2624,6 +2752,7 @@ def run_web_data_apps(
             agent_provider=agent_provider,
             agent_model=agent_model,
             agent_api_key=agent_api_key,
+            source_api_key=source_api_key,
         ))
     evidence_packets = [
         packet

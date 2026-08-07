@@ -171,6 +171,21 @@ def _repo_root() -> Path:
     return Path.cwd()
 
 
+def _load_repo_dotenv(root: Path) -> None:
+    """Load repo-root .env so data-source secrets stay out of shell commands and the browser."""
+    path = root / ".env"
+    if not path.is_file():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        match = re.match(r"^\s*([^=\s#]+)\s*=\s*(.*)$", line)
+        if match:
+            os.environ.setdefault(match.group(1), match.group(2).strip().strip('"').strip("'"))
+
+
 def _path_is_within(path: Path, root: Path) -> bool:
     try:
         path.resolve().relative_to(root.resolve())
@@ -1053,7 +1068,27 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
     manifest_path = Path(raw_manifest).expanduser()
     if not manifest_path.is_absolute():
         manifest_path = (root / manifest_path).resolve()
-    source_url = str(payload.get("sourceUrl") or payload.get("webDataUrl") or default_web_data_url()).strip()
+    source_mode = str(payload.get("sourceMode") or "auto").strip().lower()
+    is_carla = source_mode in {"carla", "simulation", "carla-trace-server", "carla_trace_server"}
+    source_url = str(payload.get("sourceUrl") or payload.get("webDataUrl") or "").strip()
+    if is_carla:
+        source_url = source_url or os.environ.get("SIMULATION_API_URL", "").strip()
+        if not source_url:
+            raise ValueError(
+                "The CARLA trace server URL is required: set SIMULATION_API_URL in the repo .env "
+                "or provide sourceUrl in the request."
+            )
+        # Prefer the full-scope key when present; the deployment-scope key is
+        # the fallback at both the request and .env level.
+        source_api_key = (
+            str(payload.get("carlaFullApiKey") or "").strip()
+            or str(payload.get("sourceApiKey") or payload.get("carlaApiKey") or "").strip()
+            or os.environ.get("SIMULATION_FULL_API_KEY", "").strip()
+            or os.environ.get("SIMULATION_API_KEY", "").strip()
+        )
+    else:
+        source_url = source_url or default_web_data_url()
+        source_api_key = str(payload.get("sourceApiKey") or "").strip()
     raw_output = str(payload.get("outputRoot") or "").strip()
     output_root = Path(raw_output).expanduser() if raw_output else None
     if output_root is not None and not output_root.is_absolute():
@@ -1073,12 +1108,14 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         or ""
     ).strip()
     request_timestamp = str(payload.get("timestamp") or payload.get("requestTimestamp") or "").strip()
-    if request_timestamp:
+    # CARLA trace timestamps are experimental upstream; never steer trace
+    # selection or the question with wall-clock times for that source.
+    if request_timestamp and not is_carla:
         question_context = f"{question_context} at {request_timestamp}".strip()
     recording_override = payload.get("recordingOverride") or payload.get("recording") or payload.get("selectedRecording")
     current = _tellme_bridge(root).current() or {}
     tellme = current.get("tellme") if isinstance(current.get("tellme"), dict) else {}
-    if not request_timestamp:
+    if not request_timestamp and not is_carla:
         request_timestamp = str(tellme.get("timestamp") or "").strip()
         if request_timestamp and request_timestamp not in question_context:
             question_context = f"{question_context} at {request_timestamp}".strip()
@@ -1095,7 +1132,7 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         manifest_path=manifest_path,
         source_url=source_url,
         output_root=output_root,
-        source_mode=str(payload.get("sourceMode") or "auto"),
+        source_mode=source_mode,
         timeout_seconds=timeout,
         handler_command=payload.get("handlerCommand") or "",
         handler_timeout_seconds=handler_timeout,
@@ -1106,25 +1143,40 @@ def _run_web_data_apps(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
         agent_provider=str(payload.get("agentProvider") or payload.get("agent_provider") or "local").strip(),
         agent_model=str(payload.get("agentModel") or payload.get("agent_model") or "gemma3:4b").strip(),
         agent_api_key=str(payload.get("agentApiKey") or payload.get("agent_api_key") or "").strip(),
+        source_api_key=source_api_key,
     )
 def _recording_preflight(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
     """Find candidate recordings before verification or agent synthesis."""
     from tracefix.runtime.web_data_harness import default_web_data_url, fetch_source_payload
 
-    source_url = str(payload.get("sourceUrl") or payload.get("webDataUrl") or default_web_data_url()).strip()
+    source_mode = str(payload.get("sourceMode") or "auto").strip().lower()
+    is_carla = source_mode in {"carla", "simulation", "carla-trace-server", "carla_trace_server"}
+    source_url = str(payload.get("sourceUrl") or payload.get("webDataUrl") or "").strip()
+    if is_carla:
+        source_url = source_url or os.environ.get("SIMULATION_API_URL", "").strip()
+        source_api_key = (
+            str(payload.get("carlaFullApiKey") or "").strip()
+            or str(payload.get("sourceApiKey") or payload.get("carlaApiKey") or "").strip()
+            or os.environ.get("SIMULATION_FULL_API_KEY", "").strip()
+            or os.environ.get("SIMULATION_API_KEY", "").strip()
+        )
+    else:
+        source_url = source_url or default_web_data_url()
+        source_api_key = str(payload.get("sourceApiKey") or "").strip()
     question = str(payload.get("question") or payload.get("query") or "").strip()
     timestamp = str(payload.get("timestamp") or "").strip()
-    if timestamp:
+    if timestamp and not is_carla:
         question = f"{question} at {timestamp}".strip()
     output_root = root / ".tracefix-ui" / "recording-preflight" / datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     result = fetch_source_payload(
         source_url,
         output_root=output_root,
-        source_mode=str(payload.get("sourceMode") or "auto"),
+        source_mode=source_mode,
         timeout_seconds=_bounded_int(payload.get("timeoutSeconds"), 30, minimum=2, maximum=600),
         question_context=question,
         raw_data_json=str(payload.get("rawDataJson") or ""),
         recording_override=payload.get("recordingOverride"),
+        source_api_key=source_api_key,
     )
     answer = result.get("answer") if isinstance(result.get("answer"), dict) else {}
     return {
@@ -2597,6 +2649,7 @@ class RunnerHandler(BaseHTTPRequestHandler):
 
 def run_server(host: str = "127.0.0.1", port: int = 8788, root: Path | None = None) -> None:
     repo_root = (root or _repo_root()).resolve()
+    _load_repo_dotenv(repo_root)
     subprocess_python = _subprocess_python()
     startup_env = _ensure_java_env(os.environ.copy())
     server = ThreadingHTTPServer((host, port), RunnerHandler)
@@ -2616,6 +2669,9 @@ def run_server(host: str = "127.0.0.1", port: int = 8788, root: Path | None = No
     _tellme_key = (os.getenv("TELLME_API_KEY") or "").strip()
     print(f"TeLLMe OPENAI_API_KEY detected: {bool(_openai_key)}", flush=True)
     print(f"TeLLMe TELLME_API_KEY detected: {bool(_tellme_key)}", flush=True)
+    print(f"CARLA SIMULATION_API_URL: {os.getenv('SIMULATION_API_URL') or '(not set)'}", flush=True)
+    print(f"CARLA SIMULATION_API_KEY detected: {bool((os.getenv('SIMULATION_API_KEY') or '').strip())}", flush=True)
+    print(f"CARLA SIMULATION_FULL_API_KEY detected: {bool((os.getenv('SIMULATION_FULL_API_KEY') or '').strip())}", flush=True)
     print(f"TeLLMe TELLME_MODEL: {os.getenv('TELLME_MODEL') or '(not set, using default)'}", flush=True)
     del _openai_key, _tellme_key
     # Routing-module diagnostics: confirm which source files are actually loaded.

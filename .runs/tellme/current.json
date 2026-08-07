@@ -1,8 +1,8 @@
 {
-  "run_id": "tellme_8ca804320fe0",
+  "run_id": "tellme_fab9104a5795",
   "tellme": {
-    "query_id": "tellme_8ca804320fe0",
-    "query": "How many people are sitting in the smart room on july 29, 2026?",
+    "query_id": "tellme_fab9104a5795",
+    "query": "Is there a bottle in the recording on August 5th?",
     "timestamp": null,
     "mode": "llm",
     "model": "gpt-4.1-mini",
@@ -11,11 +11,11 @@
     "status": "needs_tracefix",
     "route_decision": {
       "route": "single_agent",
-      "intent": "historical_lookup",
-      "selected_agent": "motion_context_agent",
-      "selected_tool": "get_motion_context",
+      "intent": "general",
+      "selected_agent": "general_context_agent",
+      "selected_tool": "cityos_context_lookup",
       "required_tools": [
-        "get_motion_context"
+        "cityos_context_lookup"
       ],
       "rationale": "The query appears answerable with one focused CityOS-style context lookup.",
       "time_window": null,
@@ -55,11 +55,9 @@
       "needs_temporal_consistency": false,
       "output_contract": {
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
-        "answer_type": "direct_answer",
+        "answer_type": "insufficient_evidence",
         "fallback_answer_type": "insufficient_evidence",
         "field_types": {
           "answer": "string",
@@ -74,7 +72,8 @@
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -89,7 +88,7 @@
         ]
       },
       "plan_type": "tracefix",
-      "query_id": "tellme_8ca804320fe0",
+      "query_id": "tellme_fab9104a5795",
       "required_harnesses": [
         "answer_synthesis_harness"
       ],
@@ -100,7 +99,6 @@
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-        "No available sensor supports 'room_state' context for this space.",
         "Mock CityOS structured context may be incomplete.",
         "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
@@ -112,9 +110,7 @@
     },
     "execution_brief": {
       "allowed_claims": [
-        "bounded_count",
-        "presence_state",
-        "timestamped_event_summary"
+        "insufficient_evidence"
       ],
       "ambiguity": {
         "ambiguity_type": null,
@@ -125,18 +121,17 @@
       },
       "answer_packet_requirements": {
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
-        "answer_type": "direct_answer",
+        "answer_type": "insufficient_evidence",
         "fallback_answer_type": "insufficient_evidence",
         "forbidden_claims": [
           "raw_sensor_access",
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -152,7 +147,7 @@
       },
       "application_goal": {
         "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
-        "goal_type": "occupancy_count",
+        "goal_type": "unsupported",
         "non_goals": [
           "identify person",
           "face recognition",
@@ -160,9 +155,9 @@
           "infer cause or intent"
         ],
         "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
-        "user_intent": "occupancy_lookup"
+        "user_intent": "general_lookup"
       },
-      "brief_id": "brief_task_8ca804320fe0",
+      "brief_id": "brief_task_fab9104a5795",
       "candidate_harnesses": [
         "answer_synthesis_harness"
       ],
@@ -170,7 +165,6 @@
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-        "No available sensor supports 'room_state' context for this space.",
         "Mock CityOS structured context may be incomplete.",
         "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
@@ -197,8 +191,7 @@
         ],
         "card_type": "insufficient_evidence",
         "caveat_requirements": [
-          "A stronger answer was not produced because the bounded evidence was insufficient.",
-          "Reflects structured context only; no causal interpretation."
+          "A stronger answer was not produced because the bounded evidence was insufficient."
         ],
         "claim_target": "insufficient_evidence",
         "confidence_requirements": {
@@ -232,7 +225,8 @@
           "cause_or_intent_inference",
           "unsupported_behavioral_inference",
           "raw_sensor_access",
-          "fabricated_confidence"
+          "fabricated_confidence",
+          "guessing"
         ],
         "metric_requirements": [
           {
@@ -266,24 +260,22 @@
             "value_type": "text"
           }
         ],
-        "primary_question": "What did the structured context observe?",
+        "primary_question": "Could the system answer this from the available evidence?",
         "provenance_requirements": [
-          "List which expected packets were missing or empty.",
-          "List the harness/packet ids backing the observed value."
+          "List which expected packets were missing or empty."
         ],
         "summary_requirements": [
-          "State what could and could not be determined; do not fabricate confidence.",
-          "State the observed value and its bounded time window in one sentence."
+          "State what could and could not be determined; do not fabricate confidence."
         ],
         "title_template": "Insufficient evidence to answer confidently"
       },
       "evidence_plan": {
         "conflicting_evidence_checks": [],
         "minimum_sufficient_evidence": [
-          "answer_packet"
+          "general_context_packet"
         ],
         "primary_evidence": [
-          "answer_packet"
+          "general_context_packet"
         ],
         "supporting_evidence": []
       },
@@ -293,9 +285,10 @@
         "face_identity",
         "personal_identity",
         "medical_diagnosis",
-        "unsupported_behavioral_inference"
+        "unsupported_behavioral_inference",
+        "guessing"
       ],
-      "normalized_query": "how many people are sitting in the smart room on july 29, 2026?",
+      "normalized_query": "is there a bottle in the recording on august 5th?",
       "privacy_policy": {
         "forbidden_inferences": [
           "raw_sensor_access",
@@ -313,8 +306,8 @@
         "privacy_scope": "cityos_structured_context_only",
         "raw_sensor_access_allowed": false
       },
-      "query_id": "tellme_8ca804320fe0",
-      "reasoning_summary": "Deterministic template proposal generated for query tellme_8ca804320fe0.",
+      "query_id": "tellme_fab9104a5795",
+      "reasoning_summary": "Deterministic template proposal generated for query tellme_fab9104a5795.",
       "required_modalities": [
         "context"
       ],
@@ -341,10 +334,10 @@
           "get_room_state",
           "get_speech_activity_context"
         ],
-        "coverage_gaps": [
-          "No available sensor supports 'room_state' context for this space."
+        "coverage_gaps": [],
+        "notes": [
+          "No primary sensor is available for this query; planning relies on general context."
         ],
-        "notes": [],
         "privacy_policy": {
           "forbidden_inferences": [
             "raw_sensor_access",
@@ -367,7 +360,7 @@
           "privacy_scope": "cityos_structured_context_only",
           "raw_sensor_access_allowed": false
         },
-        "query_id": "tellme_8ca804320fe0",
+        "query_id": "tellme_fab9104a5795",
         "relevant_sensors": [
           {
             "allowed_api_names": [
@@ -394,8 +387,8 @@
               "Cannot verify events outside the doorway field of view."
             ],
             "modality": "video",
-            "reason": "Modality or supported context type matches the query requirements.",
-            "relevance": "primary",
+            "reason": "Not directly targeted but available for corroboration.",
+            "relevance": "supporting",
             "restricted_api_names": [
               "get_raw_video_reference"
             ],
@@ -432,8 +425,8 @@
               "Posture signals are candidate-level only."
             ],
             "modality": "video",
-            "reason": "Modality or supported context type matches the query requirements.",
-            "relevance": "primary",
+            "reason": "Not directly targeted but available for corroboration.",
+            "relevance": "supporting",
             "restricted_api_names": [
               "get_raw_video_reference"
             ],
@@ -468,8 +461,8 @@
               "Cannot establish visual identity."
             ],
             "modality": "audio",
-            "reason": "Modality or supported context type matches the query requirements.",
-            "relevance": "primary",
+            "reason": "Not directly targeted but available for corroboration.",
+            "relevance": "supporting",
             "restricted_api_names": [
               "get_raw_audio_reference",
               "get_full_transcript_context"
@@ -541,40 +534,35 @@
       "space_id": "smart_room_1",
       "task_category": "unsupported",
       "time_windows": [],
-      "user_query": "How many people are sitting in the smart room on july 29, 2026?",
+      "user_query": "Is there a bottle in the recording on August 5th?",
       "validation_policy": {
         "bounded_time_windows_required": true,
         "llm_proposal_untrusted": true,
         "must_preserve_forbidden_claims": true,
-        "repairs": [
-          "Trimmed harness plan to deterministic modalities.",
-          "Overrode proposed 'descriptive' card with deterministically supported 'insufficient_evidence' card.",
-          "Discarded LLM-supplied metric/confidence/badge definitions; deterministic card rules are authoritative."
-        ],
+        "repairs": [],
         "schema_validation_required": true,
-        "validation_status": "repaired",
+        "validation_status": "accepted",
         "warnings": [
-          "No evidence-gathering harness survived capability/policy filtering (likely a coverage gap); proposal downgraded to unsupported.",
           "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
         ]
       }
     },
     "tracefix_task_spec": {
-      "task_id": "task_8ca804320fe0",
-      "query_id": "tellme_8ca804320fe0",
-      "user_query": "How many people are sitting in the smart room on july 29, 2026?",
+      "task_id": "task_fab9104a5795",
+      "query_id": "tellme_fab9104a5795",
+      "user_query": "Is there a bottle in the recording on August 5th?",
       "space_id": "smart_room_1",
-      "intent": "occupancy_lookup",
+      "intent": "general_lookup",
       "tracefix_reason": "Needs a safe non-executable contract.",
       "required_capabilities": [
         "answer_synthesis"
       ],
       "input_artifacts": [
         {
-          "artifact_id": "answer_packet",
+          "artifact_id": "general_context_packet",
           "artifact_type": "packet",
           "time_range": null,
-          "modality": "context",
+          "modality": null,
           "privacy_level": "structured_context_only"
         }
       ],
@@ -594,7 +582,7 @@
         "Return required fields only.",
         "Preserve privacy limits and caveats."
       ],
-      "output_contract_name": "direct_answer_v1",
+      "output_contract_name": "insufficient_evidence_v1",
       "route": "single_agent",
       "time_windows": [],
       "required_modalities": [
@@ -604,8 +592,8 @@
         "answer_synthesis_harness"
       ],
       "application_goal": {
-        "goal_type": "occupancy_count",
-        "user_intent": "occupancy_lookup",
+        "goal_type": "unsupported",
+        "user_intent": "general_lookup",
         "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
         "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
         "non_goals": [
@@ -617,16 +605,16 @@
       },
       "evidence_plan": {
         "primary_evidence": [
-          "answer_packet"
+          "general_context_packet"
         ],
         "supporting_evidence": [],
         "minimum_sufficient_evidence": [
-          "answer_packet"
+          "general_context_packet"
         ],
         "conflicting_evidence_checks": []
       },
       "answer_packet_requirements": {
-        "answer_type": "direct_answer",
+        "answer_type": "insufficient_evidence",
         "required_fields": [
           "answer",
           "confidence",
@@ -636,16 +624,15 @@
           "limitations"
         ],
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
         "forbidden_claims": [
           "raw_sensor_access",
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -654,7 +641,7 @@
       },
       "evidence_card_contract": {
         "card_type": "insufficient_evidence",
-        "primary_question": "What did the structured context observe?",
+        "primary_question": "Could the system answer this from the available evidence?",
         "title_template": "Insufficient evidence to answer confidently",
         "claim_target": "insufficient_evidence",
         "allowed_conclusion_types": [
@@ -668,7 +655,8 @@
           "cause_or_intent_inference",
           "unsupported_behavioral_inference",
           "raw_sensor_access",
-          "fabricated_confidence"
+          "fabricated_confidence",
+          "guessing"
         ],
         "badge_requirements": [
           {
@@ -711,8 +699,7 @@
           }
         ],
         "summary_requirements": [
-          "State what could and could not be determined; do not fabricate confidence.",
-          "State the observed value and its bounded time window in one sentence."
+          "State what could and could not be determined; do not fabricate confidence."
         ],
         "confidence_requirements": {
           "confidence_kind": "composite_confidence",
@@ -737,12 +724,10 @@
         },
         "evidence_requirements": [],
         "caveat_requirements": [
-          "A stronger answer was not produced because the bounded evidence was insufficient.",
-          "Reflects structured context only; no causal interpretation."
+          "A stronger answer was not produced because the bounded evidence was insufficient."
         ],
         "provenance_requirements": [
-          "List which expected packets were missing or empty.",
-          "List the harness/packet ids backing the observed value."
+          "List which expected packets were missing or empty."
         ],
         "fallback_card_type": "insufficient_evidence"
       },
@@ -763,19 +748,18 @@
           "privacy_scope": "string",
           "limitations": "array"
         },
-        "answer_type": "direct_answer",
+        "answer_type": "insufficient_evidence",
         "fallback_answer_type": "insufficient_evidence",
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
         "forbidden_claims": [
           "raw_sensor_access",
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -803,14 +787,9 @@
         "bounded_time_windows_required": true,
         "schema_validation_required": true,
         "must_preserve_forbidden_claims": true,
-        "validation_status": "repaired",
-        "repairs": [
-          "Trimmed harness plan to deterministic modalities.",
-          "Overrode proposed 'descriptive' card with deterministically supported 'insufficient_evidence' card.",
-          "Discarded LLM-supplied metric/confidence/badge definitions; deterministic card rules are authoritative."
-        ],
+        "validation_status": "accepted",
+        "repairs": [],
         "warnings": [
-          "No evidence-gathering harness survived capability/policy filtering (likely a coverage gap); proposal downgraded to unsupported.",
           "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
         ]
       },
@@ -824,23 +803,21 @@
         "face_identity",
         "personal_identity",
         "medical_diagnosis",
-        "unsupported_behavioral_inference"
+        "unsupported_behavioral_inference",
+        "guessing"
       ],
       "allowed_claims": [
-        "bounded_count",
-        "presence_state",
-        "timestamped_event_summary"
+        "insufficient_evidence"
       ],
-      "reasoning_summary": "Deterministic template proposal generated for query tellme_8ca804320fe0.",
+      "reasoning_summary": "Deterministic template proposal generated for query tellme_fab9104a5795.",
       "executable": false,
-      "reason": "occupancy_lookup",
+      "reason": "general_lookup",
       "target_tracefix_path": "TraceFix-main/",
       "status": "stub",
       "caveats": [
         "This is a stub only; TraceFix-main is not invoked in V0.",
         "Real TraceFix multi-agent execution is not integrated yet.",
         "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-        "No available sensor supports 'room_state' context for this space.",
         "Mock CityOS structured context may be incomplete.",
         "Confidence must remain bounded by available evidence.",
         "Use CityOS structured context only.",
@@ -866,11 +843,9 @@
       ],
       "output_contract": {
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
-        "answer_type": "direct_answer",
+        "answer_type": "insufficient_evidence",
         "fallback_answer_type": "insufficient_evidence",
         "field_types": {
           "answer": "string",
@@ -885,7 +860,8 @@
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "must_include_confidence": true,
         "must_include_evidence_refs": true,
@@ -899,7 +875,7 @@
           "limitations"
         ]
       },
-      "query_id": "tellme_8ca804320fe0",
+      "query_id": "tellme_fab9104a5795",
       "resources": [
         {
           "modalities": [
@@ -912,21 +888,21 @@
         },
         {
           "name": "tellme_query_logs",
-          "query_id": "tellme_8ca804320fe0",
+          "query_id": "tellme_fab9104a5795",
           "type": "local_query_run_directory"
         }
       ],
-      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\nHow many people are sitting in the smart room on july 29, 2026?\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- none specified\n\n## Required Modalities\n- context\n\n## Candidate Harnesses\n- answer_synthesis_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence or escalate when the structured context is inadequate.\n- goal_type: occupancy_count\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer packet with confidence and evidence refs.\n- user_intent: occupancy_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['answer_packet']\n- primary_evidence: ['answer_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['bounded_count', 'presence_state', 'timestamped_event_summary']\n- answer_type: direct_answer\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- bounded_count, presence_state, timestamped_event_summary\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
-      "task_id": "task_8ca804320fe0",
+      "task_description": "# TraceFix Dry-Run Task\n\n## User Query\nIs there a bottle in the recording on August 5th?\n\n## Scope\n- space_id: smart_room_1\n- privacy boundary: CityOS structured context only\n- raw sensor policy: no raw sensor data may be used; inputs are CityOS structured context, not raw sensor data\n\n## Time Windows\n- none specified\n\n## Required Modalities\n- context\n\n## Candidate Harnesses\n- answer_synthesis_harness\n\n## Application Goal\n- failure_condition: Return insufficient_evidence or escalate when the structured context is inadequate.\n- goal_type: unsupported\n- non_goals: ['identify person', 'face recognition', 'medical diagnosis', 'infer cause or intent']\n- success_condition: Return a privacy-bounded answer packet with confidence and evidence refs.\n- user_intent: general_lookup\n\n## Evidence Plan\n- conflicting_evidence_checks: []\n- minimum_sufficient_evidence: ['general_context_packet']\n- primary_evidence: ['general_context_packet']\n- supporting_evidence: []\n\n## Answer Packet Requirements\n- allowed_claims: ['insufficient_evidence']\n- answer_type: insufficient_evidence\n- fallback_answer_type: insufficient_evidence\n- forbidden_claims: ['raw_sensor_access', 'face_identity', 'personal_identity', 'medical_diagnosis', 'unsupported_behavioral_inference', 'guessing']\n- must_include_confidence: True\n- must_include_evidence_refs: True\n- must_include_limitations: True\n- required_fields: ['answer', 'confidence', 'evidence_refs', 'caveats', 'privacy_scope', 'limitations']\n\n## Allowed Claims\n- insufficient_evidence\n\n## Forbidden Claims\n- raw_sensor_access, face_identity, personal_identity, medical_diagnosis, unsupported_behavioral_inference, guessing\n\n## Expected Output Contract\n- required_fields: answer, confidence, evidence_refs, caveats, privacy_scope, limitations\n- field_types:\n  - answer: string\n  - caveats: array\n  - confidence: number\n  - evidence_refs: array\n  - limitations: array\n  - privacy_scope: string\n\n## Privacy Constraints\n- Use only CityOS-approved structured context.\n- Do not use or request raw sensor data.\n- All inputs are CityOS structured context summaries, not raw video, audio, radar, or Wi-Fi artifacts.",
+      "task_id": "task_fab9104a5795",
       "tool_manifest": {
         "answer_synthesis_harness": [
           "synthesize_answer_packet"
         ]
       },
-      "user_query": "How many people are sitting in the smart room on july 29, 2026?"
+      "user_query": "Is there a bottle in the recording on August 5th?"
     },
     "answer_packet": {
-      "query_id": "tellme_8ca804320fe0",
+      "query_id": "tellme_fab9104a5795",
       "status": "needs_tracefix",
       "answer": "This query requires a future TraceFix multi-agent workflow and cannot be fully answered in V0.",
       "confidence": 0.0,
@@ -941,11 +917,11 @@
       "selected_agent": null,
       "route_decision": {
         "route": "single_agent",
-        "intent": "historical_lookup",
-        "selected_agent": "motion_context_agent",
-        "selected_tool": "get_motion_context",
+        "intent": "general",
+        "selected_agent": "general_context_agent",
+        "selected_tool": "cityos_context_lookup",
         "required_tools": [
-          "get_motion_context"
+          "cityos_context_lookup"
         ],
         "rationale": "The query appears answerable with one focused CityOS-style context lookup.",
         "time_window": null,
@@ -958,7 +934,7 @@
       },
       "agent_plan": {},
       "raw_outputs": {
-        "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_8ca804320fe0",
+        "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_fab9104a5795",
         "logging_fallback_used": false,
         "llm_operational": {
           "agent_backend_mode": "llm",
@@ -969,16 +945,16 @@
           "decomposition": {
             "model": "gpt-4.1-mini",
             "last_used": "primary",
-            "last_latency_ms": 19161.62,
+            "last_latency_ms": 18476.71,
             "fallback_reason": null,
             "primary_calls": 1,
             "fallback_calls": 0,
             "last_request": {
-              "request_start": "2026-07-30T17:56:36.293095+00:00",
-              "first_response_time": "2026-07-30T17:56:55.435365+00:00",
-              "request_end": "2026-07-30T17:56:55.453627+00:00",
-              "total_duration_ms": 19160.5,
-              "time_to_first_response_ms": 19142.32,
+              "request_start": "2026-08-06T14:26:09.422900+00:00",
+              "first_response_time": "2026-08-06T14:26:27.886529+00:00",
+              "request_end": "2026-08-06T14:26:27.899001+00:00",
+              "total_duration_ms": 18476.05,
+              "time_to_first_response_ms": 18463.63,
               "model": "gpt-4.1-mini",
               "provider": "https://api.openai.com/v1",
               "provider_name": "OpenAI",
@@ -992,21 +968,21 @@
         },
         "agent_backend_mode": "llm",
         "tracefix_task_spec": {
-          "task_id": "task_8ca804320fe0",
-          "query_id": "tellme_8ca804320fe0",
-          "user_query": "How many people are sitting in the smart room on july 29, 2026?",
+          "task_id": "task_fab9104a5795",
+          "query_id": "tellme_fab9104a5795",
+          "user_query": "Is there a bottle in the recording on August 5th?",
           "space_id": "smart_room_1",
-          "intent": "occupancy_lookup",
+          "intent": "general_lookup",
           "tracefix_reason": "Needs a safe non-executable contract.",
           "required_capabilities": [
             "answer_synthesis"
           ],
           "input_artifacts": [
             {
-              "artifact_id": "answer_packet",
+              "artifact_id": "general_context_packet",
               "artifact_type": "packet",
               "time_range": null,
-              "modality": "context",
+              "modality": null,
               "privacy_level": "structured_context_only"
             }
           ],
@@ -1026,7 +1002,7 @@
             "Return required fields only.",
             "Preserve privacy limits and caveats."
           ],
-          "output_contract_name": "direct_answer_v1",
+          "output_contract_name": "insufficient_evidence_v1",
           "route": "single_agent",
           "time_windows": [],
           "required_modalities": [
@@ -1036,8 +1012,8 @@
             "answer_synthesis_harness"
           ],
           "application_goal": {
-            "goal_type": "occupancy_count",
-            "user_intent": "occupancy_lookup",
+            "goal_type": "unsupported",
+            "user_intent": "general_lookup",
             "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
             "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
             "non_goals": [
@@ -1049,16 +1025,16 @@
           },
           "evidence_plan": {
             "primary_evidence": [
-              "answer_packet"
+              "general_context_packet"
             ],
             "supporting_evidence": [],
             "minimum_sufficient_evidence": [
-              "answer_packet"
+              "general_context_packet"
             ],
             "conflicting_evidence_checks": []
           },
           "answer_packet_requirements": {
-            "answer_type": "direct_answer",
+            "answer_type": "insufficient_evidence",
             "required_fields": [
               "answer",
               "confidence",
@@ -1068,16 +1044,15 @@
               "limitations"
             ],
             "allowed_claims": [
-              "bounded_count",
-              "presence_state",
-              "timestamped_event_summary"
+              "insufficient_evidence"
             ],
             "forbidden_claims": [
               "raw_sensor_access",
               "face_identity",
               "personal_identity",
               "medical_diagnosis",
-              "unsupported_behavioral_inference"
+              "unsupported_behavioral_inference",
+              "guessing"
             ],
             "must_include_confidence": true,
             "must_include_evidence_refs": true,
@@ -1086,7 +1061,7 @@
           },
           "evidence_card_contract": {
             "card_type": "insufficient_evidence",
-            "primary_question": "What did the structured context observe?",
+            "primary_question": "Could the system answer this from the available evidence?",
             "title_template": "Insufficient evidence to answer confidently",
             "claim_target": "insufficient_evidence",
             "allowed_conclusion_types": [
@@ -1100,7 +1075,8 @@
               "cause_or_intent_inference",
               "unsupported_behavioral_inference",
               "raw_sensor_access",
-              "fabricated_confidence"
+              "fabricated_confidence",
+              "guessing"
             ],
             "badge_requirements": [
               {
@@ -1143,8 +1119,7 @@
               }
             ],
             "summary_requirements": [
-              "State what could and could not be determined; do not fabricate confidence.",
-              "State the observed value and its bounded time window in one sentence."
+              "State what could and could not be determined; do not fabricate confidence."
             ],
             "confidence_requirements": {
               "confidence_kind": "composite_confidence",
@@ -1169,12 +1144,10 @@
             },
             "evidence_requirements": [],
             "caveat_requirements": [
-              "A stronger answer was not produced because the bounded evidence was insufficient.",
-              "Reflects structured context only; no causal interpretation."
+              "A stronger answer was not produced because the bounded evidence was insufficient."
             ],
             "provenance_requirements": [
-              "List which expected packets were missing or empty.",
-              "List the harness/packet ids backing the observed value."
+              "List which expected packets were missing or empty."
             ],
             "fallback_card_type": "insufficient_evidence"
           },
@@ -1195,19 +1168,18 @@
               "privacy_scope": "string",
               "limitations": "array"
             },
-            "answer_type": "direct_answer",
+            "answer_type": "insufficient_evidence",
             "fallback_answer_type": "insufficient_evidence",
             "allowed_claims": [
-              "bounded_count",
-              "presence_state",
-              "timestamped_event_summary"
+              "insufficient_evidence"
             ],
             "forbidden_claims": [
               "raw_sensor_access",
               "face_identity",
               "personal_identity",
               "medical_diagnosis",
-              "unsupported_behavioral_inference"
+              "unsupported_behavioral_inference",
+              "guessing"
             ],
             "must_include_confidence": true,
             "must_include_evidence_refs": true,
@@ -1235,14 +1207,9 @@
             "bounded_time_windows_required": true,
             "schema_validation_required": true,
             "must_preserve_forbidden_claims": true,
-            "validation_status": "repaired",
-            "repairs": [
-              "Trimmed harness plan to deterministic modalities.",
-              "Overrode proposed 'descriptive' card with deterministically supported 'insufficient_evidence' card.",
-              "Discarded LLM-supplied metric/confidence/badge definitions; deterministic card rules are authoritative."
-            ],
+            "validation_status": "accepted",
+            "repairs": [],
             "warnings": [
-              "No evidence-gathering harness survived capability/policy filtering (likely a coverage gap); proposal downgraded to unsupported.",
               "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
             ]
           },
@@ -1256,23 +1223,21 @@
             "face_identity",
             "personal_identity",
             "medical_diagnosis",
-            "unsupported_behavioral_inference"
+            "unsupported_behavioral_inference",
+            "guessing"
           ],
           "allowed_claims": [
-            "bounded_count",
-            "presence_state",
-            "timestamped_event_summary"
+            "insufficient_evidence"
           ],
-          "reasoning_summary": "Deterministic template proposal generated for query tellme_8ca804320fe0.",
+          "reasoning_summary": "Deterministic template proposal generated for query tellme_fab9104a5795.",
           "executable": false,
-          "reason": "occupancy_lookup",
+          "reason": "general_lookup",
           "target_tracefix_path": "TraceFix-main/",
           "status": "stub",
           "caveats": [
             "This is a stub only; TraceFix-main is not invoked in V0.",
             "Real TraceFix multi-agent execution is not integrated yet.",
             "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-            "No available sensor supports 'room_state' context for this space.",
             "Mock CityOS structured context may be incomplete.",
             "Confidence must remain bounded by available evidence.",
             "Use CityOS structured context only.",
@@ -1282,7 +1247,7 @@
           ]
         },
         "tracefix_bundle_summary": {
-          "task_id": "task_8ca804320fe0",
+          "task_id": "task_fab9104a5795",
           "agent_names": [
             "answer_synthesis_harness"
           ],
@@ -1296,21 +1261,21 @@
         }
       },
       "tracefix_task_spec": {
-        "task_id": "task_8ca804320fe0",
-        "query_id": "tellme_8ca804320fe0",
-        "user_query": "How many people are sitting in the smart room on july 29, 2026?",
+        "task_id": "task_fab9104a5795",
+        "query_id": "tellme_fab9104a5795",
+        "user_query": "Is there a bottle in the recording on August 5th?",
         "space_id": "smart_room_1",
-        "intent": "occupancy_lookup",
+        "intent": "general_lookup",
         "tracefix_reason": "Needs a safe non-executable contract.",
         "required_capabilities": [
           "answer_synthesis"
         ],
         "input_artifacts": [
           {
-            "artifact_id": "answer_packet",
+            "artifact_id": "general_context_packet",
             "artifact_type": "packet",
             "time_range": null,
-            "modality": "context",
+            "modality": null,
             "privacy_level": "structured_context_only"
           }
         ],
@@ -1330,7 +1295,7 @@
           "Return required fields only.",
           "Preserve privacy limits and caveats."
         ],
-        "output_contract_name": "direct_answer_v1",
+        "output_contract_name": "insufficient_evidence_v1",
         "route": "single_agent",
         "time_windows": [],
         "required_modalities": [
@@ -1340,8 +1305,8 @@
           "answer_synthesis_harness"
         ],
         "application_goal": {
-          "goal_type": "occupancy_count",
-          "user_intent": "occupancy_lookup",
+          "goal_type": "unsupported",
+          "user_intent": "general_lookup",
           "success_condition": "Return a privacy-bounded answer packet with confidence and evidence refs.",
           "failure_condition": "Return insufficient_evidence or escalate when the structured context is inadequate.",
           "non_goals": [
@@ -1353,16 +1318,16 @@
         },
         "evidence_plan": {
           "primary_evidence": [
-            "answer_packet"
+            "general_context_packet"
           ],
           "supporting_evidence": [],
           "minimum_sufficient_evidence": [
-            "answer_packet"
+            "general_context_packet"
           ],
           "conflicting_evidence_checks": []
         },
         "answer_packet_requirements": {
-          "answer_type": "direct_answer",
+          "answer_type": "insufficient_evidence",
           "required_fields": [
             "answer",
             "confidence",
@@ -1372,16 +1337,15 @@
             "limitations"
           ],
           "allowed_claims": [
-            "bounded_count",
-            "presence_state",
-            "timestamped_event_summary"
+            "insufficient_evidence"
           ],
           "forbidden_claims": [
             "raw_sensor_access",
             "face_identity",
             "personal_identity",
             "medical_diagnosis",
-            "unsupported_behavioral_inference"
+            "unsupported_behavioral_inference",
+            "guessing"
           ],
           "must_include_confidence": true,
           "must_include_evidence_refs": true,
@@ -1390,7 +1354,7 @@
         },
         "evidence_card_contract": {
           "card_type": "insufficient_evidence",
-          "primary_question": "What did the structured context observe?",
+          "primary_question": "Could the system answer this from the available evidence?",
           "title_template": "Insufficient evidence to answer confidently",
           "claim_target": "insufficient_evidence",
           "allowed_conclusion_types": [
@@ -1404,7 +1368,8 @@
             "cause_or_intent_inference",
             "unsupported_behavioral_inference",
             "raw_sensor_access",
-            "fabricated_confidence"
+            "fabricated_confidence",
+            "guessing"
           ],
           "badge_requirements": [
             {
@@ -1447,8 +1412,7 @@
             }
           ],
           "summary_requirements": [
-            "State what could and could not be determined; do not fabricate confidence.",
-            "State the observed value and its bounded time window in one sentence."
+            "State what could and could not be determined; do not fabricate confidence."
           ],
           "confidence_requirements": {
             "confidence_kind": "composite_confidence",
@@ -1473,12 +1437,10 @@
           },
           "evidence_requirements": [],
           "caveat_requirements": [
-            "A stronger answer was not produced because the bounded evidence was insufficient.",
-            "Reflects structured context only; no causal interpretation."
+            "A stronger answer was not produced because the bounded evidence was insufficient."
           ],
           "provenance_requirements": [
-            "List which expected packets were missing or empty.",
-            "List the harness/packet ids backing the observed value."
+            "List which expected packets were missing or empty."
           ],
           "fallback_card_type": "insufficient_evidence"
         },
@@ -1499,19 +1461,18 @@
             "privacy_scope": "string",
             "limitations": "array"
           },
-          "answer_type": "direct_answer",
+          "answer_type": "insufficient_evidence",
           "fallback_answer_type": "insufficient_evidence",
           "allowed_claims": [
-            "bounded_count",
-            "presence_state",
-            "timestamped_event_summary"
+            "insufficient_evidence"
           ],
           "forbidden_claims": [
             "raw_sensor_access",
             "face_identity",
             "personal_identity",
             "medical_diagnosis",
-            "unsupported_behavioral_inference"
+            "unsupported_behavioral_inference",
+            "guessing"
           ],
           "must_include_confidence": true,
           "must_include_evidence_refs": true,
@@ -1539,14 +1500,9 @@
           "bounded_time_windows_required": true,
           "schema_validation_required": true,
           "must_preserve_forbidden_claims": true,
-          "validation_status": "repaired",
-          "repairs": [
-            "Trimmed harness plan to deterministic modalities.",
-            "Overrode proposed 'descriptive' card with deterministically supported 'insufficient_evidence' card.",
-            "Discarded LLM-supplied metric/confidence/badge definitions; deterministic card rules are authoritative."
-          ],
+          "validation_status": "accepted",
+          "repairs": [],
           "warnings": [
-            "No evidence-gathering harness survived capability/policy filtering (likely a coverage gap); proposal downgraded to unsupported.",
             "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
           ]
         },
@@ -1560,23 +1516,21 @@
           "face_identity",
           "personal_identity",
           "medical_diagnosis",
-          "unsupported_behavioral_inference"
+          "unsupported_behavioral_inference",
+          "guessing"
         ],
         "allowed_claims": [
-          "bounded_count",
-          "presence_state",
-          "timestamped_event_summary"
+          "insufficient_evidence"
         ],
-        "reasoning_summary": "Deterministic template proposal generated for query tellme_8ca804320fe0.",
+        "reasoning_summary": "Deterministic template proposal generated for query tellme_fab9104a5795.",
         "executable": false,
-        "reason": "occupancy_lookup",
+        "reason": "general_lookup",
         "target_tracefix_path": "TraceFix-main/",
         "status": "stub",
         "caveats": [
           "This is a stub only; TraceFix-main is not invoked in V0.",
           "Real TraceFix multi-agent execution is not integrated yet.",
           "LLM reasoning is audit-only; validators and deterministic guardrails remain authoritative.",
-          "No available sensor supports 'room_state' context for this space.",
           "Mock CityOS structured context may be incomplete.",
           "Confidence must remain bounded by available evidence.",
           "Use CityOS structured context only.",
@@ -1587,140 +1541,4201 @@
       },
       "error_message": null
     },
-    "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_8ca804320fe0",
+    "run_dir": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.runs\\tellme\\tellme_fab9104a5795",
     "warnings": [
-      "No evidence-gathering harness survived capability/policy filtering (likely a coverage gap); proposal downgraded to unsupported.",
       "Proposal was marked unsupported and will compile to an insufficient-evidence TaskSpec."
     ],
-    "answer_summary": "28 people are sitting in the smart room on July 29, 2026.",
-    "chat_answer": "28 people are sitting in the smart room on July 29, 2026.",
+    "answer_summary": "Yes. A bottle was detected in the August 5 recording, up to 1 at once, visible in about 32% of sampled frames with peak confidence 0.74.",
+    "chat_answer": "Yes. A bottle was detected in the August 5 recording, up to 1 at once, visible in about 32% of sampled frames with peak confidence 0.74.",
     "web_data_answer": {
-      "answer": "28 people are sitting in the smart room on July 29, 2026.",
-      "text": "28 people are sitting in the smart room on July 29, 2026.",
-      "chatAnswer": "28 people are sitting in the smart room on July 29, 2026.",
-      "chat_answer": "28 people are sitting in the smart room on July 29, 2026.",
+      "answer": "Yes. A bottle was detected in the August 5 recording, up to 1 at once, visible in about 32% of sampled frames with peak confidence 0.74.",
+      "text": "Yes. A bottle was detected in the August 5 recording, up to 1 at once, visible in about 32% of sampled frames with peak confidence 0.74.",
+      "chatAnswer": "Yes. A bottle was detected in the August 5 recording, up to 1 at once, visible in about 32% of sampled frames with peak confidence 0.74.",
+      "chat_answer": "Yes. A bottle was detected in the August 5 recording, up to 1 at once, visible in about 32% of sampled frames with peak confidence 0.74.",
       "producer_agent": "OCCUPANCY_ANALYZER",
-      "confidence": 0.95,
+      "confidence": 0.86,
       "evidence_refs": [
-        "OCCUPANCY_ANALYZER:rec_20260729_141500:cam2-d435",
-        "OCCUPANCY_ANALYZER:rec_20260729_141500:cam2-d455"
+        "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-cam1",
+        "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-cam2",
+        "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-cam3",
+        "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-cam4",
+        "OCCUPANCY_ANALYZER:rec_20260805_110324:cam2-d455"
       ],
       "limitations": [
-        "Counts are bounded by the available aggregate inference data."
+        "Counts are bounded by the available aggregate inference data.",
+        "Object detections are sampled at 5 Hz and dropped below the detector's confidence threshold; counts are per-frame, not unique objects.",
+        "Occupancy comes from the depth-verified camera(s) only; raw detector counts from cam2-cam1, cam2-cam2, cam2-cam3, cam2-cam4 were not used because they can include people on screens or seen through windows."
       ],
-      "source_count": 405,
-      "evidence_used_count": 2,
+      "source_count": 426,
+      "evidence_used_count": 5,
       "recording": {
-        "day": "day_19_2026-07-29",
-        "rec": "rec_20260729_141500"
+        "day": "day_23_2026-08-05",
+        "rec": "rec_20260805_110324"
       },
       "cameras": [
         {
-          "camera": "cam2-d435",
-          "peakPeople": null,
+          "camera": "cam2-cam1",
+          "peakPeople": 6,
           "lastPeople": 2,
-          "activities": [
-            "carry/hold (an object)",
-            "sit",
-            "stand"
+          "occupancyVerified": false,
+          "objects": {
+            "tv": {
+              "frames": 304,
+              "maxPerFrame": 2,
+              "avgPerFrame": 1.951,
+              "peakConf": 0.928,
+              "visibleFraction": 1.0
+            },
+            "chair": {
+              "frames": 304,
+              "maxPerFrame": 8,
+              "avgPerFrame": 5.74,
+              "peakConf": 0.925,
+              "visibleFraction": 1.0
+            },
+            "keyboard": {
+              "frames": 304,
+              "maxPerFrame": 4,
+              "avgPerFrame": 2.312,
+              "peakConf": 0.912,
+              "visibleFraction": 1.0
+            },
+            "person": {
+              "frames": 303,
+              "maxPerFrame": 6,
+              "avgPerFrame": 2.516,
+              "peakConf": 0.953,
+              "visibleFraction": 0.997
+            },
+            "mouse": {
+              "frames": 66,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.217,
+              "peakConf": 0.602,
+              "visibleFraction": 0.217
+            },
+            "bottle": {
+              "frames": 35,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.115,
+              "peakConf": 0.501,
+              "visibleFraction": 0.115
+            },
+            "bed": {
+              "frames": 4,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.013,
+              "peakConf": 0.415,
+              "visibleFraction": 0.013
+            },
+            "backpack": {
+              "frames": 1,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.003,
+              "peakConf": 0.587,
+              "visibleFraction": 0.003
+            }
+          },
+          "sounds": {
+            "Speech": {
+              "windows": 17,
+              "peakProb": 0.949
+            },
+            "Door": {
+              "windows": 13,
+              "peakProb": 0.611
+            },
+            "Slam": {
+              "windows": 4,
+              "peakProb": 0.233
+            },
+            "Animal": {
+              "windows": 1,
+              "peakProb": 0.335
+            },
+            "Arrow": {
+              "windows": 1,
+              "peakProb": 0.224
+            },
+            "Sliding door": {
+              "windows": 1,
+              "peakProb": 0.217
+            }
+          },
+          "framesAnalyzed": 304,
+          "durationSec": 61.739,
+          "activities": [],
+          "activityCounts": {},
+          "activityCountMethods": {},
+          "activityCountsUnion": {},
+          "occupancySamples": [
+            {
+              "t": 0.0,
+              "count": 3
+            },
+            {
+              "t": 0.24,
+              "count": 3
+            },
+            {
+              "t": 0.4,
+              "count": 3
+            },
+            {
+              "t": 0.68,
+              "count": 3
+            },
+            {
+              "t": 0.95,
+              "count": 2
+            },
+            {
+              "t": 1.04,
+              "count": 1
+            },
+            {
+              "t": 1.34,
+              "count": 2
+            },
+            {
+              "t": 1.58,
+              "count": 2
+            },
+            {
+              "t": 1.7,
+              "count": 3
+            },
+            {
+              "t": 2.02,
+              "count": 3
+            },
+            {
+              "t": 2.14,
+              "count": 2
+            },
+            {
+              "t": 2.34,
+              "count": 2
+            },
+            {
+              "t": 2.54,
+              "count": 2
+            },
+            {
+              "t": 2.7,
+              "count": 1
+            },
+            {
+              "t": 3.02,
+              "count": 1
+            },
+            {
+              "t": 3.14,
+              "count": 2
+            },
+            {
+              "t": 3.34,
+              "count": 3
+            },
+            {
+              "t": 3.58,
+              "count": 3
+            },
+            {
+              "t": 3.7,
+              "count": 2
+            },
+            {
+              "t": 4.02,
+              "count": 3
+            },
+            {
+              "t": 4.17,
+              "count": 2
+            },
+            {
+              "t": 4.37,
+              "count": 4
+            },
+            {
+              "t": 4.56,
+              "count": 3
+            },
+            {
+              "t": 4.72,
+              "count": 3
+            },
+            {
+              "t": 5.04,
+              "count": 3
+            },
+            {
+              "t": 5.24,
+              "count": 3
+            },
+            {
+              "t": 5.44,
+              "count": 4
+            },
+            {
+              "t": 5.64,
+              "count": 3
+            },
+            {
+              "t": 5.84,
+              "count": 3
+            },
+            {
+              "t": 6.04,
+              "count": 3
+            },
+            {
+              "t": 6.24,
+              "count": 3
+            },
+            {
+              "t": 6.44,
+              "count": 3
+            },
+            {
+              "t": 6.64,
+              "count": 3
+            },
+            {
+              "t": 6.84,
+              "count": 2
+            },
+            {
+              "t": 7.05,
+              "count": 3
+            },
+            {
+              "t": 7.24,
+              "count": 3
+            },
+            {
+              "t": 7.44,
+              "count": 2
+            },
+            {
+              "t": 7.64,
+              "count": 2
+            },
+            {
+              "t": 7.84,
+              "count": 2
+            },
+            {
+              "t": 8.04,
+              "count": 3
+            },
+            {
+              "t": 8.27,
+              "count": 3
+            },
+            {
+              "t": 8.43,
+              "count": 3
+            },
+            {
+              "t": 8.63,
+              "count": 2
+            },
+            {
+              "t": 8.83,
+              "count": 2
+            },
+            {
+              "t": 9.07,
+              "count": 3
+            },
+            {
+              "t": 9.43,
+              "count": 3
+            },
+            {
+              "t": 9.58,
+              "count": 3
+            },
+            {
+              "t": 9.73,
+              "count": 2
+            },
+            {
+              "t": 9.97,
+              "count": 2
+            },
+            {
+              "t": 10.2,
+              "count": 3
+            },
+            {
+              "t": 10.38,
+              "count": 3
+            },
+            {
+              "t": 10.56,
+              "count": 3
+            },
+            {
+              "t": 10.75,
+              "count": 3
+            },
+            {
+              "t": 11.1,
+              "count": 3
+            },
+            {
+              "t": 11.19,
+              "count": 3
+            },
+            {
+              "t": 11.4,
+              "count": 1
+            },
+            {
+              "t": 11.64,
+              "count": 2
+            },
+            {
+              "t": 11.76,
+              "count": 2
+            },
+            {
+              "t": 12.06,
+              "count": 1
+            },
+            {
+              "t": 12.16,
+              "count": 2
+            },
+            {
+              "t": 12.36,
+              "count": 2
+            },
+            {
+              "t": 12.56,
+              "count": 2
+            },
+            {
+              "t": 12.72,
+              "count": 2
+            },
+            {
+              "t": 13.04,
+              "count": 2
+            },
+            {
+              "t": 13.24,
+              "count": 2
+            },
+            {
+              "t": 13.43,
+              "count": 2
+            },
+            {
+              "t": 13.65,
+              "count": 2
+            },
+            {
+              "t": 13.85,
+              "count": 2
+            },
+            {
+              "t": 14.05,
+              "count": 2
+            },
+            {
+              "t": 14.25,
+              "count": 2
+            },
+            {
+              "t": 14.45,
+              "count": 3
+            },
+            {
+              "t": 14.65,
+              "count": 3
+            },
+            {
+              "t": 14.85,
+              "count": 3
+            },
+            {
+              "t": 15.05,
+              "count": 2
+            },
+            {
+              "t": 15.25,
+              "count": 3
+            },
+            {
+              "t": 15.45,
+              "count": 3
+            },
+            {
+              "t": 15.65,
+              "count": 2
+            },
+            {
+              "t": 15.85,
+              "count": 2
+            },
+            {
+              "t": 16.05,
+              "count": 3
+            },
+            {
+              "t": 16.25,
+              "count": 3
+            },
+            {
+              "t": 16.45,
+              "count": 3
+            },
+            {
+              "t": 16.65,
+              "count": 2
+            },
+            {
+              "t": 16.87,
+              "count": 3
+            },
+            {
+              "t": 17.07,
+              "count": 3
+            },
+            {
+              "t": 17.28,
+              "count": 3
+            },
+            {
+              "t": 17.47,
+              "count": 3
+            },
+            {
+              "t": 17.69,
+              "count": 2
+            },
+            {
+              "t": 17.87,
+              "count": 2
+            },
+            {
+              "t": 18.07,
+              "count": 2
+            },
+            {
+              "t": 18.28,
+              "count": 2
+            },
+            {
+              "t": 18.46,
+              "count": 2
+            },
+            {
+              "t": 18.7,
+              "count": 3
+            },
+            {
+              "t": 18.9,
+              "count": 2
+            },
+            {
+              "t": 19.06,
+              "count": 2
+            },
+            {
+              "t": 19.26,
+              "count": 1
+            },
+            {
+              "t": 19.46,
+              "count": 3
+            },
+            {
+              "t": 19.66,
+              "count": 2
+            },
+            {
+              "t": 19.86,
+              "count": 1
+            },
+            {
+              "t": 20.05,
+              "count": 3
+            },
+            {
+              "t": 20.25,
+              "count": 2
+            },
+            {
+              "t": 20.45,
+              "count": 3
+            },
+            {
+              "t": 20.65,
+              "count": 3
+            },
+            {
+              "t": 20.89,
+              "count": 2
+            },
+            {
+              "t": 21.05,
+              "count": 3
+            },
+            {
+              "t": 21.26,
+              "count": 3
+            },
+            {
+              "t": 21.45,
+              "count": 3
+            },
+            {
+              "t": 21.65,
+              "count": 4
+            },
+            {
+              "t": 21.89,
+              "count": 3
+            },
+            {
+              "t": 22.05,
+              "count": 2
+            },
+            {
+              "t": 22.25,
+              "count": 2
+            },
+            {
+              "t": 22.45,
+              "count": 2
+            },
+            {
+              "t": 22.65,
+              "count": 2
+            },
+            {
+              "t": 22.88,
+              "count": 2
+            },
+            {
+              "t": 23.08,
+              "count": 2
+            },
+            {
+              "t": 23.24,
+              "count": 3
+            },
+            {
+              "t": 23.48,
+              "count": 3
+            },
+            {
+              "t": 23.68,
+              "count": 3
+            },
+            {
+              "t": 23.88,
+              "count": 2
+            },
+            {
+              "t": 24.08,
+              "count": 3
+            },
+            {
+              "t": 24.28,
+              "count": 3
+            },
+            {
+              "t": 24.48,
+              "count": 3
+            },
+            {
+              "t": 24.68,
+              "count": 3
+            },
+            {
+              "t": 24.88,
+              "count": 3
+            },
+            {
+              "t": 25.08,
+              "count": 2
+            },
+            {
+              "t": 25.27,
+              "count": 2
+            },
+            {
+              "t": 25.46,
+              "count": 2
+            },
+            {
+              "t": 25.66,
+              "count": 2
+            },
+            {
+              "t": 25.86,
+              "count": 2
+            },
+            {
+              "t": 26.06,
+              "count": 2
+            },
+            {
+              "t": 26.29,
+              "count": 2
+            },
+            {
+              "t": 26.46,
+              "count": 2
+            },
+            {
+              "t": 26.69,
+              "count": 3
+            },
+            {
+              "t": 26.88,
+              "count": 3
+            },
+            {
+              "t": 27.08,
+              "count": 3
+            },
+            {
+              "t": 27.33,
+              "count": 4
+            },
+            {
+              "t": 27.54,
+              "count": 3
+            },
+            {
+              "t": 27.71,
+              "count": 3
+            },
+            {
+              "t": 28.04,
+              "count": 3
+            },
+            {
+              "t": 28.23,
+              "count": 3
+            },
+            {
+              "t": 28.39,
+              "count": 3
+            },
+            {
+              "t": 28.59,
+              "count": 2
+            },
+            {
+              "t": 28.79,
+              "count": 2
+            },
+            {
+              "t": 29.02,
+              "count": 2
+            },
+            {
+              "t": 29.1,
+              "count": 2
+            },
+            {
+              "t": 29.44,
+              "count": 2
+            },
+            {
+              "t": 29.62,
+              "count": 2
+            },
+            {
+              "t": 29.78,
+              "count": 2
+            },
+            {
+              "t": 30.02,
+              "count": 2
+            },
+            {
+              "t": 30.18,
+              "count": 2
+            },
+            {
+              "t": 30.38,
+              "count": 2
+            },
+            {
+              "t": 30.58,
+              "count": 2
+            },
+            {
+              "t": 30.78,
+              "count": 2
+            },
+            {
+              "t": 31.02,
+              "count": 2
+            },
+            {
+              "t": 31.23,
+              "count": 2
+            },
+            {
+              "t": 31.41,
+              "count": 2
+            },
+            {
+              "t": 31.64,
+              "count": 4
+            },
+            {
+              "t": 31.76,
+              "count": 2
+            },
+            {
+              "t": 32.08,
+              "count": 2
+            },
+            {
+              "t": 32.28,
+              "count": 2
+            },
+            {
+              "t": 32.47,
+              "count": 2
+            },
+            {
+              "t": 32.67,
+              "count": 2
+            },
+            {
+              "t": 32.87,
+              "count": 2
+            },
+            {
+              "t": 33.07,
+              "count": 2
+            },
+            {
+              "t": 33.28,
+              "count": 2
+            },
+            {
+              "t": 33.47,
+              "count": 2
+            },
+            {
+              "t": 33.7,
+              "count": 2
+            },
+            {
+              "t": 33.9,
+              "count": 2
+            },
+            {
+              "t": 34.1,
+              "count": 2
+            },
+            {
+              "t": 34.3,
+              "count": 2
+            },
+            {
+              "t": 34.5,
+              "count": 2
+            },
+            {
+              "t": 34.7,
+              "count": 3
+            },
+            {
+              "t": 34.9,
+              "count": 2
+            },
+            {
+              "t": 35.09,
+              "count": 2
+            },
+            {
+              "t": 35.29,
+              "count": 3
+            },
+            {
+              "t": 35.49,
+              "count": 3
+            },
+            {
+              "t": 35.69,
+              "count": 2
+            },
+            {
+              "t": 35.77,
+              "count": 2
+            },
+            {
+              "t": 36.09,
+              "count": 2
+            },
+            {
+              "t": 36.29,
+              "count": 2
+            },
+            {
+              "t": 36.49,
+              "count": 2
+            },
+            {
+              "t": 36.69,
+              "count": 3
+            },
+            {
+              "t": 36.89,
+              "count": 3
+            },
+            {
+              "t": 37.09,
+              "count": 2
+            },
+            {
+              "t": 37.3,
+              "count": 3
+            },
+            {
+              "t": 37.49,
+              "count": 3
+            },
+            {
+              "t": 37.69,
+              "count": 2
+            },
+            {
+              "t": 37.77,
+              "count": 2
+            },
+            {
+              "t": 38.08,
+              "count": 2
+            },
+            {
+              "t": 38.2,
+              "count": 3
+            },
+            {
+              "t": 38.52,
+              "count": 3
+            },
+            {
+              "t": 38.6,
+              "count": 3
+            },
+            {
+              "t": 38.88,
+              "count": 3
+            },
+            {
+              "t": 39.08,
+              "count": 2
+            },
+            {
+              "t": 39.28,
+              "count": 3
+            },
+            {
+              "t": 39.4,
+              "count": 3
+            },
+            {
+              "t": 39.68,
+              "count": 3
+            },
+            {
+              "t": 39.76,
+              "count": 3
+            },
+            {
+              "t": 40.08,
+              "count": 3
+            },
+            {
+              "t": 40.2,
+              "count": 3
+            },
+            {
+              "t": 40.52,
+              "count": 4
+            },
+            {
+              "t": 40.64,
+              "count": 3
+            },
+            {
+              "t": 40.8,
+              "count": 3
+            },
+            {
+              "t": 41.09,
+              "count": 3
+            },
+            {
+              "t": 41.32,
+              "count": 5
+            },
+            {
+              "t": 41.52,
+              "count": 6
+            },
+            {
+              "t": 41.63,
+              "count": 2
+            },
+            {
+              "t": 41.79,
+              "count": 2
+            },
+            {
+              "t": 42.09,
+              "count": 3
+            },
+            {
+              "t": 42.28,
+              "count": 2
+            },
+            {
+              "t": 42.51,
+              "count": 1
+            },
+            {
+              "t": 42.63,
+              "count": 1
+            },
+            {
+              "t": 42.77,
+              "count": 2
+            },
+            {
+              "t": 43.13,
+              "count": 4
+            },
+            {
+              "t": 43.33,
+              "count": 2
+            },
+            {
+              "t": 43.45,
+              "count": 2
+            },
+            {
+              "t": 43.65,
+              "count": 2
+            },
+            {
+              "t": 43.81,
+              "count": 2
+            },
+            {
+              "t": 44.13,
+              "count": 2
+            },
+            {
+              "t": 44.25,
+              "count": 2
+            },
+            {
+              "t": 44.45,
+              "count": 3
+            },
+            {
+              "t": 44.65,
+              "count": 4
+            },
+            {
+              "t": 44.81,
+              "count": 3
+            },
+            {
+              "t": 45.12,
+              "count": 4
+            },
+            {
+              "t": 45.43,
+              "count": 4
+            },
+            {
+              "t": 45.66,
+              "count": 3
+            },
+            {
+              "t": 45.78,
+              "count": 4
+            },
+            {
+              "t": 46.07,
+              "count": 5
+            },
+            {
+              "t": 46.12,
+              "count": 3
+            },
+            {
+              "t": 46.44,
+              "count": 3
+            },
+            {
+              "t": 46.64,
+              "count": 4
+            },
+            {
+              "t": 46.8,
+              "count": 4
+            },
+            {
+              "t": 47.04,
+              "count": 3
+            },
+            {
+              "t": 47.24,
+              "count": 3
+            },
+            {
+              "t": 47.44,
+              "count": 4
+            },
+            {
+              "t": 47.67,
+              "count": 4
+            },
+            {
+              "t": 47.78,
+              "count": 4
+            },
+            {
+              "t": 48.06,
+              "count": 4
+            },
+            {
+              "t": 48.22,
+              "count": 5
+            },
+            {
+              "t": 48.44,
+              "count": 5
+            },
+            {
+              "t": 48.52,
+              "count": 4
+            },
+            {
+              "t": 48.8,
+              "count": 4
+            },
+            {
+              "t": 49.04,
+              "count": 4
+            },
+            {
+              "t": 49.12,
+              "count": 4
+            },
+            {
+              "t": 49.44,
+              "count": 3
+            },
+            {
+              "t": 49.68,
+              "count": 3
+            },
+            {
+              "t": 49.8,
+              "count": 2
+            },
+            {
+              "t": 50.12,
+              "count": 2
+            },
+            {
+              "t": 50.24,
+              "count": 2
+            },
+            {
+              "t": 50.44,
+              "count": 2
+            },
+            {
+              "t": 50.64,
+              "count": 2
+            },
+            {
+              "t": 50.81,
+              "count": 1
+            },
+            {
+              "t": 51.14,
+              "count": 3
+            },
+            {
+              "t": 51.24,
+              "count": 3
+            },
+            {
+              "t": 51.47,
+              "count": 3
+            },
+            {
+              "t": 51.7,
+              "count": 3
+            },
+            {
+              "t": 51.82,
+              "count": 3
+            },
+            {
+              "t": 52.13,
+              "count": 2
+            },
+            {
+              "t": 52.27,
+              "count": 2
+            },
+            {
+              "t": 52.46,
+              "count": 3
+            },
+            {
+              "t": 52.66,
+              "count": 1
+            },
+            {
+              "t": 52.8,
+              "count": 1
+            },
+            {
+              "t": 53.13,
+              "count": 1
+            },
+            {
+              "t": 53.42,
+              "count": 1
+            },
+            {
+              "t": 53.66,
+              "count": 3
+            },
+            {
+              "t": 53.82,
+              "count": 1
+            },
+            {
+              "t": 53.97,
+              "count": 3
+            },
+            {
+              "t": 54.16,
+              "count": 3
+            },
+            {
+              "t": 54.34,
+              "count": 3
+            },
+            {
+              "t": 54.53,
+              "count": 3
+            },
+            {
+              "t": 54.75,
+              "count": 2
+            },
+            {
+              "t": 54.93,
+              "count": 2
+            },
+            {
+              "t": 55.13,
+              "count": 3
+            },
+            {
+              "t": 55.34,
+              "count": 3
+            },
+            {
+              "t": 55.58,
+              "count": 3
+            },
+            {
+              "t": 55.73,
+              "count": 3
+            },
+            {
+              "t": 55.93,
+              "count": 2
+            },
+            {
+              "t": 56.13,
+              "count": 2
+            },
+            {
+              "t": 56.35,
+              "count": 2
+            },
+            {
+              "t": 56.53,
+              "count": 2
+            },
+            {
+              "t": 56.72,
+              "count": 2
+            },
+            {
+              "t": 57.04,
+              "count": 1
+            },
+            {
+              "t": 57.12,
+              "count": 3
+            },
+            {
+              "t": 57.44,
+              "count": 3
+            },
+            {
+              "t": 57.72,
+              "count": 3
+            },
+            {
+              "t": 57.87,
+              "count": 3
+            },
+            {
+              "t": 58.07,
+              "count": 2
+            },
+            {
+              "t": 58.31,
+              "count": 1
+            },
+            {
+              "t": 58.5,
+              "count": 0
+            },
+            {
+              "t": 58.69,
+              "count": 1
+            },
+            {
+              "t": 58.83,
+              "count": 1
+            },
+            {
+              "t": 59.15,
+              "count": 2
+            },
+            {
+              "t": 59.26,
+              "count": 1
+            },
+            {
+              "t": 59.48,
+              "count": 2
+            },
+            {
+              "t": 59.68,
+              "count": 2
+            },
+            {
+              "t": 59.87,
+              "count": 1
+            },
+            {
+              "t": 60.1,
+              "count": 3
+            },
+            {
+              "t": 60.28,
+              "count": 3
+            },
+            {
+              "t": 60.52,
+              "count": 2
+            },
+            {
+              "t": 60.66,
+              "count": 3
+            },
+            {
+              "t": 60.84,
+              "count": 2
+            },
+            {
+              "t": 61.17,
+              "count": 2
+            },
+            {
+              "t": 61.35,
+              "count": 2
+            },
+            {
+              "t": 61.54,
+              "count": 2
+            },
+            {
+              "t": 61.74,
+              "count": 2
+            }
           ],
-          "activityCounts": {
-            "sit": 3,
-            "stand": 5
-          },
-          "activityTrackIds": {
-            "sit": [
-              "1",
-              "10",
-              "59"
-            ],
-            "stand": [
-              "13",
-              "2",
-              "29",
-              "65",
-              "68"
-            ]
-          },
+          "activityTrackIds": {},
           "endpoints": {
-            "action-ava": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d435/inference/action-ava",
-            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d435/inference/geo",
-            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d435/inference/yolo26m",
-            "yolo26n-pose": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d435/inference/yolo26n-pose"
+            "audio-passt": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam1/inference/audio-passt",
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam1/inference/geo",
+            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam1/inference/yolo26m"
           },
           "pose": {
-            "available": true
+            "available": false
+          }
+        },
+        {
+          "camera": "cam2-cam2",
+          "peakPeople": 5,
+          "lastPeople": 2,
+          "occupancyVerified": false,
+          "objects": {
+            "chair": {
+              "frames": 103,
+              "maxPerFrame": 5,
+              "avgPerFrame": 3.738,
+              "peakConf": 0.957,
+              "visibleFraction": 1.0
+            },
+            "person": {
+              "frames": 103,
+              "maxPerFrame": 5,
+              "avgPerFrame": 2.699,
+              "peakConf": 0.958,
+              "visibleFraction": 1.0
+            },
+            "tv": {
+              "frames": 103,
+              "maxPerFrame": 1,
+              "avgPerFrame": 1,
+              "peakConf": 0.889,
+              "visibleFraction": 1.0
+            },
+            "keyboard": {
+              "frames": 103,
+              "maxPerFrame": 3,
+              "avgPerFrame": 2.019,
+              "peakConf": 0.769,
+              "visibleFraction": 1.0
+            },
+            "book": {
+              "frames": 102,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.99,
+              "peakConf": 0.641,
+              "visibleFraction": 0.99
+            },
+            "bed": {
+              "frames": 101,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.981,
+              "peakConf": 0.883,
+              "visibleFraction": 0.981
+            },
+            "laptop": {
+              "frames": 24,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.233,
+              "peakConf": 0.595,
+              "visibleFraction": 0.233
+            },
+            "mouse": {
+              "frames": 5,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.049,
+              "peakConf": 0.477,
+              "visibleFraction": 0.049
+            }
+          },
+          "sounds": {},
+          "framesAnalyzed": 103,
+          "durationSec": 61.74,
+          "activities": [],
+          "activityCounts": {},
+          "activityCountMethods": {},
+          "activityCountsUnion": {},
+          "occupancySamples": [
+            {
+              "t": 0.0,
+              "count": 2
+            },
+            {
+              "t": 0.6,
+              "count": 1
+            },
+            {
+              "t": 1.12,
+              "count": 2
+            },
+            {
+              "t": 1.78,
+              "count": 2
+            },
+            {
+              "t": 2.42,
+              "count": 2
+            },
+            {
+              "t": 3.02,
+              "count": 3
+            },
+            {
+              "t": 3.62,
+              "count": 3
+            },
+            {
+              "t": 4.25,
+              "count": 3
+            },
+            {
+              "t": 4.72,
+              "count": 3
+            },
+            {
+              "t": 5.32,
+              "count": 3
+            },
+            {
+              "t": 5.92,
+              "count": 3
+            },
+            {
+              "t": 6.52,
+              "count": 3
+            },
+            {
+              "t": 7.12,
+              "count": 3
+            },
+            {
+              "t": 7.72,
+              "count": 3
+            },
+            {
+              "t": 8.31,
+              "count": 3
+            },
+            {
+              "t": 8.95,
+              "count": 4
+            },
+            {
+              "t": 9.65,
+              "count": 3
+            },
+            {
+              "t": 10.15,
+              "count": 3
+            },
+            {
+              "t": 10.75,
+              "count": 3
+            },
+            {
+              "t": 11.35,
+              "count": 3
+            },
+            {
+              "t": 11.94,
+              "count": 4
+            },
+            {
+              "t": 12.53,
+              "count": 2
+            },
+            {
+              "t": 13.13,
+              "count": 3
+            },
+            {
+              "t": 13.73,
+              "count": 3
+            },
+            {
+              "t": 14.33,
+              "count": 2
+            },
+            {
+              "t": 14.93,
+              "count": 2
+            },
+            {
+              "t": 15.53,
+              "count": 1
+            },
+            {
+              "t": 16.13,
+              "count": 2
+            },
+            {
+              "t": 16.73,
+              "count": 2
+            },
+            {
+              "t": 17.35,
+              "count": 3
+            },
+            {
+              "t": 17.95,
+              "count": 3
+            },
+            {
+              "t": 18.55,
+              "count": 3
+            },
+            {
+              "t": 19.14,
+              "count": 3
+            },
+            {
+              "t": 19.74,
+              "count": 4
+            },
+            {
+              "t": 20.33,
+              "count": 3
+            },
+            {
+              "t": 20.93,
+              "count": 3
+            },
+            {
+              "t": 21.57,
+              "count": 3
+            },
+            {
+              "t": 22.17,
+              "count": 3
+            },
+            {
+              "t": 22.77,
+              "count": 4
+            },
+            {
+              "t": 23.36,
+              "count": 3
+            },
+            {
+              "t": 23.96,
+              "count": 3
+            },
+            {
+              "t": 24.56,
+              "count": 3
+            },
+            {
+              "t": 25.15,
+              "count": 4
+            },
+            {
+              "t": 25.74,
+              "count": 3
+            },
+            {
+              "t": 26.39,
+              "count": 3
+            },
+            {
+              "t": 26.96,
+              "count": 2
+            },
+            {
+              "t": 27.58,
+              "count": 3
+            },
+            {
+              "t": 28.18,
+              "count": 3
+            },
+            {
+              "t": 28.75,
+              "count": 3
+            },
+            {
+              "t": 29.34,
+              "count": 3
+            },
+            {
+              "t": 29.94,
+              "count": 3
+            },
+            {
+              "t": 30.59,
+              "count": 3
+            },
+            {
+              "t": 31.17,
+              "count": 3
+            },
+            {
+              "t": 31.76,
+              "count": 4
+            },
+            {
+              "t": 32.4,
+              "count": 3
+            },
+            {
+              "t": 32.83,
+              "count": 3
+            },
+            {
+              "t": 33.47,
+              "count": 3
+            },
+            {
+              "t": 34.18,
+              "count": 3
+            },
+            {
+              "t": 34.78,
+              "count": 3
+            },
+            {
+              "t": 35.37,
+              "count": 3
+            },
+            {
+              "t": 35.97,
+              "count": 3
+            },
+            {
+              "t": 36.62,
+              "count": 3
+            },
+            {
+              "t": 37.23,
+              "count": 3
+            },
+            {
+              "t": 37.79,
+              "count": 3
+            },
+            {
+              "t": 38.41,
+              "count": 3
+            },
+            {
+              "t": 38.89,
+              "count": 3
+            },
+            {
+              "t": 39.56,
+              "count": 2
+            },
+            {
+              "t": 40.2,
+              "count": 2
+            },
+            {
+              "t": 40.72,
+              "count": 2
+            },
+            {
+              "t": 41.52,
+              "count": 2
+            },
+            {
+              "t": 42.13,
+              "count": 2
+            },
+            {
+              "t": 42.7,
+              "count": 3
+            },
+            {
+              "t": 43.21,
+              "count": 4
+            },
+            {
+              "t": 43.81,
+              "count": 5
+            },
+            {
+              "t": 44.43,
+              "count": 3
+            },
+            {
+              "t": 45.0,
+              "count": 3
+            },
+            {
+              "t": 45.75,
+              "count": 5
+            },
+            {
+              "t": 46.32,
+              "count": 4
+            },
+            {
+              "t": 46.88,
+              "count": 4
+            },
+            {
+              "t": 47.52,
+              "count": 3
+            },
+            {
+              "t": 48.14,
+              "count": 3
+            },
+            {
+              "t": 48.6,
+              "count": 2
+            },
+            {
+              "t": 49.32,
+              "count": 2
+            },
+            {
+              "t": 49.9,
+              "count": 1
+            },
+            {
+              "t": 50.56,
+              "count": 3
+            },
+            {
+              "t": 51.13,
+              "count": 3
+            },
+            {
+              "t": 51.78,
+              "count": 2
+            },
+            {
+              "t": 52.21,
+              "count": 2
+            },
+            {
+              "t": 52.91,
+              "count": 1
+            },
+            {
+              "t": 53.43,
+              "count": 2
+            },
+            {
+              "t": 54.05,
+              "count": 2
+            },
+            {
+              "t": 54.61,
+              "count": 1
+            },
+            {
+              "t": 55.33,
+              "count": 2
+            },
+            {
+              "t": 55.83,
+              "count": 1
+            },
+            {
+              "t": 56.53,
+              "count": 1
+            },
+            {
+              "t": 57.01,
+              "count": 3
+            },
+            {
+              "t": 57.62,
+              "count": 1
+            },
+            {
+              "t": 58.23,
+              "count": 2
+            },
+            {
+              "t": 58.85,
+              "count": 2
+            },
+            {
+              "t": 59.44,
+              "count": 2
+            },
+            {
+              "t": 60.04,
+              "count": 2
+            },
+            {
+              "t": 60.66,
+              "count": 2
+            },
+            {
+              "t": 61.24,
+              "count": 2
+            }
+          ],
+          "activityTrackIds": {},
+          "endpoints": {
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam2/inference/geo",
+            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam2/inference/yolo26m"
+          },
+          "pose": {
+            "available": false
+          }
+        },
+        {
+          "camera": "cam2-cam3",
+          "peakPeople": 2,
+          "lastPeople": 0,
+          "occupancyVerified": false,
+          "objects": {
+            "chair": {
+              "frames": 103,
+              "maxPerFrame": 6,
+              "avgPerFrame": 2.971,
+              "peakConf": 0.961,
+              "visibleFraction": 1.0
+            },
+            "tv": {
+              "frames": 103,
+              "maxPerFrame": 2,
+              "avgPerFrame": 1.01,
+              "peakConf": 0.865,
+              "visibleFraction": 1.0
+            },
+            "keyboard": {
+              "frames": 101,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.981,
+              "peakConf": 0.802,
+              "visibleFraction": 0.981
+            },
+            "couch": {
+              "frames": 97,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.942,
+              "peakConf": 0.881,
+              "visibleFraction": 0.942
+            },
+            "person": {
+              "frames": 73,
+              "maxPerFrame": 2,
+              "avgPerFrame": 1.039,
+              "peakConf": 0.961,
+              "visibleFraction": 0.709
+            },
+            "bottle": {
+              "frames": 15,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.146,
+              "peakConf": 0.742,
+              "visibleFraction": 0.146
+            },
+            "laptop": {
+              "frames": 5,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.049,
+              "peakConf": 0.408,
+              "visibleFraction": 0.049
+            }
+          },
+          "sounds": {},
+          "framesAnalyzed": 103,
+          "durationSec": 61.745,
+          "activities": [],
+          "activityCounts": {},
+          "activityCountMethods": {},
+          "activityCountsUnion": {},
+          "occupancySamples": [
+            {
+              "t": 0.0,
+              "count": 0
+            },
+            {
+              "t": 0.56,
+              "count": 0
+            },
+            {
+              "t": 1.02,
+              "count": 0
+            },
+            {
+              "t": 1.73,
+              "count": 0
+            },
+            {
+              "t": 2.41,
+              "count": 0
+            },
+            {
+              "t": 2.93,
+              "count": 0
+            },
+            {
+              "t": 3.53,
+              "count": 0
+            },
+            {
+              "t": 4.11,
+              "count": 1
+            },
+            {
+              "t": 4.75,
+              "count": 1
+            },
+            {
+              "t": 5.35,
+              "count": 1
+            },
+            {
+              "t": 5.95,
+              "count": 1
+            },
+            {
+              "t": 6.55,
+              "count": 1
+            },
+            {
+              "t": 7.12,
+              "count": 1
+            },
+            {
+              "t": 7.75,
+              "count": 1
+            },
+            {
+              "t": 8.34,
+              "count": 1
+            },
+            {
+              "t": 8.94,
+              "count": 1
+            },
+            {
+              "t": 9.55,
+              "count": 1
+            },
+            {
+              "t": 10.16,
+              "count": 1
+            },
+            {
+              "t": 10.77,
+              "count": 1
+            },
+            {
+              "t": 11.35,
+              "count": 1
+            },
+            {
+              "t": 11.97,
+              "count": 1
+            },
+            {
+              "t": 12.58,
+              "count": 1
+            },
+            {
+              "t": 13.04,
+              "count": 1
+            },
+            {
+              "t": 13.76,
+              "count": 1
+            },
+            {
+              "t": 14.39,
+              "count": 1
+            },
+            {
+              "t": 14.99,
+              "count": 1
+            },
+            {
+              "t": 15.56,
+              "count": 1
+            },
+            {
+              "t": 16.14,
+              "count": 1
+            },
+            {
+              "t": 16.76,
+              "count": 1
+            },
+            {
+              "t": 17.42,
+              "count": 1
+            },
+            {
+              "t": 18.0,
+              "count": 2
+            },
+            {
+              "t": 18.57,
+              "count": 2
+            },
+            {
+              "t": 19.13,
+              "count": 2
+            },
+            {
+              "t": 19.77,
+              "count": 2
+            },
+            {
+              "t": 20.36,
+              "count": 2
+            },
+            {
+              "t": 20.96,
+              "count": 2
+            },
+            {
+              "t": 21.59,
+              "count": 2
+            },
+            {
+              "t": 22.12,
+              "count": 2
+            },
+            {
+              "t": 22.76,
+              "count": 2
+            },
+            {
+              "t": 23.39,
+              "count": 2
+            },
+            {
+              "t": 23.99,
+              "count": 2
+            },
+            {
+              "t": 24.59,
+              "count": 2
+            },
+            {
+              "t": 25.07,
+              "count": 2
+            },
+            {
+              "t": 25.77,
+              "count": 2
+            },
+            {
+              "t": 26.41,
+              "count": 2
+            },
+            {
+              "t": 26.89,
+              "count": 2
+            },
+            {
+              "t": 27.6,
+              "count": 2
+            },
+            {
+              "t": 28.17,
+              "count": 2
+            },
+            {
+              "t": 28.77,
+              "count": 2
+            },
+            {
+              "t": 29.48,
+              "count": 2
+            },
+            {
+              "t": 30.17,
+              "count": 2
+            },
+            {
+              "t": 30.81,
+              "count": 2
+            },
+            {
+              "t": 31.43,
+              "count": 2
+            },
+            {
+              "t": 32.01,
+              "count": 2
+            },
+            {
+              "t": 32.62,
+              "count": 2
+            },
+            {
+              "t": 33.1,
+              "count": 2
+            },
+            {
+              "t": 33.81,
+              "count": 2
+            },
+            {
+              "t": 34.51,
+              "count": 2
+            },
+            {
+              "t": 35.01,
+              "count": 2
+            },
+            {
+              "t": 35.7,
+              "count": 2
+            },
+            {
+              "t": 36.19,
+              "count": 2
+            },
+            {
+              "t": 36.89,
+              "count": 2
+            },
+            {
+              "t": 37.49,
+              "count": 2
+            },
+            {
+              "t": 38.11,
+              "count": 1
+            },
+            {
+              "t": 38.73,
+              "count": 1
+            },
+            {
+              "t": 39.21,
+              "count": 1
+            },
+            {
+              "t": 39.86,
+              "count": 1
+            },
+            {
+              "t": 40.54,
+              "count": 1
+            },
+            {
+              "t": 41.07,
+              "count": 2
+            },
+            {
+              "t": 41.62,
+              "count": 1
+            },
+            {
+              "t": 42.2,
+              "count": 1
+            },
+            {
+              "t": 42.81,
+              "count": 1
+            },
+            {
+              "t": 43.53,
+              "count": 1
+            },
+            {
+              "t": 44.07,
+              "count": 1
+            },
+            {
+              "t": 44.67,
+              "count": 1
+            },
+            {
+              "t": 45.11,
+              "count": 1
+            },
+            {
+              "t": 45.83,
+              "count": 1
+            },
+            {
+              "t": 46.55,
+              "count": 1
+            },
+            {
+              "t": 47.04,
+              "count": 1
+            },
+            {
+              "t": 47.69,
+              "count": 0
+            },
+            {
+              "t": 48.21,
+              "count": 0
+            },
+            {
+              "t": 48.85,
+              "count": 0
+            },
+            {
+              "t": 49.45,
+              "count": 0
+            },
+            {
+              "t": 50.06,
+              "count": 0
+            },
+            {
+              "t": 50.67,
+              "count": 1
+            },
+            {
+              "t": 51.24,
+              "count": 0
+            },
+            {
+              "t": 51.85,
+              "count": 0
+            },
+            {
+              "t": 52.5,
+              "count": 0
+            },
+            {
+              "t": 53.09,
+              "count": 0
+            },
+            {
+              "t": 53.66,
+              "count": 0
+            },
+            {
+              "t": 54.19,
+              "count": 0
+            },
+            {
+              "t": 54.87,
+              "count": 0
+            },
+            {
+              "t": 55.52,
+              "count": 0
+            },
+            {
+              "t": 56.06,
+              "count": 0
+            },
+            {
+              "t": 56.68,
+              "count": 0
+            },
+            {
+              "t": 57.15,
+              "count": 0
+            },
+            {
+              "t": 57.88,
+              "count": 0
+            },
+            {
+              "t": 58.49,
+              "count": 0
+            },
+            {
+              "t": 59.09,
+              "count": 0
+            },
+            {
+              "t": 59.68,
+              "count": 0
+            },
+            {
+              "t": 60.26,
+              "count": 0
+            },
+            {
+              "t": 60.91,
+              "count": 0
+            },
+            {
+              "t": 61.46,
+              "count": 0
+            }
+          ],
+          "activityTrackIds": {},
+          "endpoints": {
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam3/inference/geo",
+            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam3/inference/yolo26m"
+          },
+          "pose": {
+            "available": false
+          }
+        },
+        {
+          "camera": "cam2-cam4",
+          "peakPeople": 2,
+          "lastPeople": 0,
+          "occupancyVerified": false,
+          "objects": {
+            "tv": {
+              "frames": 102,
+              "maxPerFrame": 2,
+              "avgPerFrame": 1.029,
+              "peakConf": 0.945,
+              "visibleFraction": 1.0
+            },
+            "chair": {
+              "frames": 102,
+              "maxPerFrame": 6,
+              "avgPerFrame": 3.471,
+              "peakConf": 0.945,
+              "visibleFraction": 1.0
+            },
+            "keyboard": {
+              "frames": 95,
+              "maxPerFrame": 2,
+              "avgPerFrame": 0.99,
+              "peakConf": 0.788,
+              "visibleFraction": 0.931
+            },
+            "person": {
+              "frames": 74,
+              "maxPerFrame": 2,
+              "avgPerFrame": 1.078,
+              "peakConf": 0.951,
+              "visibleFraction": 0.725
+            },
+            "mouse": {
+              "frames": 8,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.078,
+              "peakConf": 0.426,
+              "visibleFraction": 0.078
+            },
+            "backpack": {
+              "frames": 1,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.01,
+              "peakConf": 0.369,
+              "visibleFraction": 0.01
+            }
+          },
+          "sounds": {},
+          "framesAnalyzed": 102,
+          "durationSec": 61.696,
+          "activities": [],
+          "activityCounts": {},
+          "activityCountMethods": {},
+          "activityCountsUnion": {},
+          "occupancySamples": [
+            {
+              "t": 0.0,
+              "count": 0
+            },
+            {
+              "t": 0.54,
+              "count": 0
+            },
+            {
+              "t": 1.21,
+              "count": 0
+            },
+            {
+              "t": 1.79,
+              "count": 0
+            },
+            {
+              "t": 2.33,
+              "count": 0
+            },
+            {
+              "t": 2.95,
+              "count": 1
+            },
+            {
+              "t": 3.56,
+              "count": 1
+            },
+            {
+              "t": 4.18,
+              "count": 1
+            },
+            {
+              "t": 4.77,
+              "count": 1
+            },
+            {
+              "t": 5.33,
+              "count": 1
+            },
+            {
+              "t": 5.97,
+              "count": 1
+            },
+            {
+              "t": 6.58,
+              "count": 1
+            },
+            {
+              "t": 7.18,
+              "count": 1
+            },
+            {
+              "t": 7.82,
+              "count": 1
+            },
+            {
+              "t": 8.34,
+              "count": 1
+            },
+            {
+              "t": 9.04,
+              "count": 1
+            },
+            {
+              "t": 9.56,
+              "count": 1
+            },
+            {
+              "t": 10.19,
+              "count": 1
+            },
+            {
+              "t": 10.78,
+              "count": 1
+            },
+            {
+              "t": 11.37,
+              "count": 1
+            },
+            {
+              "t": 12.0,
+              "count": 1
+            },
+            {
+              "t": 12.61,
+              "count": 1
+            },
+            {
+              "t": 13.2,
+              "count": 1
+            },
+            {
+              "t": 13.82,
+              "count": 1
+            },
+            {
+              "t": 14.36,
+              "count": 1
+            },
+            {
+              "t": 14.98,
+              "count": 1
+            },
+            {
+              "t": 15.58,
+              "count": 1
+            },
+            {
+              "t": 16.21,
+              "count": 1
+            },
+            {
+              "t": 16.83,
+              "count": 1
+            },
+            {
+              "t": 17.48,
+              "count": 2
+            },
+            {
+              "t": 18.08,
+              "count": 2
+            },
+            {
+              "t": 18.67,
+              "count": 2
+            },
+            {
+              "t": 19.27,
+              "count": 2
+            },
+            {
+              "t": 19.98,
+              "count": 2
+            },
+            {
+              "t": 20.58,
+              "count": 2
+            },
+            {
+              "t": 21.18,
+              "count": 2
+            },
+            {
+              "t": 21.82,
+              "count": 2
+            },
+            {
+              "t": 22.38,
+              "count": 2
+            },
+            {
+              "t": 23.01,
+              "count": 2
+            },
+            {
+              "t": 23.61,
+              "count": 2
+            },
+            {
+              "t": 24.21,
+              "count": 2
+            },
+            {
+              "t": 24.81,
+              "count": 2
+            },
+            {
+              "t": 25.38,
+              "count": 2
+            },
+            {
+              "t": 26.01,
+              "count": 2
+            },
+            {
+              "t": 26.61,
+              "count": 2
+            },
+            {
+              "t": 27.23,
+              "count": 2
+            },
+            {
+              "t": 27.88,
+              "count": 2
+            },
+            {
+              "t": 28.4,
+              "count": 2
+            },
+            {
+              "t": 29.05,
+              "count": 2
+            },
+            {
+              "t": 29.51,
+              "count": 2
+            },
+            {
+              "t": 30.11,
+              "count": 2
+            },
+            {
+              "t": 30.71,
+              "count": 2
+            },
+            {
+              "t": 31.35,
+              "count": 2
+            },
+            {
+              "t": 32.05,
+              "count": 2
+            },
+            {
+              "t": 32.72,
+              "count": 2
+            },
+            {
+              "t": 33.32,
+              "count": 2
+            },
+            {
+              "t": 33.91,
+              "count": 2
+            },
+            {
+              "t": 34.51,
+              "count": 2
+            },
+            {
+              "t": 35.12,
+              "count": 2
+            },
+            {
+              "t": 35.88,
+              "count": 2
+            },
+            {
+              "t": 36.4,
+              "count": 2
+            },
+            {
+              "t": 37.05,
+              "count": 2
+            },
+            {
+              "t": 37.64,
+              "count": 2
+            },
+            {
+              "t": 38.29,
+              "count": 2
+            },
+            {
+              "t": 38.86,
+              "count": 2
+            },
+            {
+              "t": 39.45,
+              "count": 1
+            },
+            {
+              "t": 40.14,
+              "count": 1
+            },
+            {
+              "t": 40.85,
+              "count": 1
+            },
+            {
+              "t": 41.37,
+              "count": 1
+            },
+            {
+              "t": 42.06,
+              "count": 1
+            },
+            {
+              "t": 42.74,
+              "count": 1
+            },
+            {
+              "t": 43.32,
+              "count": 1
+            },
+            {
+              "t": 43.9,
+              "count": 1
+            },
+            {
+              "t": 44.44,
+              "count": 1
+            },
+            {
+              "t": 45.07,
+              "count": 1
+            },
+            {
+              "t": 45.74,
+              "count": 1
+            },
+            {
+              "t": 46.31,
+              "count": 1
+            },
+            {
+              "t": 46.88,
+              "count": 1
+            },
+            {
+              "t": 47.43,
+              "count": 1
+            },
+            {
+              "t": 48.13,
+              "count": 0
+            },
+            {
+              "t": 48.79,
+              "count": 0
+            },
+            {
+              "t": 49.31,
+              "count": 0
+            },
+            {
+              "t": 50.09,
+              "count": 0
+            },
+            {
+              "t": 50.71,
+              "count": 0
+            },
+            {
+              "t": 51.29,
+              "count": 0
+            },
+            {
+              "t": 51.92,
+              "count": 0
+            },
+            {
+              "t": 52.4,
+              "count": 0
+            },
+            {
+              "t": 53.1,
+              "count": 0
+            },
+            {
+              "t": 53.68,
+              "count": 0
+            },
+            {
+              "t": 54.28,
+              "count": 0
+            },
+            {
+              "t": 54.87,
+              "count": 0
+            },
+            {
+              "t": 55.42,
+              "count": 0
+            },
+            {
+              "t": 56.09,
+              "count": 0
+            },
+            {
+              "t": 56.68,
+              "count": 0
+            },
+            {
+              "t": 57.3,
+              "count": 0
+            },
+            {
+              "t": 57.92,
+              "count": 0
+            },
+            {
+              "t": 58.44,
+              "count": 0
+            },
+            {
+              "t": 59.09,
+              "count": 0
+            },
+            {
+              "t": 59.68,
+              "count": 0
+            },
+            {
+              "t": 60.31,
+              "count": 0
+            },
+            {
+              "t": 60.87,
+              "count": 0
+            },
+            {
+              "t": 61.46,
+              "count": 0
+            }
+          ],
+          "activityTrackIds": {},
+          "endpoints": {
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam4/inference/geo",
+            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-cam4/inference/yolo26m"
+          },
+          "pose": {
+            "available": false
           }
         },
         {
           "camera": "cam2-d455",
-          "peakPeople": null,
-          "lastPeople": 3,
+          "peakPeople": 2,
+          "lastPeople": 0,
+          "occupancyVerified": true,
+          "objects": {
+            "chair": {
+              "frames": 155,
+              "maxPerFrame": 4,
+              "avgPerFrame": 3.071,
+              "peakConf": 0.943,
+              "visibleFraction": 1.0
+            },
+            "tv": {
+              "frames": 155,
+              "maxPerFrame": 2,
+              "avgPerFrame": 1.994,
+              "peakConf": 0.918,
+              "visibleFraction": 1.0
+            },
+            "bed": {
+              "frames": 155,
+              "maxPerFrame": 2,
+              "avgPerFrame": 1.019,
+              "peakConf": 0.814,
+              "visibleFraction": 1.0
+            },
+            "person": {
+              "frames": 154,
+              "maxPerFrame": 5,
+              "avgPerFrame": 2.587,
+              "peakConf": 0.969,
+              "visibleFraction": 0.994
+            },
+            "laptop": {
+              "frames": 138,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.89,
+              "peakConf": 0.884,
+              "visibleFraction": 0.89
+            },
+            "keyboard": {
+              "frames": 77,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.497,
+              "peakConf": 0.682,
+              "visibleFraction": 0.497
+            },
+            "bottle": {
+              "frames": 50,
+              "maxPerFrame": 1,
+              "avgPerFrame": 0.323,
+              "peakConf": 0.704,
+              "visibleFraction": 0.323
+            }
+          },
+          "sounds": {},
+          "framesAnalyzed": 155,
+          "durationSec": 61.795,
           "activities": [
-            "bend/bow (at the waist)",
             "carry/hold (an object)",
+            "chew",
+            "clap",
+            "draw sword",
+            "dribble",
+            "jumping",
+            "laugh",
             "listen to (a person)",
+            "not fully in frame",
+            "pick",
+            "punch",
+            "run/jog",
             "sit",
             "stand",
-            "walk"
+            "walk",
+            "wave"
           ],
           "activityCounts": {
-            "carry/hold (an object)": 1,
+            "carry/hold (an object)": 2,
+            "chew": 1,
+            "clap": 1,
+            "draw sword": 1,
+            "dribble": 1,
+            "laugh": 1,
             "listen to (a person)": 1,
-            "sit": 28,
+            "not fully in frame": 1,
+            "pick": 1,
+            "punch": 1,
+            "run/jog": 1,
+            "sit": 2,
             "stand": 2,
-            "walk": 1
+            "walk": 1,
+            "wave": 1
           },
+          "activityCountMethods": {
+            "carry/hold (an object)": "concurrent",
+            "chew": "concurrent",
+            "clap": "concurrent",
+            "draw sword": "concurrent",
+            "dribble": "concurrent",
+            "laugh": "concurrent",
+            "listen to (a person)": "concurrent",
+            "not fully in frame": "segments",
+            "pick": "concurrent",
+            "punch": "concurrent",
+            "run/jog": "concurrent",
+            "sit": "concurrent",
+            "stand": "concurrent",
+            "walk": "concurrent",
+            "wave": "concurrent"
+          },
+          "activityCountsUnion": {
+            "carry/hold (an object)": 1,
+            "dribble": 1,
+            "pick": 1,
+            "punch": 1,
+            "sit": 2,
+            "stand": 3
+          },
+          "occupancySamples": [
+            {
+              "t": 0.0,
+              "count": 0
+            },
+            {
+              "t": 0.2,
+              "count": 0
+            },
+            {
+              "t": 0.4,
+              "count": 0
+            },
+            {
+              "t": 0.6,
+              "count": 0
+            },
+            {
+              "t": 0.8,
+              "count": 0
+            },
+            {
+              "t": 1.0,
+              "count": 0
+            },
+            {
+              "t": 1.2,
+              "count": 0
+            },
+            {
+              "t": 1.4,
+              "count": 0
+            },
+            {
+              "t": 1.6,
+              "count": 0
+            },
+            {
+              "t": 1.8,
+              "count": 0
+            },
+            {
+              "t": 2.0,
+              "count": 0
+            },
+            {
+              "t": 2.2,
+              "count": 0
+            },
+            {
+              "t": 2.4,
+              "count": 0
+            },
+            {
+              "t": 2.6,
+              "count": 0
+            },
+            {
+              "t": 2.8,
+              "count": 0
+            },
+            {
+              "t": 3.0,
+              "count": 0
+            },
+            {
+              "t": 3.2,
+              "count": 1
+            },
+            {
+              "t": 3.4,
+              "count": 1
+            },
+            {
+              "t": 3.6,
+              "count": 1
+            },
+            {
+              "t": 3.8,
+              "count": 1
+            },
+            {
+              "t": 4.0,
+              "count": 1
+            },
+            {
+              "t": 4.2,
+              "count": 1
+            },
+            {
+              "t": 4.4,
+              "count": 1
+            },
+            {
+              "t": 4.6,
+              "count": 1
+            },
+            {
+              "t": 4.8,
+              "count": 1
+            },
+            {
+              "t": 5.0,
+              "count": 1
+            },
+            {
+              "t": 5.2,
+              "count": 1
+            },
+            {
+              "t": 5.4,
+              "count": 1
+            },
+            {
+              "t": 5.6,
+              "count": 1
+            },
+            {
+              "t": 5.8,
+              "count": 1
+            },
+            {
+              "t": 6.0,
+              "count": 1
+            },
+            {
+              "t": 6.2,
+              "count": 1
+            },
+            {
+              "t": 6.4,
+              "count": 1
+            },
+            {
+              "t": 6.6,
+              "count": 1
+            },
+            {
+              "t": 6.8,
+              "count": 1
+            },
+            {
+              "t": 7.0,
+              "count": 1
+            },
+            {
+              "t": 7.2,
+              "count": 1
+            },
+            {
+              "t": 7.4,
+              "count": 1
+            },
+            {
+              "t": 7.6,
+              "count": 1
+            },
+            {
+              "t": 7.8,
+              "count": 1
+            },
+            {
+              "t": 8.0,
+              "count": 1
+            },
+            {
+              "t": 8.2,
+              "count": 1
+            },
+            {
+              "t": 8.4,
+              "count": 1
+            },
+            {
+              "t": 8.6,
+              "count": 1
+            },
+            {
+              "t": 8.8,
+              "count": 1
+            },
+            {
+              "t": 9.0,
+              "count": 1
+            },
+            {
+              "t": 9.2,
+              "count": 1
+            },
+            {
+              "t": 9.4,
+              "count": 1
+            },
+            {
+              "t": 9.6,
+              "count": 1
+            },
+            {
+              "t": 9.8,
+              "count": 1
+            },
+            {
+              "t": 10.0,
+              "count": 1
+            },
+            {
+              "t": 10.2,
+              "count": 1
+            },
+            {
+              "t": 10.4,
+              "count": 1
+            },
+            {
+              "t": 10.6,
+              "count": 1
+            },
+            {
+              "t": 10.8,
+              "count": 1
+            },
+            {
+              "t": 11.0,
+              "count": 1
+            },
+            {
+              "t": 11.2,
+              "count": 1
+            },
+            {
+              "t": 11.4,
+              "count": 1
+            },
+            {
+              "t": 11.6,
+              "count": 1
+            },
+            {
+              "t": 11.8,
+              "count": 1
+            },
+            {
+              "t": 12.0,
+              "count": 1
+            },
+            {
+              "t": 12.2,
+              "count": 1
+            },
+            {
+              "t": 12.4,
+              "count": 1
+            },
+            {
+              "t": 12.6,
+              "count": 1
+            },
+            {
+              "t": 12.8,
+              "count": 1
+            },
+            {
+              "t": 13.0,
+              "count": 1
+            },
+            {
+              "t": 13.2,
+              "count": 1
+            },
+            {
+              "t": 13.4,
+              "count": 1
+            },
+            {
+              "t": 13.6,
+              "count": 1
+            },
+            {
+              "t": 13.8,
+              "count": 1
+            },
+            {
+              "t": 14.0,
+              "count": 1
+            },
+            {
+              "t": 14.2,
+              "count": 1
+            },
+            {
+              "t": 14.4,
+              "count": 1
+            },
+            {
+              "t": 14.6,
+              "count": 1
+            },
+            {
+              "t": 14.8,
+              "count": 1
+            },
+            {
+              "t": 15.0,
+              "count": 1
+            },
+            {
+              "t": 15.2,
+              "count": 1
+            },
+            {
+              "t": 15.4,
+              "count": 1
+            },
+            {
+              "t": 15.6,
+              "count": 1
+            },
+            {
+              "t": 15.8,
+              "count": 1
+            },
+            {
+              "t": 16.0,
+              "count": 1
+            },
+            {
+              "t": 16.2,
+              "count": 1
+            },
+            {
+              "t": 16.4,
+              "count": 1
+            },
+            {
+              "t": 16.6,
+              "count": 1
+            },
+            {
+              "t": 16.8,
+              "count": 1
+            },
+            {
+              "t": 17.0,
+              "count": 1
+            },
+            {
+              "t": 17.2,
+              "count": 1
+            },
+            {
+              "t": 17.4,
+              "count": 1
+            },
+            {
+              "t": 17.6,
+              "count": 1
+            },
+            {
+              "t": 17.8,
+              "count": 2
+            },
+            {
+              "t": 18.0,
+              "count": 2
+            },
+            {
+              "t": 18.2,
+              "count": 2
+            },
+            {
+              "t": 18.4,
+              "count": 2
+            },
+            {
+              "t": 18.6,
+              "count": 2
+            },
+            {
+              "t": 18.8,
+              "count": 2
+            },
+            {
+              "t": 19.0,
+              "count": 2
+            },
+            {
+              "t": 19.2,
+              "count": 2
+            },
+            {
+              "t": 19.4,
+              "count": 2
+            },
+            {
+              "t": 19.6,
+              "count": 2
+            },
+            {
+              "t": 19.8,
+              "count": 2
+            },
+            {
+              "t": 20.0,
+              "count": 2
+            },
+            {
+              "t": 20.2,
+              "count": 2
+            },
+            {
+              "t": 20.4,
+              "count": 2
+            },
+            {
+              "t": 20.6,
+              "count": 2
+            },
+            {
+              "t": 20.8,
+              "count": 1
+            },
+            {
+              "t": 21.0,
+              "count": 1
+            },
+            {
+              "t": 21.2,
+              "count": 1
+            },
+            {
+              "t": 21.4,
+              "count": 1
+            },
+            {
+              "t": 21.6,
+              "count": 2
+            },
+            {
+              "t": 21.8,
+              "count": 2
+            },
+            {
+              "t": 22.0,
+              "count": 2
+            },
+            {
+              "t": 22.2,
+              "count": 2
+            },
+            {
+              "t": 22.4,
+              "count": 2
+            },
+            {
+              "t": 22.6,
+              "count": 2
+            },
+            {
+              "t": 22.8,
+              "count": 2
+            },
+            {
+              "t": 23.0,
+              "count": 2
+            },
+            {
+              "t": 23.2,
+              "count": 2
+            },
+            {
+              "t": 23.4,
+              "count": 2
+            },
+            {
+              "t": 23.6,
+              "count": 2
+            },
+            {
+              "t": 23.8,
+              "count": 2
+            },
+            {
+              "t": 24.0,
+              "count": 2
+            },
+            {
+              "t": 24.2,
+              "count": 2
+            },
+            {
+              "t": 24.4,
+              "count": 2
+            },
+            {
+              "t": 24.6,
+              "count": 2
+            },
+            {
+              "t": 24.8,
+              "count": 2
+            },
+            {
+              "t": 25.0,
+              "count": 2
+            },
+            {
+              "t": 25.2,
+              "count": 2
+            },
+            {
+              "t": 25.4,
+              "count": 2
+            },
+            {
+              "t": 25.6,
+              "count": 2
+            },
+            {
+              "t": 25.8,
+              "count": 2
+            },
+            {
+              "t": 26.0,
+              "count": 2
+            },
+            {
+              "t": 26.2,
+              "count": 2
+            },
+            {
+              "t": 26.4,
+              "count": 2
+            },
+            {
+              "t": 26.6,
+              "count": 2
+            },
+            {
+              "t": 26.8,
+              "count": 2
+            },
+            {
+              "t": 27.0,
+              "count": 2
+            },
+            {
+              "t": 27.2,
+              "count": 2
+            },
+            {
+              "t": 27.4,
+              "count": 2
+            },
+            {
+              "t": 27.6,
+              "count": 2
+            },
+            {
+              "t": 27.8,
+              "count": 2
+            },
+            {
+              "t": 28.0,
+              "count": 2
+            },
+            {
+              "t": 28.2,
+              "count": 2
+            },
+            {
+              "t": 28.4,
+              "count": 2
+            },
+            {
+              "t": 28.6,
+              "count": 2
+            },
+            {
+              "t": 28.8,
+              "count": 2
+            },
+            {
+              "t": 29.0,
+              "count": 2
+            },
+            {
+              "t": 29.2,
+              "count": 2
+            },
+            {
+              "t": 29.4,
+              "count": 2
+            },
+            {
+              "t": 29.6,
+              "count": 2
+            },
+            {
+              "t": 29.8,
+              "count": 2
+            },
+            {
+              "t": 30.0,
+              "count": 2
+            },
+            {
+              "t": 30.2,
+              "count": 2
+            },
+            {
+              "t": 30.4,
+              "count": 2
+            },
+            {
+              "t": 30.6,
+              "count": 2
+            },
+            {
+              "t": 30.8,
+              "count": 2
+            },
+            {
+              "t": 31.0,
+              "count": 2
+            },
+            {
+              "t": 31.2,
+              "count": 2
+            },
+            {
+              "t": 31.4,
+              "count": 2
+            },
+            {
+              "t": 31.6,
+              "count": 2
+            },
+            {
+              "t": 31.8,
+              "count": 2
+            },
+            {
+              "t": 32.0,
+              "count": 2
+            },
+            {
+              "t": 32.2,
+              "count": 2
+            },
+            {
+              "t": 32.4,
+              "count": 2
+            },
+            {
+              "t": 32.6,
+              "count": 1
+            },
+            {
+              "t": 32.8,
+              "count": 1
+            },
+            {
+              "t": 33.0,
+              "count": 1
+            },
+            {
+              "t": 33.2,
+              "count": 1
+            },
+            {
+              "t": 33.4,
+              "count": 1
+            },
+            {
+              "t": 33.6,
+              "count": 2
+            },
+            {
+              "t": 33.8,
+              "count": 2
+            },
+            {
+              "t": 34.0,
+              "count": 2
+            },
+            {
+              "t": 34.2,
+              "count": 2
+            },
+            {
+              "t": 34.4,
+              "count": 2
+            },
+            {
+              "t": 34.6,
+              "count": 2
+            },
+            {
+              "t": 34.8,
+              "count": 2
+            },
+            {
+              "t": 35.0,
+              "count": 2
+            },
+            {
+              "t": 35.2,
+              "count": 2
+            },
+            {
+              "t": 35.4,
+              "count": 2
+            },
+            {
+              "t": 35.6,
+              "count": 2
+            },
+            {
+              "t": 35.8,
+              "count": 2
+            },
+            {
+              "t": 36.0,
+              "count": 2
+            },
+            {
+              "t": 36.2,
+              "count": 2
+            },
+            {
+              "t": 36.4,
+              "count": 2
+            },
+            {
+              "t": 36.6,
+              "count": 2
+            },
+            {
+              "t": 36.8,
+              "count": 2
+            },
+            {
+              "t": 37.0,
+              "count": 2
+            },
+            {
+              "t": 37.2,
+              "count": 2
+            },
+            {
+              "t": 37.4,
+              "count": 2
+            },
+            {
+              "t": 37.6,
+              "count": 2
+            },
+            {
+              "t": 37.8,
+              "count": 2
+            },
+            {
+              "t": 38.0,
+              "count": 1
+            },
+            {
+              "t": 38.2,
+              "count": 2
+            },
+            {
+              "t": 38.4,
+              "count": 2
+            },
+            {
+              "t": 38.6,
+              "count": 2
+            },
+            {
+              "t": 38.8,
+              "count": 2
+            },
+            {
+              "t": 39.0,
+              "count": 2
+            },
+            {
+              "t": 39.2,
+              "count": 2
+            },
+            {
+              "t": 39.4,
+              "count": 1
+            },
+            {
+              "t": 39.6,
+              "count": 1
+            },
+            {
+              "t": 39.8,
+              "count": 1
+            },
+            {
+              "t": 40.0,
+              "count": 1
+            },
+            {
+              "t": 40.2,
+              "count": 1
+            },
+            {
+              "t": 40.4,
+              "count": 1
+            },
+            {
+              "t": 40.6,
+              "count": 1
+            },
+            {
+              "t": 40.8,
+              "count": 1
+            },
+            {
+              "t": 41.0,
+              "count": 1
+            },
+            {
+              "t": 41.2,
+              "count": 1
+            },
+            {
+              "t": 41.4,
+              "count": 1
+            },
+            {
+              "t": 41.6,
+              "count": 1
+            },
+            {
+              "t": 41.8,
+              "count": 1
+            },
+            {
+              "t": 42.0,
+              "count": 1
+            },
+            {
+              "t": 42.2,
+              "count": 1
+            },
+            {
+              "t": 42.4,
+              "count": 1
+            },
+            {
+              "t": 42.6,
+              "count": 1
+            },
+            {
+              "t": 42.8,
+              "count": 1
+            },
+            {
+              "t": 43.0,
+              "count": 1
+            },
+            {
+              "t": 43.2,
+              "count": 1
+            },
+            {
+              "t": 43.4,
+              "count": 1
+            },
+            {
+              "t": 43.6,
+              "count": 1
+            },
+            {
+              "t": 43.8,
+              "count": 1
+            },
+            {
+              "t": 44.0,
+              "count": 1
+            },
+            {
+              "t": 44.2,
+              "count": 1
+            },
+            {
+              "t": 44.4,
+              "count": 1
+            },
+            {
+              "t": 44.6,
+              "count": 1
+            },
+            {
+              "t": 44.8,
+              "count": 1
+            },
+            {
+              "t": 45.0,
+              "count": 1
+            },
+            {
+              "t": 45.2,
+              "count": 1
+            },
+            {
+              "t": 45.4,
+              "count": 1
+            },
+            {
+              "t": 45.6,
+              "count": 1
+            },
+            {
+              "t": 45.8,
+              "count": 1
+            },
+            {
+              "t": 46.0,
+              "count": 1
+            },
+            {
+              "t": 46.2,
+              "count": 1
+            },
+            {
+              "t": 46.4,
+              "count": 1
+            },
+            {
+              "t": 46.6,
+              "count": 1
+            },
+            {
+              "t": 46.8,
+              "count": 1
+            },
+            {
+              "t": 47.0,
+              "count": 1
+            },
+            {
+              "t": 47.2,
+              "count": 1
+            },
+            {
+              "t": 47.4,
+              "count": 1
+            },
+            {
+              "t": 47.6,
+              "count": 1
+            },
+            {
+              "t": 47.8,
+              "count": 1
+            },
+            {
+              "t": 48.0,
+              "count": 1
+            },
+            {
+              "t": 48.2,
+              "count": 0
+            },
+            {
+              "t": 48.4,
+              "count": 0
+            },
+            {
+              "t": 48.6,
+              "count": 0
+            },
+            {
+              "t": 48.8,
+              "count": 0
+            },
+            {
+              "t": 49.0,
+              "count": 0
+            },
+            {
+              "t": 49.2,
+              "count": 0
+            },
+            {
+              "t": 49.4,
+              "count": 0
+            },
+            {
+              "t": 49.6,
+              "count": 0
+            },
+            {
+              "t": 49.8,
+              "count": 0
+            },
+            {
+              "t": 50.0,
+              "count": 0
+            },
+            {
+              "t": 50.2,
+              "count": 0
+            },
+            {
+              "t": 50.4,
+              "count": 0
+            },
+            {
+              "t": 50.6,
+              "count": 0
+            },
+            {
+              "t": 50.8,
+              "count": 0
+            },
+            {
+              "t": 51.0,
+              "count": 0
+            },
+            {
+              "t": 51.2,
+              "count": 0
+            },
+            {
+              "t": 51.4,
+              "count": 0
+            },
+            {
+              "t": 51.6,
+              "count": 0
+            },
+            {
+              "t": 51.8,
+              "count": 0
+            },
+            {
+              "t": 52.0,
+              "count": 0
+            },
+            {
+              "t": 52.2,
+              "count": 0
+            },
+            {
+              "t": 52.4,
+              "count": 0
+            },
+            {
+              "t": 52.6,
+              "count": 0
+            },
+            {
+              "t": 52.8,
+              "count": 0
+            },
+            {
+              "t": 53.0,
+              "count": 0
+            },
+            {
+              "t": 53.2,
+              "count": 0
+            },
+            {
+              "t": 53.4,
+              "count": 0
+            },
+            {
+              "t": 53.6,
+              "count": 0
+            },
+            {
+              "t": 53.8,
+              "count": 0
+            },
+            {
+              "t": 54.0,
+              "count": 0
+            },
+            {
+              "t": 54.2,
+              "count": 0
+            },
+            {
+              "t": 54.4,
+              "count": 0
+            },
+            {
+              "t": 54.6,
+              "count": 0
+            },
+            {
+              "t": 54.8,
+              "count": 0
+            },
+            {
+              "t": 55.0,
+              "count": 0
+            },
+            {
+              "t": 55.2,
+              "count": 0
+            },
+            {
+              "t": 55.4,
+              "count": 0
+            },
+            {
+              "t": 55.6,
+              "count": 0
+            },
+            {
+              "t": 55.8,
+              "count": 0
+            },
+            {
+              "t": 56.0,
+              "count": 0
+            },
+            {
+              "t": 56.2,
+              "count": 0
+            },
+            {
+              "t": 56.4,
+              "count": 0
+            },
+            {
+              "t": 56.6,
+              "count": 0
+            },
+            {
+              "t": 56.8,
+              "count": 0
+            },
+            {
+              "t": 57.0,
+              "count": 0
+            },
+            {
+              "t": 57.2,
+              "count": 0
+            },
+            {
+              "t": 57.4,
+              "count": 0
+            },
+            {
+              "t": 57.6,
+              "count": 0
+            },
+            {
+              "t": 57.8,
+              "count": 0
+            },
+            {
+              "t": 58.0,
+              "count": 0
+            },
+            {
+              "t": 58.2,
+              "count": 0
+            },
+            {
+              "t": 58.4,
+              "count": 0
+            },
+            {
+              "t": 58.6,
+              "count": 0
+            },
+            {
+              "t": 58.8,
+              "count": 0
+            },
+            {
+              "t": 59.0,
+              "count": 0
+            },
+            {
+              "t": 59.2,
+              "count": 0
+            },
+            {
+              "t": 59.4,
+              "count": 0
+            },
+            {
+              "t": 59.6,
+              "count": 0
+            },
+            {
+              "t": 59.8,
+              "count": 0
+            },
+            {
+              "t": 60.0,
+              "count": 0
+            },
+            {
+              "t": 60.2,
+              "count": 0
+            },
+            {
+              "t": 60.4,
+              "count": 0
+            },
+            {
+              "t": 60.6,
+              "count": 0
+            },
+            {
+              "t": 60.8,
+              "count": 0
+            },
+            {
+              "t": 61.0,
+              "count": 0
+            },
+            {
+              "t": 61.2,
+              "count": 0
+            },
+            {
+              "t": 61.4,
+              "count": 0
+            },
+            {
+              "t": 61.6,
+              "count": 0
+            }
+          ],
           "activityTrackIds": {
             "carry/hold (an object)": [
-              "173"
+              "7"
             ],
-            "listen to (a person)": [
+            "dribble": [
               "1"
             ],
-            "sit": [
-              "10",
-              "114",
-              "125",
-              "14",
-              "20",
-              "21",
-              "24",
-              "25",
-              "3",
-              "30",
-              "36",
-              "4",
-              "41",
-              "45",
-              "48",
-              "51",
-              "54",
-              "57",
-              "71",
-              "75",
-              "76",
-              "77",
-              "79",
-              "82",
-              "90",
-              "91",
-              "93",
-              "98"
+            "pick": [
+              "5"
             ],
-            "stand": [
-              "113",
+            "punch": [
               "2"
             ],
-            "walk": [
-              "171"
+            "sit": [
+              "1",
+              "5"
+            ],
+            "stand": [
+              "2",
+              "8",
+              "9"
             ]
           },
           "endpoints": {
-            "action-ava": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d455/inference/action-ava",
-            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d455/inference/geo",
-            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d455/inference/yolo26m",
-            "yolo26n-pose": "http://172.16.60.239:3000/api/v1/recordings/day_19_2026-07-29/rec_20260729_141500/cam2-d455/inference/yolo26n-pose"
+            "action-ava": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-d455/inference/action-ava",
+            "action-hmdb": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-d455/inference/action-hmdb",
+            "geo": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-d455/inference/geo",
+            "yolo26m": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-d455/inference/yolo26m",
+            "yolo26n-pose": "http://172.16.60.239:3000/api/v1/recordings/day_23_2026-08-05/rec_20260805_110324/cam2-d455/inference/yolo26n-pose"
           },
           "pose": {
             "available": true
@@ -1731,41 +5746,759 @@
         "mode": "recording_override",
         "requestedDate": {
           "year": 2026,
-          "month": 7,
-          "day": 29
+          "month": 8,
+          "day": 5
         },
-        "requestedDateLabel": "July 29, 2026",
+        "requestedDateLabel": "August 5, 2026",
         "recordingOverride": {
-          "day": "day_19_2026-07-29",
-          "rec": "rec_20260729_141500"
+          "day": "day_23_2026-08-05",
+          "rec": "rec_20260805_110324"
         },
-        "reason": "selected requested recording rec_20260729_141500"
+        "reason": "selected requested recording rec_20260805_110324"
       },
-      "requestedActivities": [
-        "sit"
+      "requestedActivities": [],
+      "requestedActivityCounts": {},
+      "occupancyTimeline": [
+        {
+          "t": 0.0,
+          "count": 0
+        },
+        {
+          "t": 0.34,
+          "count": 0
+        },
+        {
+          "t": 0.68,
+          "count": 0
+        },
+        {
+          "t": 1.03,
+          "count": 0
+        },
+        {
+          "t": 1.37,
+          "count": 0
+        },
+        {
+          "t": 1.71,
+          "count": 0
+        },
+        {
+          "t": 2.05,
+          "count": 0
+        },
+        {
+          "t": 2.4,
+          "count": 0
+        },
+        {
+          "t": 2.74,
+          "count": 0
+        },
+        {
+          "t": 3.08,
+          "count": 1
+        },
+        {
+          "t": 3.42,
+          "count": 1
+        },
+        {
+          "t": 3.76,
+          "count": 1
+        },
+        {
+          "t": 4.11,
+          "count": 1
+        },
+        {
+          "t": 4.45,
+          "count": 1
+        },
+        {
+          "t": 4.79,
+          "count": 1
+        },
+        {
+          "t": 5.13,
+          "count": 1
+        },
+        {
+          "t": 5.48,
+          "count": 1
+        },
+        {
+          "t": 5.82,
+          "count": 1
+        },
+        {
+          "t": 6.16,
+          "count": 1
+        },
+        {
+          "t": 6.5,
+          "count": 1
+        },
+        {
+          "t": 6.84,
+          "count": 1
+        },
+        {
+          "t": 7.19,
+          "count": 1
+        },
+        {
+          "t": 7.53,
+          "count": 1
+        },
+        {
+          "t": 7.87,
+          "count": 1
+        },
+        {
+          "t": 8.21,
+          "count": 1
+        },
+        {
+          "t": 8.56,
+          "count": 1
+        },
+        {
+          "t": 8.9,
+          "count": 1
+        },
+        {
+          "t": 9.24,
+          "count": 1
+        },
+        {
+          "t": 9.58,
+          "count": 1
+        },
+        {
+          "t": 9.92,
+          "count": 1
+        },
+        {
+          "t": 10.27,
+          "count": 1
+        },
+        {
+          "t": 10.61,
+          "count": 1
+        },
+        {
+          "t": 10.95,
+          "count": 1
+        },
+        {
+          "t": 11.29,
+          "count": 1
+        },
+        {
+          "t": 11.64,
+          "count": 1
+        },
+        {
+          "t": 11.98,
+          "count": 1
+        },
+        {
+          "t": 12.32,
+          "count": 1
+        },
+        {
+          "t": 12.66,
+          "count": 1
+        },
+        {
+          "t": 13.0,
+          "count": 1
+        },
+        {
+          "t": 13.35,
+          "count": 1
+        },
+        {
+          "t": 13.69,
+          "count": 1
+        },
+        {
+          "t": 14.03,
+          "count": 1
+        },
+        {
+          "t": 14.37,
+          "count": 1
+        },
+        {
+          "t": 14.72,
+          "count": 1
+        },
+        {
+          "t": 15.06,
+          "count": 1
+        },
+        {
+          "t": 15.4,
+          "count": 1
+        },
+        {
+          "t": 15.74,
+          "count": 1
+        },
+        {
+          "t": 16.08,
+          "count": 1
+        },
+        {
+          "t": 16.43,
+          "count": 1
+        },
+        {
+          "t": 16.77,
+          "count": 1
+        },
+        {
+          "t": 17.11,
+          "count": 1
+        },
+        {
+          "t": 17.45,
+          "count": 1
+        },
+        {
+          "t": 17.8,
+          "count": 2
+        },
+        {
+          "t": 18.14,
+          "count": 2
+        },
+        {
+          "t": 18.48,
+          "count": 2
+        },
+        {
+          "t": 18.82,
+          "count": 2
+        },
+        {
+          "t": 19.16,
+          "count": 2
+        },
+        {
+          "t": 19.51,
+          "count": 2
+        },
+        {
+          "t": 19.85,
+          "count": 2
+        },
+        {
+          "t": 20.19,
+          "count": 2
+        },
+        {
+          "t": 20.53,
+          "count": 1
+        },
+        {
+          "t": 20.88,
+          "count": 1
+        },
+        {
+          "t": 21.22,
+          "count": 1
+        },
+        {
+          "t": 21.56,
+          "count": 2
+        },
+        {
+          "t": 21.9,
+          "count": 2
+        },
+        {
+          "t": 22.24,
+          "count": 2
+        },
+        {
+          "t": 22.59,
+          "count": 2
+        },
+        {
+          "t": 22.93,
+          "count": 2
+        },
+        {
+          "t": 23.27,
+          "count": 2
+        },
+        {
+          "t": 23.61,
+          "count": 2
+        },
+        {
+          "t": 23.96,
+          "count": 2
+        },
+        {
+          "t": 24.3,
+          "count": 2
+        },
+        {
+          "t": 24.64,
+          "count": 2
+        },
+        {
+          "t": 24.98,
+          "count": 2
+        },
+        {
+          "t": 25.32,
+          "count": 2
+        },
+        {
+          "t": 25.67,
+          "count": 2
+        },
+        {
+          "t": 26.01,
+          "count": 2
+        },
+        {
+          "t": 26.35,
+          "count": 2
+        },
+        {
+          "t": 26.69,
+          "count": 2
+        },
+        {
+          "t": 27.04,
+          "count": 2
+        },
+        {
+          "t": 27.38,
+          "count": 2
+        },
+        {
+          "t": 27.72,
+          "count": 2
+        },
+        {
+          "t": 28.06,
+          "count": 2
+        },
+        {
+          "t": 28.4,
+          "count": 2
+        },
+        {
+          "t": 28.75,
+          "count": 2
+        },
+        {
+          "t": 29.09,
+          "count": 2
+        },
+        {
+          "t": 29.43,
+          "count": 2
+        },
+        {
+          "t": 29.77,
+          "count": 2
+        },
+        {
+          "t": 30.12,
+          "count": 2
+        },
+        {
+          "t": 30.46,
+          "count": 2
+        },
+        {
+          "t": 30.8,
+          "count": 2
+        },
+        {
+          "t": 31.14,
+          "count": 2
+        },
+        {
+          "t": 31.48,
+          "count": 2
+        },
+        {
+          "t": 31.83,
+          "count": 2
+        },
+        {
+          "t": 32.17,
+          "count": 2
+        },
+        {
+          "t": 32.51,
+          "count": 1
+        },
+        {
+          "t": 32.85,
+          "count": 1
+        },
+        {
+          "t": 33.2,
+          "count": 1
+        },
+        {
+          "t": 33.54,
+          "count": 2
+        },
+        {
+          "t": 33.88,
+          "count": 2
+        },
+        {
+          "t": 34.22,
+          "count": 2
+        },
+        {
+          "t": 34.56,
+          "count": 2
+        },
+        {
+          "t": 34.91,
+          "count": 2
+        },
+        {
+          "t": 35.25,
+          "count": 2
+        },
+        {
+          "t": 35.59,
+          "count": 2
+        },
+        {
+          "t": 35.93,
+          "count": 2
+        },
+        {
+          "t": 36.28,
+          "count": 2
+        },
+        {
+          "t": 36.62,
+          "count": 2
+        },
+        {
+          "t": 36.96,
+          "count": 2
+        },
+        {
+          "t": 37.3,
+          "count": 2
+        },
+        {
+          "t": 37.64,
+          "count": 2
+        },
+        {
+          "t": 37.99,
+          "count": 1
+        },
+        {
+          "t": 38.33,
+          "count": 2
+        },
+        {
+          "t": 38.67,
+          "count": 2
+        },
+        {
+          "t": 39.01,
+          "count": 2
+        },
+        {
+          "t": 39.36,
+          "count": 1
+        },
+        {
+          "t": 39.7,
+          "count": 1
+        },
+        {
+          "t": 40.04,
+          "count": 1
+        },
+        {
+          "t": 40.38,
+          "count": 1
+        },
+        {
+          "t": 40.72,
+          "count": 1
+        },
+        {
+          "t": 41.07,
+          "count": 1
+        },
+        {
+          "t": 41.41,
+          "count": 1
+        },
+        {
+          "t": 41.75,
+          "count": 1
+        },
+        {
+          "t": 42.09,
+          "count": 1
+        },
+        {
+          "t": 42.44,
+          "count": 1
+        },
+        {
+          "t": 42.78,
+          "count": 1
+        },
+        {
+          "t": 43.12,
+          "count": 1
+        },
+        {
+          "t": 43.46,
+          "count": 1
+        },
+        {
+          "t": 43.8,
+          "count": 1
+        },
+        {
+          "t": 44.15,
+          "count": 1
+        },
+        {
+          "t": 44.49,
+          "count": 1
+        },
+        {
+          "t": 44.83,
+          "count": 1
+        },
+        {
+          "t": 45.17,
+          "count": 1
+        },
+        {
+          "t": 45.52,
+          "count": 1
+        },
+        {
+          "t": 45.86,
+          "count": 1
+        },
+        {
+          "t": 46.2,
+          "count": 1
+        },
+        {
+          "t": 46.54,
+          "count": 1
+        },
+        {
+          "t": 46.88,
+          "count": 1
+        },
+        {
+          "t": 47.23,
+          "count": 1
+        },
+        {
+          "t": 47.57,
+          "count": 1
+        },
+        {
+          "t": 47.91,
+          "count": 0
+        },
+        {
+          "t": 48.25,
+          "count": 0
+        },
+        {
+          "t": 48.6,
+          "count": 0
+        },
+        {
+          "t": 48.94,
+          "count": 0
+        },
+        {
+          "t": 49.28,
+          "count": 0
+        },
+        {
+          "t": 49.62,
+          "count": 0
+        },
+        {
+          "t": 49.96,
+          "count": 0
+        },
+        {
+          "t": 50.31,
+          "count": 0
+        },
+        {
+          "t": 50.65,
+          "count": 0
+        },
+        {
+          "t": 50.99,
+          "count": 0
+        },
+        {
+          "t": 51.33,
+          "count": 0
+        },
+        {
+          "t": 51.68,
+          "count": 0
+        },
+        {
+          "t": 52.02,
+          "count": 0
+        },
+        {
+          "t": 52.36,
+          "count": 0
+        },
+        {
+          "t": 52.7,
+          "count": 0
+        },
+        {
+          "t": 53.04,
+          "count": 0
+        },
+        {
+          "t": 53.39,
+          "count": 0
+        },
+        {
+          "t": 53.73,
+          "count": 0
+        },
+        {
+          "t": 54.07,
+          "count": 0
+        },
+        {
+          "t": 54.41,
+          "count": 0
+        },
+        {
+          "t": 54.76,
+          "count": 0
+        },
+        {
+          "t": 55.1,
+          "count": 0
+        },
+        {
+          "t": 55.44,
+          "count": 0
+        },
+        {
+          "t": 55.78,
+          "count": 0
+        },
+        {
+          "t": 56.12,
+          "count": 0
+        },
+        {
+          "t": 56.47,
+          "count": 0
+        },
+        {
+          "t": 56.81,
+          "count": 0
+        },
+        {
+          "t": 57.15,
+          "count": 0
+        },
+        {
+          "t": 57.49,
+          "count": 0
+        },
+        {
+          "t": 57.84,
+          "count": 0
+        },
+        {
+          "t": 58.18,
+          "count": 0
+        },
+        {
+          "t": 58.52,
+          "count": 0
+        },
+        {
+          "t": 58.86,
+          "count": 0
+        },
+        {
+          "t": 59.2,
+          "count": 0
+        },
+        {
+          "t": 59.55,
+          "count": 0
+        },
+        {
+          "t": 59.89,
+          "count": 0
+        },
+        {
+          "t": 60.23,
+          "count": 0
+        },
+        {
+          "t": 60.57,
+          "count": 0
+        },
+        {
+          "t": 60.92,
+          "count": 0
+        },
+        {
+          "t": 61.26,
+          "count": 0
+        }
       ],
-      "requestedActivityCounts": {
-        "sit": 28
-      },
       "requestedActivityCombination": null,
       "errors": [],
       "runtime_provider": "openrouter",
       "runtime_model": "z-ai/glm-5.2",
       "generation_mode": "llm"
     },
-    "web_data_answer_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260730-175723-645408\\smartroom-answer.json",
+    "web_data_answer_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260806-142639-330517\\smartroom-answer.json",
     "web_data_manifest_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260730_113000\\output\\cityos_synthesis\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis.json",
     "web_data_recording_override": {
-      "day": "day_19_2026-07-29",
-      "rec": "rec_20260729_141500"
+      "day": "day_23_2026-08-05",
+      "rec": "rec_20260805_110324"
     },
     "web_data_snapshot_summary": null,
-    "web_data_payload_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260730-175723-645408\\source_data\\20260730-175726-431024_agent_request.json",
+    "web_data_payload_path": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\.tracefix-ui\\web-data-runs\\tracefix-tellme-structured-smart-room-application-20260730-113000-synthesis-20260806-142639-330517\\source_data\\20260806-142648-794914_agent_request.json",
     "web_data_source_url": "http://172.16.60.239:3000/api/v1",
     "web_data_source_kind": "smartroom-control"
   },
   "tracefix": {
-    "run_id": "cached-546f273e",
+    "run_id": "cached-d1dcbcdf",
     "workspace": "C:\\Users\\rajac\\CityOS-Agentic-Stack-Planner-\\workspace\\tellme_structured_smart_room_application_20260730_113000"
   },
   "cityos": {

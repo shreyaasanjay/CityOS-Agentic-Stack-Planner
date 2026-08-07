@@ -62,6 +62,7 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   mirrorApiUrl: 'http://172.16.60.239:3000/api/v1',
   dataSource: 'smartroom',
   carlaApiKey: '',
+  carlaFullApiKey: '',
   timestamp: '',
   tracefixProvider: 'openrouter',
   tracefixModel: 'z-ai/glm-5.2',
@@ -205,7 +206,9 @@ export default function Page() {
             'http://172.16.60.239:3000/api',
           ].includes(savedConfig.mirrorApiUrl || '')
             ? DEFAULT_RUNTIME_CONFIG.mirrorApiUrl
-            : savedConfig.mirrorApiUrl || DEFAULT_RUNTIME_CONFIG.mirrorApiUrl,
+            : savedConfig.mirrorApiUrl === 'http://172.16.60.239:8420'
+              ? 'http://172.16.60.252:8420'
+              : savedConfig.mirrorApiUrl || DEFAULT_RUNTIME_CONFIG.mirrorApiUrl,
           mode: 'llm',
           openaiApiKey: '',
           tracefixApiKey: '',
@@ -319,6 +322,7 @@ export default function Page() {
         mirrorApiUrl: runtimeConfig.mirrorApiUrl,
         dataSource: runtimeConfig.dataSource,
         carlaApiKey: runtimeConfig.carlaApiKey,
+        carlaFullApiKey: runtimeConfig.carlaFullApiKey,
         openaiApiKey: runtimeConfig.openaiApiKey,
         tracefixProvider: runtimeConfig.tracefixProvider,
         tracefixModel: runtimeConfig.tracefixModel,
@@ -393,6 +397,7 @@ export default function Page() {
         mirrorApiUrl: runtimeConfig.mirrorApiUrl,
         dataSource: runtimeConfig.dataSource,
         carlaApiKey: runtimeConfig.carlaApiKey,
+        carlaFullApiKey: runtimeConfig.carlaFullApiKey,
         openaiApiKey: runtimeConfig.openaiApiKey,
         tracefixProvider: runtimeConfig.tracefixProvider,
         tracefixModel: runtimeConfig.tracefixModel,

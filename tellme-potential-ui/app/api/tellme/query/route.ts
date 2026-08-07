@@ -8,7 +8,7 @@ export const runtime = 'nodejs'
 
 type JsonObject = Record<string, unknown>
 
-const EXPLICIT_DATE = /\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:,?\s+\d{2,4})?)\b/i
+const EXPLICIT_DATE = /\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{2,4})?|\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*(?:,?\s+\d{2,4})?)\b/i
 const RELATIVE_DATE = /\b(?:today|yesterday|tomorrow|last\s+(?:night|week|month)|this\s+(?:morning|afternoon|evening|week)|on\s+\w+day)\b/i
 
 function needsRecordingDate(query: string, timestamp?: string) {
@@ -113,7 +113,9 @@ export async function POST(request: NextRequest) {
   const dateReply = EXPLICIT_DATE.test(body.query) || RELATIVE_DATE.test(body.query) || Boolean(body.timestamp?.trim())
   const effectiveQuery = pendingQuery && dateReply ? `${pendingQuery} on ${body.query}` : body.query
 
-  if (needsRecordingDate(effectiveQuery, body.timestamp)) {
+  // The date gate exists to pick the right smart-room recording. CARLA trace
+  // timestamps are experimental and deliberately unused, so never ask there.
+  if (body.dataSource !== 'carla' && needsRecordingDate(effectiveQuery, body.timestamp)) {
     const response = NextResponse.json(dateFollowUp(effectiveQuery, body.model?.trim() || 'TeLLMe'), { status: 200 })
     response.cookies.set('tellme_pending_recording_question', effectiveQuery, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 900 })
     return response

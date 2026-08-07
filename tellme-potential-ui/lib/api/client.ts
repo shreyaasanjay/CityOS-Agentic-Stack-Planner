@@ -86,6 +86,7 @@ const httpQueryApi: QueryApi = {
       mirrorApiUrl: req.mirrorApiUrl,
       dataSource: req.dataSource,
       carlaApiKey: req.carlaApiKey,
+      carlaFullApiKey: req.carlaFullApiKey,
       model: req.tracefixModel,
       timestamp: req.timestamp,
     }, options?.signal)
@@ -126,6 +127,7 @@ const httpQueryApi: QueryApi = {
       mirrorApiUrl: req.mirrorApiUrl,
       dataSource: req.dataSource,
       carlaApiKey: req.carlaApiKey,
+      carlaFullApiKey: req.carlaFullApiKey,
       agentProvider: req.cityosAgentProvider,
       agentModel: req.cityosAgentModel,
       agentApiKey: cityosAgentKey,
@@ -161,6 +163,7 @@ const httpQueryApi: QueryApi = {
       mirrorApiUrl: req.mirrorApiUrl,
       dataSource: req.dataSource,
       carlaApiKey: req.carlaApiKey,
+      carlaFullApiKey: req.carlaFullApiKey,
       agentProvider: req.cityosAgentProvider,
       agentModel: req.cityosAgentModel,
       agentApiKey: req.cityosAgentApiKey?.trim()

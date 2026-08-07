@@ -21,23 +21,18 @@ import {
   Download,
   Timer,
   Database,
+  Activity,
 } from 'lucide-react'
 import type { Agent, QueryResult, RecordingCandidate } from '@/lib/api/types'
 import { EvidenceCard } from '@/components/evidence-card'
+import { OccupancyChart } from '@/components/occupancy-chart'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { formatResponseTime } from '@/components/response-timer'
 import { translate, type LanguageMode, type TranslationKey } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-type ResultTab = 'answer' | 'agents' | 'evidence'
+type ResultTab = 'answer' | 'agents' | 'evidence' | 'occupancy'
 type Feedback = 'helpful' | 'incorrect'
-
-function confidenceLabel(value: number | null, language: LanguageMode) {
-  if (value === null) return translate(language, 'result.confidenceNotReported')
-  if (value >= 0.85) return translate(language, 'result.highConfidence')
-  if (value >= 0.6) return translate(language, 'result.moderateConfidence')
-  return translate(language, 'result.lowConfidence')
-}
 
 function agentIcon(type: string) {
   const t = type.toLowerCase()
@@ -89,7 +84,6 @@ export function ResultView({
   const [selectedRecordingId, setSelectedRecordingId] = useState('')
   const recordingCandidates = result.recordingSelection?.candidates || []
   const selectedRecording = recordingCandidates.find((candidate) => candidate.recordingId === selectedRecordingId) || recordingCandidates[0]
-  const pct = result.confidence === null ? null : Math.round(result.confidence * 100)
   const answer = visibleAnswer ?? result.answer
   const t = (key: TranslationKey, values?: Record<string, string | number>) =>
     translate(language, key, values)
@@ -99,6 +93,10 @@ export function ResultView({
     { id: 'agents', label: t('result.sensorsUsed'), icon: Cpu, count: result.agents.length },
     { id: 'evidence', label: t('result.privacyReceipt'), icon: FileSearch, count: result.evidence.length },
   ]
+  const occupancy = result.occupancyTimeline ?? []
+  if (occupancy.length) {
+    tabs.push({ id: 'occupancy', label: t('chart.tab'), icon: Activity })
+  }
 
   return (
     <section
@@ -157,17 +155,6 @@ export function ResultView({
                   </span>
                 )}
               </div>
-              <span
-                className={cn(
-                  'inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium',
-                  result.confidence !== null && result.confidence >= 0.85
-                    ? 'border-primary/30 bg-accent text-accent-foreground'
-                    : 'border-border bg-background text-muted-foreground',
-                )}
-              >
-                <ShieldCheck className="size-3.5" aria-hidden="true" />
-                {confidenceLabel(result.confidence, language)}{pct === null ? '' : ` - ${pct}%`}
-              </span>
             </div>
 
             <TrustIndicators result={result} responseMs={responseMs} language={language} />
@@ -297,6 +284,10 @@ export function ResultView({
           </div>
         )}
 
+        {tab === 'occupancy' && (
+          <OccupancyChart points={occupancy} language={language} />
+        )}
+
         {tab === 'evidence' && (
           <div className="flex flex-col gap-4">
             <p className="text-[13px] leading-relaxed text-muted-foreground">
@@ -324,14 +315,12 @@ function TrustIndicators({
   language: LanguageMode
 }) {
   const t = (key: TranslationKey) => translate(language, key)
-  const confidence = result.confidence === null
-    ? t('result.notReported')
-    : `${Math.round(result.confidence * 100)}%`
   const responseTime = typeof responseMs === 'number'
     ? formatResponseTime(responseMs)
     : t('result.pending')
+  // Confidence is intentionally not shown: it still flows through the API and
+  // QueryResult for logging and debugging, but residents should not see it.
   const metrics = [
-    { label: t('result.confidence'), value: confidence, icon: ShieldCheck },
     { label: t('result.sources'), value: result.agents.length.toString(), icon: Database },
     { label: t('result.evidenceUsed'), value: result.evidence.length.toString(), icon: FileSearch },
     { label: t('result.model'), value: result.model || t('result.notReported'), icon: Cpu },
@@ -339,7 +328,7 @@ function TrustIndicators({
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-secondary/40 p-2 sm:grid-cols-5">
+    <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-secondary/40 p-2 sm:grid-cols-4">
       {metrics.map(({ label, value, icon: Icon }) => (
         <div key={label} className="rounded-lg bg-background px-3 py-2">
           <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase text-muted-foreground">

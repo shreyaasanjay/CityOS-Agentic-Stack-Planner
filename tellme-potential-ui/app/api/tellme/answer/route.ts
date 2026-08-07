@@ -18,6 +18,9 @@ export const runtime = 'nodejs'
 interface AnswerRequest {
   query?: string
   mirrorApiUrl?: string
+  dataSource?: 'smartroom' | 'carla'
+  carlaApiKey?: string
+  carlaFullApiKey?: string
   agentProvider?: 'openai' | 'anthropic' | 'openrouter' | 'local'
   agentModel?: string
   agentApiKey?: string
@@ -290,6 +293,15 @@ function safeFinalResult(
     },
   ]
   const reportedConfidence = asNumber(answer.confidence)
+  // Offsets into the recording plus aggregate head counts. No wall-clock time,
+  // no identities, so this stays inside the same aggregate-only policy as the
+  // rest of the answer.
+  const occupancyTimeline = asArray(answer.occupancyTimeline)
+    .map(asObject)
+    .map((point) => ({ t: asNumber(point.t), count: asNumber(point.count) }))
+    .filter((point): point is { t: number; count: number } =>
+      point.t !== null && point.count !== null && point.t >= 0 && point.count >= 0)
+    .map((point) => ({ t: point.t, count: Math.round(point.count) }))
 
   return {
     id: asString(envelope.run_id) || asString(data.query_id) || `tellme_${Date.now()}`,
@@ -298,6 +310,7 @@ function safeFinalResult(
     confidence: reportedConfidence === null ? null : Math.max(0, Math.min(1, reportedConfidence)),
     agents,
     evidence,
+    occupancyTimeline,
     guidelines: [],
     model: model || undefined,
     workflow: { requiresVerification: false },
@@ -322,23 +335,32 @@ export async function POST(request: Request) {
   if (agentProvider !== 'local' && !agentApiKey) {
     return NextResponse.json({ error: 'Add the API key used by the generated CityOS answer agent.' }, { status: 400 })
   }
-  if (agentApiKey && !getRequestApiKeyOriginPolicy(request).canUseApiKeys) {
+  const dataSource = body.dataSource === 'carla' ? 'carla' : 'smartroom'
+  const carlaApiKey = body.carlaApiKey?.trim() || ''
+  const carlaFullApiKey = body.carlaFullApiKey?.trim() || ''
+  if ((agentApiKey || carlaApiKey || carlaFullApiKey) && !getRequestApiKeyOriginPolicy(request).canUseApiKeys) {
     return NextResponse.json({ error: getRequestApiKeyOriginPolicy(request).message }, { status: 403 })
   }
 
-  let sourceUrl: URL
+  // For CARLA an empty URL is fine: the runner falls back to SIMULATION_API_URL
+  // from the repo .env (same for the API key).
+  let sourceUrlText = ''
   try {
-    sourceUrl = new URL(body.mirrorApiUrl || '')
+    const sourceUrl = new URL(body.mirrorApiUrl || '')
     if (!['http:', 'https:'].includes(sourceUrl.protocol)) throw new Error('Unsupported protocol')
     if (
-      sourceUrl.hostname === '172.16.60.239'
+      dataSource === 'smartroom'
+      && sourceUrl.hostname === '172.16.60.239'
       && sourceUrl.port === '3000'
       && sourceUrl.pathname.replace(/\/+$/, '') === '/api'
     ) {
       sourceUrl.pathname = '/api/v1'
     }
+    sourceUrlText = sourceUrl.toString()
   } catch {
-    return NextResponse.json({ error: 'Enter a valid smart-room API URL.' }, { status: 400 })
+    if (dataSource !== 'carla') {
+      return NextResponse.json({ error: 'Enter a valid smart-room API URL.' }, { status: 400 })
+    }
   }
 
   try {
@@ -355,14 +377,16 @@ export async function POST(request: Request) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         manifestPath,
-        sourceUrl: sourceUrl.toString(),
-        sourceMode: 'smartroom',
+        sourceUrl: sourceUrlText || undefined,
+        sourceMode: dataSource,
+        carlaApiKey: carlaApiKey || undefined,
+        carlaFullApiKey: carlaFullApiKey || undefined,
         timeoutSeconds: 30,
         question: query,
         agentProvider,
         agentModel,
         agentApiKey: agentApiKey || undefined,
-        timestamp: body.timestamp?.trim() || undefined,
+        timestamp: dataSource === 'carla' ? undefined : body.timestamp?.trim() || undefined,
         recordingOverride: normalizedRecordingOverride(body.recordingOverride),
       }),
     }, 180_000)

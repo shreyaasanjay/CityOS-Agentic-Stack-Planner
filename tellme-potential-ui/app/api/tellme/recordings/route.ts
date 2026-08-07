@@ -7,23 +7,40 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null) as { query?: string; mirrorApiUrl?: string; model?: string; timestamp?: string } | null
+  const body = await request.json().catch(() => null) as { query?: string; mirrorApiUrl?: string; dataSource?: string; carlaApiKey?: string; carlaFullApiKey?: string; model?: string; timestamp?: string } | null
   const query = body?.query?.trim() || ''
   if (!query) return NextResponse.json({ error: 'The original question is required.' }, { status: 400 })
-  let sourceUrl: URL
+  const isCarla = body?.dataSource === 'carla'
+  // For CARLA an empty URL is allowed: the runner falls back to
+  // SIMULATION_API_URL / SIMULATION_API_KEY from the repo .env.
+  let sourceUrlText = ''
   try {
-    sourceUrl = new URL(body?.mirrorApiUrl || '')
+    const sourceUrl = new URL(body?.mirrorApiUrl || '')
     if (!['http:', 'https:'].includes(sourceUrl.protocol)) throw new Error('Unsupported protocol')
+    sourceUrlText = sourceUrl.toString()
   } catch {
-    return NextResponse.json({ error: 'Enter a valid smart-room API URL.' }, { status: 400 })
+    if (!isCarla) return NextResponse.json({ error: 'Enter a valid smart-room API URL.' }, { status: 400 })
   }
   try {
     const preflight = await runnerJson('/api/synth/recording-preflight', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sourceUrl: sourceUrl.toString(), question: query, timestamp: body?.timestamp?.trim() || undefined }),
+      body: JSON.stringify({
+        sourceUrl: sourceUrlText || undefined,
+        sourceMode: isCarla ? 'carla' : undefined,
+        carlaApiKey: isCarla ? body?.carlaApiKey?.trim() || undefined : undefined,
+        carlaFullApiKey: isCarla ? body?.carlaFullApiKey?.trim() || undefined : undefined,
+        question: query,
+        timestamp: isCarla ? undefined : body?.timestamp?.trim() || undefined,
+      }),
     }, 35_000)
     if (!preflight.response.ok || preflight.payload.ok !== true) {
-      return NextResponse.json({ error: 'The smart-room recording list could not be loaded.' }, { status: 502 })
+      const detail = asString(preflight.payload.error)
+        || asArray(preflight.payload.errors).map(asString).find(Boolean)
+        || ''
+      return NextResponse.json(
+        { error: `The smart-room recording list could not be loaded${detail ? `: ${detail}` : '.'}` },
+        { status: 502 },
+      )
     }
     if (preflight.payload.needsClarification !== true) return NextResponse.json({ needsRecordingSelection: false })
     const answer = asObject(preflight.payload.answer)
@@ -44,7 +61,11 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString(),
     }
     return NextResponse.json({ needsRecordingSelection: true, result })
-  } catch {
-    return NextResponse.json({ error: 'The smart-room recording list could not be loaded.' }, { status: 502 })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : ''
+    return NextResponse.json(
+      { error: `The smart-room recording list could not be loaded${detail ? `: ${detail}` : '.'}` },
+      { status: 502 },
+    )
   }
 }
